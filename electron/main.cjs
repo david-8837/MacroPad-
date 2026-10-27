@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, session } = require('electron');
 const path = require('path');
-const http = require('http');
+const fs = require('fs');
+const { createWebhookServer, generateToken } = require('./webhookServer.cjs');
 const {
   discoverApplications,
   getAppIcon,
@@ -13,6 +14,7 @@ let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 let webhookServer = null;
+let webhookToken = '';
 const WEBHOOK_PORT = 38491;
 
 const profileMenuState = {
@@ -27,79 +29,45 @@ const profileMenuState = {
 function sendToRenderer(payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('hardware-event', payload);
+    return true;
   }
+  return false;
 }
 
-function json(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(body));
-}
-
-function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (chunk) => {
-      body += chunk;
-      if (body.length > 1_000_000) {
-        reject(new Error('Payload too large'));
-        req.destroy();
-      }
-    });
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(body || '{}'));
-      } catch {
-        reject(new Error('Malformed JSON payload'));
-      }
-    });
-  });
+// Persist the webhook token so external automations (Home Assistant, cURL scripts)
+// keep working across restarts. Stored in the per-user data directory, owner-only.
+function loadOrCreateWebhookToken() {
+  const file = path.join(app.getPath('userData'), 'webhook-token.txt');
+  try {
+    const existing = fs.readFileSync(file, 'utf8').trim();
+    if (/^[0-9a-f]{48}$/.test(existing)) return existing;
+  } catch {
+    // not created yet
+  }
+  const token = generateToken();
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, token, { mode: 0o600 });
+  } catch (err) {
+    console.error('[KADOWAZ Daemon] Could not persist webhook token (using session-only token):', err.message);
+  }
+  return token;
 }
 
 function startLocalhostWebhookServer() {
   if (webhookServer) return;
-  const server = http.createServer(async (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-
-    const url = (req.url || '').split('?')[0];
-
-    if (url === '/api/v1/status' && req.method === 'GET') {
-      json(res, 200, {
-        status: 'online',
-        app: 'KADOWAZ Deck Studio',
-        port: WEBHOOK_PORT,
-        profileId: profileMenuState.activeId,
-      });
-      return;
-    }
-
-    if (req.method !== 'POST') {
-      json(res, 404, { error: 'Endpoint not found' });
-      return;
-    }
-
-    let parsed;
-    try {
-      parsed = await readJsonBody(req);
-    } catch (err) {
-      json(res, 400, { error: err.message || 'Malformed JSON payload' });
-      return;
-    }
-
-    const event = { source: 'webhook', endpoint: url, data: parsed };
-    sendToRenderer(event);
-    json(res, 200, { success: true, received: parsed, endpoint: url });
+  webhookToken = loadOrCreateWebhookToken();
+  const server = createWebhookServer({
+    port: WEBHOOK_PORT,
+    token: webhookToken,
+    getStatus: () => ({ profileId: profileMenuState.activeId }),
+    onEvent: (event) => sendToRenderer(event),
   });
 
   server.on('error', (err) => {
+    // EADDRINUSE etc. Without this the app would run with a silently dead API.
     console.error('[KADOWAZ Daemon] Webhook server error:', err.message);
+    if (webhookServer === server) webhookServer = null;
   });
 
   server.listen(WEBHOOK_PORT, '127.0.0.1', () => {
@@ -133,6 +101,13 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  // The UI is a closed local app: never open new windows or navigate away from it.
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowed = url.startsWith('http://localhost:5173') || url.startsWith('file://');
+    if (!allowed) event.preventDefault();
+  });
 
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
@@ -266,6 +241,12 @@ ipcMain.on('exec-action', async (_event, incoming) => {
   }
 });
 
+ipcMain.handle('get-webhook-info', async () => ({
+  port: WEBHOOK_PORT,
+  token: webhookToken,
+  listening: Boolean(webhookServer && webhookServer.listening),
+}));
+
 ipcMain.handle('discover-apps', async () => discoverApplications());
 ipcMain.handle('get-app-icon', async (_event, exePath) => getAppIcon(exePath));
 ipcMain.handle('browse-for-app', async () => browseForApp());
@@ -283,16 +264,72 @@ ipcMain.on('profiles-sync', (_event, payload) => {
   }
 });
 
-app.whenReady().then(() => {
-  startLocalhostWebhookServer();
-  createWindow();
-  createTray();
+// Electron does not show Chromium's serial/HID chooser. Without these handlers
+// navigator.serial.requestPort() / navigator.hid.requestDevice() cannot select a device,
+// so the "Connect" buttons would do nothing inside the desktop app.
+function describeDevice(d) {
+  const ids = d.vendorId !== undefined ? ` [${Number(d.vendorId).toString(16)}:${Number(d.productId || 0).toString(16)}]` : '';
+  return `${d.displayName || d.name || d.productName || 'Unknown device'}${ids}`;
+}
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    else mainWindow?.show();
+async function chooseDevice(kind, list) {
+  if (!list || list.length === 0) return '';
+  if (list.length === 1) return list[0].portId || list[0].deviceId;
+  const shown = list.slice(0, 8);
+  const { response } = await dialog.showMessageBox(mainWindow || undefined, {
+    type: 'question',
+    title: `Select ${kind} device`,
+    message: `Choose the macropad ${kind} device`,
+    detail: list.length > shown.length ? `Showing the first ${shown.length} of ${list.length} devices.` : undefined,
+    buttons: [...shown.map(describeDevice), 'Cancel'],
+    cancelId: shown.length,
+    defaultId: 0,
   });
-});
+  if (response >= shown.length) return '';
+  return shown[response].portId || shown[response].deviceId;
+}
+
+function setupDeviceAccess() {
+  const ses = session.defaultSession;
+  ses.setPermissionCheckHandler((_wc, permission) => permission === 'serial' || permission === 'hid');
+  ses.setDevicePermissionHandler((details) => details.deviceType === 'serial' || details.deviceType === 'hid');
+
+  ses.on('select-serial-port', (event, portList, _wc, callback) => {
+    event.preventDefault();
+    chooseDevice('serial', portList).then(callback, () => callback(''));
+  });
+  ses.on('select-hid-device', (event, details, callback) => {
+    event.preventDefault();
+    chooseDevice('HID', details.deviceList).then(callback, () => callback(''));
+  });
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  // Another instance already owns the tray icon and the webhook port.
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(() => {
+    setupDeviceAccess();
+    startLocalhostWebhookServer();
+    createWindow();
+    createTray();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      else mainWindow?.show();
+    });
+  });
+}
 
 app.on('before-quit', () => {
   isQuitting = true;

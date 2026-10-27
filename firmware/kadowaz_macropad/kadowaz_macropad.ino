@@ -111,6 +111,7 @@ void drawChannelScreen(uint8_t channel) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.setTimeout(20); // readStringUntil() must not stall key scanning for its 1s default
 
   // Setup Matrix Pins
   for (int r = 0; r < 3; r++) {

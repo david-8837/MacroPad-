@@ -14,6 +14,7 @@ export interface ElectronAPI {
   execAction: (action: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
   onHardwareEvent: (callback: (value: ElectronHardwareEvent) => void) => () => void;
   sendOLEDUpdate: (data: unknown) => void;
+  getWebhookInfo: () => Promise<{ port: number; token: string; listening: boolean }>;
   discoverApps: () => Promise<unknown>;
   launchApp: (appInfo: unknown) => Promise<{ success: boolean; error?: string }>;
   browseForApp: () => Promise<unknown>;

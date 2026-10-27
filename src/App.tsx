@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Profile, Layer, KeyBinding, DialBinding, OLEDState, ActionDefinition, DiscoveredApp } from './types';
 import { defaultProfiles } from './data/defaultProfiles';
 import { TopNavbar } from './components/TopNavbar';
@@ -21,6 +21,7 @@ import { ViaKeycodeItem } from './data/viaKeycodes';
 import { hardwareBridge, HardwareConnectionState, ConnectedDeviceInfo } from './utils/hardwareBridge';
 import { executeDeckAction } from './utils/executeDeckAction';
 import { WebhookDocPanel } from './components/WebhookDocPanel';
+import type { ElectronHardwareEvent } from './types/electron';
 import {
   Terminal,
   Trash2,
@@ -96,6 +97,7 @@ export const App: React.FC = () => {
   // Hardware Connection State
   const [hardwareState, setHardwareState] = useState<HardwareConnectionState>('disconnected');
   const [deviceInfo, setDeviceInfo] = useState<ConnectedDeviceInfo | null>(null);
+  const lastHardwareStateRef = useRef<HardwareConnectionState>('disconnected');
 
   // VIA Keycode Assignment Handlers
   const handleAssignViaKeycode = (keyIndex: number, item: ViaKeycodeItem) => {
@@ -406,12 +408,18 @@ export const App: React.FC = () => {
   useEffect(() => {
     let hwDialTimer: ReturnType<typeof setTimeout> | null = null;
     let hwDialHoldTriggered = false;
+    let deviceReportsHold = false;
 
     const unsubState = hardwareBridge.onStateChange((state, info) => {
       setHardwareState(state);
       setDeviceInfo(info);
-      if (state === 'connected') {
+      deviceReportsHold = state === 'connected' && info?.type === 'webserial';
+      const previous = lastHardwareStateRef.current;
+      lastHardwareStateRef.current = state;
+      if (state === 'connected' && previous !== 'connected') {
         handleTriggerAction('mcu-conn', `Connected: ${info?.name || 'Microcontroller'}`, 'info');
+      } else if (state === 'disconnected' && previous === 'connected') {
+        handleTriggerAction('mcu-disc', 'Macropad disconnected', 'info');
       }
     });
 
@@ -457,11 +465,13 @@ export const App: React.FC = () => {
           hwDialHoldTriggered = false;
           if (hwDialTimer) clearTimeout(hwDialTimer);
           const threshold = activeLayer.dial.channelHoldThresholdMs || 800;
-          hwDialTimer = setTimeout(() => {
-            hwDialHoldTriggered = true;
-            handleCycleDialMode();
-            handleTriggerAction('hw-hold-ch', `[HARDWARE HOLD] Channel Switched (${threshold}ms)`, 'navigation');
-          }, threshold);
+          if (!deviceReportsHold) {
+            hwDialTimer = setTimeout(() => {
+              hwDialHoldTriggered = true;
+              handleCycleDialMode();
+              handleTriggerAction('hw-hold-ch', `[HARDWARE HOLD] Channel Switched (${threshold}ms)`, 'navigation');
+            }, threshold);
+          }
         } else if (actionType === 'up') {
           // Hardware switch released
           if (hwDialTimer) {
@@ -483,13 +493,27 @@ export const App: React.FC = () => {
     });
 
     const unsubChannel = hardwareBridge.onChannelSwitch((channelIdx) => {
+      if (hwDialTimer) {
+        clearTimeout(hwDialTimer);
+        hwDialTimer = null;
+      }
+      hwDialHoldTriggered = true;
       handleCycleDialMode(channelIdx);
+    });
+
+    const unsubHold = hardwareBridge.onHoldSwitch(() => {
+      if (hwDialTimer) {
+        clearTimeout(hwDialTimer);
+        hwDialTimer = null;
+      }
+      hwDialHoldTriggered = true;
     });
 
     return () => {
       unsubState();
       unsubInput();
       unsubChannel();
+      unsubHold();
       if (hwDialTimer) clearTimeout(hwDialTimer);
     };
   }, [activeLayer, activeChannelIdx, activeProfile]);
@@ -506,6 +530,14 @@ export const App: React.FC = () => {
       }));
     }, 2000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Events from the Electron main process: tray menu, localhost webhook, launcher status.
+  // A ref keeps the handler fresh without re-subscribing on every state change.
+  const hardwareEventHandlerRef = useRef<(event: ElectronHardwareEvent) => void>(() => {});
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onHardwareEvent?.((event) => hardwareEventHandlerRef.current(event));
+    return () => { unsubscribe?.(); };
   }, []);
 
   // Show transient OSD helper
@@ -682,6 +714,97 @@ export const App: React.FC = () => {
         'Device bridge not connected. Connect via USB HID or USB Serial above to send configuration to physical Micro Pad.',
         'safety'
       );
+    }
+  };
+
+  // Runs a webhook request against the CURRENT deck state. Requests were already
+  // authenticated and validated by the main process (electron/webhookServer.cjs).
+  const handleWebhookRequest = (endpoint: string, data: Record<string, unknown>) => {
+    const note = (msg: string, type: ActionLogItem['type'] = 'info') => pushLog(`[WEBHOOK] ${msg}`, 'webhook', type);
+    const run = (action: ActionDefinition | null | undefined, label: string) => {
+      if (!action) {
+        note(`${label}: no action assigned`);
+        return;
+      }
+      handleTriggerAction(action.id, `[WEBHOOK] ${action.name}`, action.category, action.payload);
+    };
+
+    switch (endpoint) {
+      case '/api/v1/trigger': {
+        const index = Number(data.index);
+        const key = activeLayer.keys.find(k => k.keyIndex === index);
+        if (!key) {
+          note(`Switch #${index + 1} not found on this channel`, 'safety');
+          return;
+        }
+        if (key.isDestructiveSafety) {
+          // Safety isolation exists so destructive actions need an intentional physical hold.
+          note(`Blocked: Switch #${index + 1} is safety-isolated and can only be run by a physical hold`, 'safety');
+          return;
+        }
+        const which = typeof data.action === 'string' ? data.action : 'tap';
+        const action = which === 'hold' ? key.holdAction : which === 'double' ? key.doubleTapAction : key.tapAction;
+        run(action, `Switch #${index + 1} ${which}`);
+        return;
+      }
+      case '/api/v1/dial': {
+        const dial = activeLayer.dial;
+        if (data.direction === 'press') {
+          run(dial.pressAction, 'Knob press');
+          return;
+        }
+        const steps = Math.min(10, Math.max(1, Math.floor(Number(data.step)) || 1));
+        const action = data.direction === 'ccw' ? dial.ccwAction : dial.cwAction;
+        for (let i = 0; i < steps; i++) run(action, `Knob ${String(data.direction)}`);
+        return;
+      }
+      case '/api/v1/oled': {
+        // Strip control characters so a payload cannot inject extra serial commands.
+        const clean = (v: unknown) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f]/g, ' ').trim() : undefined);
+        const line1 = clean(data.line1);
+        const line2 = clean(data.line2);
+        setOledState(prev => ({
+          ...prev,
+          mode: 'kadowaz',
+          customTitle: line1 ?? prev.customTitle,
+          customSubtitle: line2 ?? prev.customSubtitle,
+        }));
+        void hardwareBridge.sendSerialCommand(`OLED:${[line1, line2].filter(Boolean).join(' ')}`);
+        note(`OLED text set${hardwareState === 'connected' ? '' : ' (on-screen preview only, no device connected)'}`);
+        return;
+      }
+      case '/api/v1/profile':
+      case '/api/v1/action': {
+        const profileId = typeof data.profileId === 'string' ? data.profileId : undefined;
+        if (profileId) {
+          const target = profiles.find(p => p.id === profileId);
+          if (!target) {
+            note(`Profile "${profileId}" not found`, 'safety');
+            return;
+          }
+          handleSelectProfile(target.id);
+          if (typeof data.layerId === 'string' && target.layers.some(l => l.id === data.layerId)) {
+            setActiveLayerId(data.layerId);
+          }
+          note(`Switched to profile "${target.name}"`);
+        }
+        if (endpoint === '/api/v1/action' && typeof data.channel === 'number') {
+          handleCycleDialMode(data.channel - 1);
+        }
+        return;
+      }
+      default:
+        note(`Unhandled endpoint ${endpoint}`, 'safety');
+    }
+  };
+
+  hardwareEventHandlerRef.current = (event) => {
+    if (event.source === 'tray' && event.action === 'switch-profile' && event.id) {
+      if (profiles.some(p => p.id === event.id)) handleSelectProfile(event.id);
+    } else if (event.source === 'webhook' && event.endpoint) {
+      handleWebhookRequest(event.endpoint, event.data || {});
+    } else if (event.source === 'app-launcher' && event.status === 'error') {
+      pushLog(`[ACTION FAILED] ${event.error || 'App launch failed'}`, 'app_launch', 'safety');
     }
   };
 
@@ -872,6 +995,16 @@ export const App: React.FC = () => {
                       </p>
                     )}
                   </div>
+
+                  {/* Localhost webhook API (collapsed by default) */}
+                  <details className="glass-panel rounded-2xl border border-white/10 mb-4">
+                    <summary className="px-4 py-3 cursor-pointer text-xs font-mono font-bold text-[#00F0FF] select-none">
+                      WEBHOOK API
+                    </summary>
+                    <div className="px-2 pb-2 max-h-80 overflow-y-auto">
+                      <WebhookDocPanel onRunLocally={handleWebhookRequest} />
+                    </div>
+                  </details>
 
                   {/* Real-time Telemetry & Action Execution Log */}
                   <div className="flex-1 glass-panel p-4 rounded-2xl border border-white/10 flex flex-col overflow-hidden">

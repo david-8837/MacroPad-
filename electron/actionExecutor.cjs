@@ -26,6 +26,23 @@ const VK = {
   OEM_2: 0xbf, OEM_3: 0xc0, OEM_4: 0xdb, OEM_5: 0xdc, OEM_6: 0xdd, OEM_7: 0xde,
 };
 
+// Literal punctuation characters as they appear in shortcut definitions
+// (e.g. ['Win', '.'], ['Ctrl', '[']). Must be matched BEFORE separator stripping,
+// otherwise '-' and '+' are erased and the chord degrades to its modifiers only.
+const PUNCTUATION_VK = {
+  ';': VK.OEM_1, ':': VK.OEM_1,
+  '=': VK.OEM_PLUS, '+': VK.OEM_PLUS,
+  ',': VK.OEM_COMMA, '<': VK.OEM_COMMA,
+  '-': VK.OEM_MINUS, '_': VK.OEM_MINUS,
+  '.': VK.OEM_PERIOD, '>': VK.OEM_PERIOD,
+  '/': VK.OEM_2, '?': VK.OEM_2,
+  '`': VK.OEM_3, '~': VK.OEM_3,
+  '[': VK.OEM_4, '{': VK.OEM_4,
+  '\\': VK.OEM_5, '|': VK.OEM_5,
+  ']': VK.OEM_6, '}': VK.OEM_6,
+  "'": VK.OEM_7, '"': VK.OEM_7,
+};
+
 const ALIASES = {
   CTRL: 'CONTROL', CONTROL: 'CONTROL', CTL: 'CONTROL',
   SHIFT: 'SHIFT', ALT: 'ALT', OPTION: 'ALT',
@@ -42,6 +59,7 @@ const ALIASES = {
   VOLUMEUP: 'VOLUME_UP', VOLUMEDOWN: 'VOLUME_DOWN', VOLUMEMUTE: 'VOLUME_MUTE', MUTE: 'VOLUME_MUTE',
   MEDIANEXTTRACK: 'MEDIA_NEXT', MEDIAPREVIOUSTRACK: 'MEDIA_PREV', MEDIAPLAYPAUSE: 'MEDIA_PLAY_PAUSE',
   PLAYPAUSE: 'MEDIA_PLAY_PAUSE', NEXT: 'MEDIA_NEXT', PREV: 'MEDIA_PREV', PREVIOUS: 'MEDIA_PREV',
+  MEDIATRACKNEXT: 'MEDIA_NEXT', MEDIATRACKPREVIOUS: 'MEDIA_PREV', 'NUMPAD.': 'DECIMAL',
   EQUAL: 'OEM_PLUS', MINUS: 'OEM_MINUS', DIGIT0: '0',
 };
 
@@ -55,6 +73,10 @@ function stripKeycodePrefix(raw) {
 }
 
 function resolveVk(raw) {
+  const trimmed = String(raw == null ? '' : raw).trim();
+  if (trimmed.length === 1 && PUNCTUATION_VK[trimmed] !== undefined) {
+    return PUNCTUATION_VK[trimmed];
+  }
   const cleaned = stripKeycodePrefix(raw);
   if (!cleaned) return null;
   const aliasKey = cleaned.replace(/[\s+\-_]/g, '').toUpperCase();
@@ -101,19 +123,35 @@ function runPowershell(script) {
   });
 }
 
-async function sendChord(keyNames) {
+function buildChordSequence(keyNames) {
   const vks = [];
+  const unmapped = [];
   for (const name of keyNames) {
     const vk = resolveVk(name);
-    if (vk == null) continue;
-    vks.push(vk);
+    if (vk == null) unmapped.push(String(name));
+    else vks.push(vk);
+  }
+  if (unmapped.length > 0) {
+    // Never send a partial chord: "Win" alone opens the Start menu instead of "Win + -".
+    return { error: `Unmappable key(s): ${unmapped.join(', ')} in ${keyNames.join('+')}` };
   }
   if (vks.length === 0) {
-    return { success: false, error: `No mappable keys in: ${keyNames.join('+')}` };
+    return { error: `No mappable keys in: ${keyNames.join('+')}` };
   }
   const sequence = [];
   for (const vk of vks) sequence.push({ vk, up: false });
   for (let i = vks.length - 1; i >= 0; i--) sequence.push({ vk: vks[i], up: true });
+  return { sequence };
+}
+
+// repeat > 1 sends the chord several times inside ONE PowerShell process
+// (spawning one process per detent made volume steps take seconds).
+async function sendChord(keyNames, repeat = 1) {
+  const built = buildChordSequence(keyNames);
+  if (built.error) return { success: false, error: built.error };
+  const count = Math.min(Math.max(1, Math.floor(repeat) || 1), 20);
+  const sequence = [];
+  for (let i = 0; i < count; i++) sequence.push(...built.sequence);
   return runPowershell(buildKeybdScript(sequence));
 }
 
@@ -187,9 +225,7 @@ async function executeAction(action) {
     if (typeof payload.audioDelta === 'number') {
       const key = payload.audioDelta >= 0 ? 'VolumeUp' : 'VolumeDown';
       const steps = Math.min(8, Math.max(1, Math.round(Math.abs(payload.audioDelta) / 2)));
-      let last = { success: true };
-      for (let i = 0; i < steps; i++) last = await sendChord([key]);
-      return last;
+      return sendChord([key], steps);
     }
     return { success: false, error: 'No audio delta or mute flag' };
   }
@@ -216,4 +252,4 @@ async function executeAction(action) {
   return { success: false, error: `Unsupported category: ${category}` };
 }
 
-module.exports = { executeAction, sendChord, typeText };
+module.exports = { executeAction, sendChord, typeText, resolveVk, buildChordSequence };

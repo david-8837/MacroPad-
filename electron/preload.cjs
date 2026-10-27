@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendOLEDUpdate: (data) => ipcRenderer.send('oled-update', data),
   reportProfiles: (items, activeId) => ipcRenderer.send('profiles-sync', { items, activeId }),
 
+  getWebhookInfo: () => ipcRenderer.invoke('get-webhook-info'),
+
   discoverApps: () => ipcRenderer.invoke('discover-apps'),
   launchApp: (appInfo) => ipcRenderer.invoke('launch-app', appInfo),
   browseForApp: () => ipcRenderer.invoke('browse-for-app'),

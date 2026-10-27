@@ -25,6 +25,7 @@ class HardwareBridgeManager {
   private listeners: ((state: HardwareConnectionState, info: ConnectedDeviceInfo | null) => void)[] = [];
   private inputListeners: ((keyIndex: number, actionType: 'down' | 'up' | 'dial_cw' | 'dial_ccw') => void)[] = [];
   private channelListeners: ((channelIndex: number) => void)[] = [];
+  private holdSwitchListeners: (() => void)[] = [];
 
   constructor() {
     this.checkExistingDevices();
@@ -55,12 +56,24 @@ class HardwareBridgeManager {
     };
   }
 
+  // Subscribe to the firmware's confirmation that a knob hold already switched channel on-device
+  public onHoldSwitch(callback: () => void) {
+    this.holdSwitchListeners.push(callback);
+    return () => {
+      this.holdSwitchListeners = this.holdSwitchListeners.filter(cb => cb !== callback);
+    };
+  }
+
   private notify() {
     this.listeners.forEach(cb => cb(this.connectionState, this.deviceInfo));
   }
 
   private notifyInput(keyIndex: number, actionType: 'down' | 'up' | 'dial_cw' | 'dial_ccw') {
     this.inputListeners.forEach(cb => cb(keyIndex, actionType));
+  }
+
+  private notifyHoldSwitch() {
+    this.holdSwitchListeners.forEach(cb => cb());
   }
 
   private notifyChannel(channelIndex: number) {
@@ -182,43 +195,63 @@ class HardwareBridgeManager {
     });
   }
 
-  private async readSerialStream(port: SerialPort) {
-    const textDecoder = new TextDecoderStream();
-    if (port.readable) {
-      const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
-      const reader = textDecoder.readable.getReader();
+  // Parse one complete protocol line (no trailing newline)
+  private handleSerialLine(rawLine: string) {
+    const line = rawLine.trim();
+    if (!line) return;
+    const parts = line.split(':');
+    if (parts[0] === 'KEY' && parts.length >= 3) {
+      const keyIdx = parseInt(parts[1], 10);
+      if (Number.isNaN(keyIdx) || keyIdx < 0 || keyIdx > 8) return;
+      const st = parts[2].toLowerCase() === 'down' ? 'down' : 'up';
+      this.notifyInput(keyIdx, st);
+    } else if (parts[0] === 'ENC') {
+      if (parts[1] === 'CW') this.notifyInput(9, 'dial_cw');
+      else if (parts[1] === 'CCW') this.notifyInput(9, 'dial_ccw');
+      else if (parts[1] === 'DOWN' || parts[1] === 'PUSH') this.notifyInput(9, 'down');
+      else if (parts[1] === 'UP') this.notifyInput(9, 'up');
+      else if (parts[1] === 'HOLD_SWITCH') this.notifyHoldSwitch();
+    } else if (parts[0] === 'CHANNEL' && parts.length >= 2) {
+      const ch = parseInt(parts[1], 10) - 1;
+      if (!Number.isNaN(ch) && ch >= 0 && ch < 3) {
+        this.notifyChannel(ch);
+      }
+    }
+  }
 
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value) {
-            // Parses lines like "KEY:0:DOWN", "KEY:0:UP", "ENC:CW", "ENC:CCW"
-            const lines = value.trim().split('\n');
-            for (const line of lines) {
-              const parts = line.trim().split(':');
-              if (parts[0] === 'KEY' && parts.length >= 3) {
-                const keyIdx = parseInt(parts[1]);
-                const st = parts[2].toLowerCase() === 'down' ? 'down' : 'up';
-                this.notifyInput(keyIdx, st);
-              } else if (parts[0] === 'ENC') {
-                if (parts[1] === 'CW') this.notifyInput(9, 'dial_cw');
-                if (parts[1] === 'CCW') this.notifyInput(9, 'dial_ccw');
-                if (parts[1] === 'DOWN' || parts[1] === 'PUSH') this.notifyInput(9, 'down');
-                if (parts[1] === 'UP') this.notifyInput(9, 'up');
-              } else if (parts[0] === 'CHANNEL' && parts.length >= 2) {
-                const ch = parseInt(parts[1]) - 1;
-                if (!isNaN(ch) && ch >= 0 && ch < 3) {
-                  this.notifyChannel(ch);
-                }
-              }
-            }
-          }
+  private async readSerialStream(port: SerialPort) {
+    if (!port.readable) return;
+    const textDecoder = new TextDecoderStream();
+    port.readable.pipeTo(textDecoder.writable).catch(() => { /* port closed */ });
+    const reader = textDecoder.readable.getReader();
+
+    // Serial chunks do not respect line boundaries ("KEY:0:D" + "OWN\n"), so
+    // accumulate text and only parse complete newline-terminated lines.
+    let buffer = '';
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        buffer += value;
+        let nl = buffer.indexOf('\n');
+        while (nl !== -1) {
+          this.handleSerialLine(buffer.slice(0, nl));
+          buffer = buffer.slice(nl + 1);
+          nl = buffer.indexOf('\n');
         }
-      } catch (err) {
-        console.error('Serial read loop error:', err);
-      } finally {
-        reader.releaseLock();
+        if (buffer.length > 1024) buffer = ''; // discard runaway garbage without a newline
+      }
+    } catch (err) {
+      console.error('Serial read loop error:', err);
+    } finally {
+      reader.releaseLock();
+      // Stream ended (device unplugged or closed): reflect it in the UI
+      if (this.serialPort === port) {
+        this.serialPort = null;
+        this.connectionState = 'disconnected';
+        this.deviceInfo = null;
+        this.notify();
       }
     }
   }
