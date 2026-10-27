@@ -1,0 +1,102 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Host test build. Compiles the SAME firmware sources with gcc on your PC, with
+# the hardware layers stubbed out by preprocessor guards:
+#
+#   SCAN_NO_HW      -> scan.c returns injected samples instead of reading GPIO
+#   LEDS_NO_HW      -> leds.c keeps the colour maths, drops PIO/DMA
+#   STORAGE_NO_HW   -> flash_store.c models two sectors in RAM
+#   HID_DEV_NO_HW   -> hid_dev.c records reports instead of sending them
+#   USB_PROTO_NO_HW -> usb_proto.c skips CDC; inject/drain drive it directly
+#
+# Nothing here needs pico-sdk, cmake, or an ARM toolchain. That is deliberate:
+# `make -f Makefile.host test` must work in a plain container so CI can run it.
+#
+#   make -f Makefile.host test     build and run the unit tests
+#   make -f Makefile.host clean
+# ─────────────────────────────────────────────────────────────────────────────
+
+CC      ?= gcc
+BUILD   := build-host
+CFLAGS  := -std=gnu11 -g -O1 -Wall -Wextra -Wno-unused-parameter -Wshadow \
+           -Ifirmware/include -Iinclude -Itests -Ifirmware/tests \
+           -DSCAN_NO_HW -DLEDS_NO_HW -DSTORAGE_NO_HW -DHID_DEV_NO_HW \
+           -DUSB_PROTO_NO_HW
+LDFLAGS :=
+
+SRC := \
+  src/core/actions.c \
+  src/core/channel.c \
+  src/core/crc.c \
+  src/core/dispatch.c \
+  src/core/events.c \
+  src/core/gesture.c \
+  src/core/protocol.c \
+  src/drivers/scan.c \
+  src/lighting/leds.c \
+  src/storage/config_defaults.c \
+  src/storage/config_store.c \
+  src/storage/flash_store.c \
+  src/usb/hid_dev.c \
+  src/usb/usb_proto.c
+
+TEST_SRC := \
+  tests/test_main.c \
+  tests/test_gesture.c \
+  tests/test_scan.c \
+  tests/test_config.c \
+  tests/test_actions.c \
+  tests/test_leds.c \
+  tests/test_protocol.c
+
+OBJ      := $(addprefix $(BUILD)/,$(SRC:.c=.o))
+TEST_OBJ := $(addprefix $(BUILD)/,$(TEST_SRC:.c=.o))
+BIN      := $(BUILD)/run_tests
+LAYOUT_BIN := $(BUILD)/dump_layout
+LAYOUT_JSON := $(BUILD)/layout.json
+DEFAULTS_BIN := $(BUILD)/dump_defaults
+DEFAULTS_OUT := $(BUILD)/defaults.bin
+
+.PHONY: all test layout defaults hostartifacts clean
+all: $(BIN)
+
+$(BIN): $(OBJ) $(TEST_OBJ)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BUILD)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+test: $(BIN)
+	@./$(BIN)
+
+# Emit the real compiled struct layout for host/tests/run.mjs to check the
+# protocol spec against. See tests/dump_layout.c for why this exists.
+$(LAYOUT_BIN): tests/dump_layout.c $(OBJ)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+layout: $(LAYOUT_BIN)
+	@./$(LAYOUT_BIN) > $(LAYOUT_JSON)
+	@echo "wrote $(LAYOUT_JSON)"
+
+$(DEFAULTS_BIN): tests/dump_defaults.c $(OBJ)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# The firmware's own factory config, as bytes, for the host suite to diff against
+# its JavaScript equivalent. See tests/dump_defaults.c.
+defaults: $(DEFAULTS_BIN)
+	@./$(DEFAULTS_BIN) > $(DEFAULTS_OUT)
+	@echo "wrote $(DEFAULTS_OUT) ($$(wc -c < $(DEFAULTS_OUT)) bytes)"
+
+# Everything host/tests/run.mjs needs.
+hostartifacts: layout defaults
+
+clean:
+	rm -rf $(BUILD)
+
+# The dump needs the same sources as the tests (config_defaults for the blob
+# definition, crc for validation) but not the test cases themselves.
+
+-include $(OBJ:.o=.d) $(TEST_OBJ:.o=.d)

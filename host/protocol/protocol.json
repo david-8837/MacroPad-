@@ -1,0 +1,889 @@
+{
+  "$comment": [
+    "mpad3 wire protocol — the single source of truth shared by firmware and host.",
+    "",
+    "This file describes the SAME bytes that firmware/include/config.h and",
+    "firmware/include/magic.h describe in C. It is not generated from them and",
+    "they are not generated from it, because a generator that reads C structs",
+    "needs a C parser and a generator that emits C needs a template engine —",
+    "both are more machinery than this project should carry.",
+    "",
+    "Instead the two are kept honest by a test on each side:",
+    "  - `make -C firmware -f Makefile.host layout` writes build-host/layout.json,",
+    "    which is the real sizeof()/offsetof() output of the compiled C structs.",
+    "  - `node host/tests/run.mjs` compares that file against THIS file and fails",
+    "    on any mismatch, and independently re-implements CRC-16 and CRC-32 in",
+    "    JavaScript and checks them against the same standard test vectors the C",
+    "    tests use.",
+    "",
+    "So: if you change a struct in config.h, this file must change too, and the",
+    "test tells you so. All integers on the wire are little-endian."
+  ],
+  "meta": {
+    "magicString": "MPAD3",
+    "magicU32": "0x4D504144",
+    "configMagicU32": "0x43464733",
+    "sectorMagicU32": "0x53454331",
+    "protocolVersion": 1,
+    "configFormatVersion": 1,
+    "channels": 3,
+    "keys": 9,
+    "leds": 9,
+    "mtu": 512,
+    "chunkSize": 256,
+    "textMax": 32
+  },
+  "frame": {
+    "sof": [
+      165,
+      90
+    ],
+    "headerSize": 6,
+    "crcSize": 2,
+    "overhead": 8,
+    "fields": [
+      {
+        "name": "sof0",
+        "type": "u8",
+        "offset": 0,
+        "note": "0xA5"
+      },
+      {
+        "name": "sof1",
+        "type": "u8",
+        "offset": 1,
+        "note": "0x5A"
+      },
+      {
+        "name": "cmd",
+        "type": "u8",
+        "offset": 2
+      },
+      {
+        "name": "len",
+        "type": "u16",
+        "offset": 3,
+        "note": "payload byte count, little endian, 0..512"
+      },
+      {
+        "name": "version",
+        "type": "u8",
+        "offset": 5
+      },
+      {
+        "name": "payload",
+        "type": "bytes",
+        "offset": 6,
+        "length": "len"
+      },
+      {
+        "name": "crc16",
+        "type": "u16",
+        "offset": "6+len",
+        "note": "CRC-16/CCITT-FALSE over cmd..payload, little endian"
+      }
+    ],
+    "crc": {
+      "algorithm": "CRC-16/CCITT-FALSE",
+      "poly": "0x1021",
+      "init": "0xFFFF",
+      "refIn": false,
+      "refOut": false,
+      "xorOut": "0x0000",
+      "check": "0x29B1",
+      "covers": "bytes [2 .. 6+len) i.e. cmd, len, version, payload"
+    }
+  },
+  "commands": {
+    "0x00": {
+      "name": "PING",
+      "dir": "host",
+      "request": [],
+      "response": "PONG",
+      "note": "handshake; also proves the cable and the CDC interface are alive"
+    },
+    "0x80": {
+      "name": "PONG",
+      "dir": "device",
+      "request": [],
+      "response": null
+    },
+    "0x01": {
+      "name": "GET_INFO",
+      "dir": "host",
+      "request": [],
+      "response": "INFO"
+    },
+    "0x81": {
+      "name": "INFO",
+      "dir": "device",
+      "request": [],
+      "response": null,
+      "payload": "info"
+    },
+    "0x02": {
+      "name": "GET_CONFIG",
+      "dir": "host",
+      "request": [
+        {
+          "name": "chunkIndex",
+          "type": "u8"
+        }
+      ],
+      "response": "CONFIG_CHUNK",
+      "note": "one request per chunk; chunkIndex must be 0..chunkCount-1"
+    },
+    "0x82": {
+      "name": "CONFIG_CHUNK",
+      "dir": "device",
+      "request": [],
+      "response": null,
+      "payload": "configChunk"
+    },
+    "0x03": {
+      "name": "SET_CONFIG",
+      "dir": "host",
+      "request": [],
+      "payload": "configChunk",
+      "response": "SET_ACK on the final chunk only",
+      "note": "streamed in order from chunk 0; applied to RAM on completion, written to flash only on COMMIT"
+    },
+    "0x83": {
+      "name": "SET_ACK",
+      "dir": "device",
+      "request": [],
+      "response": null,
+      "payload": "status"
+    },
+    "0x04": {
+      "name": "RESET_CONFIG",
+      "dir": "host",
+      "request": [],
+      "response": "SET_ACK",
+      "note": "factory defaults, written to flash immediately"
+    },
+    "0x05": {
+      "name": "COMMIT",
+      "dir": "host",
+      "request": [],
+      "response": "COMMIT_ACK",
+      "note": "write the staged RAM config to flash. Blocks ~50 ms during the erase."
+    },
+    "0x85": {
+      "name": "COMMIT_ACK",
+      "dir": "device",
+      "request": [],
+      "response": null,
+      "payload": "status"
+    },
+    "0x06": {
+      "name": "GET_CHANNEL",
+      "dir": "host",
+      "request": [],
+      "response": "CHANNEL"
+    },
+    "0x86": {
+      "name": "CHANNEL",
+      "dir": "device",
+      "request": [],
+      "response": null,
+      "payload": "channelIndex"
+    },
+    "0x07": {
+      "name": "SET_CHANNEL",
+      "dir": "host",
+      "request": [
+        {
+          "name": "channelIndex",
+          "type": "u8"
+        }
+      ],
+      "response": "SET_ACK",
+      "note": "out-of-range is refused with ERROR/BAD_ARG, not wrapped"
+    },
+    "0x08": {
+      "name": "GET_LIGHTING",
+      "dir": "host",
+      "request": [
+        {
+          "name": "channelIndex",
+          "type": "u8"
+        }
+      ],
+      "response": "LIGHTING"
+    },
+    "0x88": {
+      "name": "LIGHTING",
+      "dir": "device",
+      "request": [],
+      "response": null,
+      "payload": "channelIndex + lighting"
+    },
+    "0x09": {
+      "name": "SET_LIGHTING",
+      "dir": "host",
+      "request": [],
+      "payload": "channelIndex + lighting",
+      "response": "SET_ACK",
+      "note": "persists: marks the config dirty so COMMIT writes it"
+    },
+    "0x0A": {
+      "name": "PREVIEW_LIGHTING",
+      "dir": "host",
+      "request": [],
+      "payload": "channelIndex + lighting",
+      "response": "SET_ACK",
+      "note": "identical to SET_LIGHTING but does NOT mark dirty, so a colour-picker drag does not survive a power cycle"
+    },
+    "0x0B": {
+      "name": "LED_TEST",
+      "dir": "host",
+      "request": [],
+      "payload": "rawRgb24",
+      "response": "SET_ACK",
+      "note": "9 x 3 bytes pushed straight to the strip, bypassing gamma, brightness and the lighting engine. This is the 'is my soldering right' command."
+    },
+    "0xC0": {
+      "name": "KEY_EVENT",
+      "dir": "device",
+      "request": [],
+      "response": null,
+      "payload": "keyEvent",
+      "note": "streamed unsolicited when global.usbReportEvents is 1"
+    },
+    "0xFE": {
+      "name": "BOOTLOADER",
+      "dir": "host",
+      "request": [],
+      "response": "SET_ACK then the device reboots into BOOTSEL"
+    },
+    "0xFF": {
+      "name": "ERROR",
+      "dir": "device",
+      "request": [],
+      "response": null,
+      "payload": "status"
+    }
+  },
+  "payloads": {
+    "info": {
+      "size": 16,
+      "fields": [
+        {
+          "name": "magic",
+          "type": "u32",
+          "offset": 0
+        },
+        {
+          "name": "protocolVersion",
+          "type": "u16",
+          "offset": 4
+        },
+        {
+          "name": "configVersion",
+          "type": "u16",
+          "offset": 6
+        },
+        {
+          "name": "channels",
+          "type": "u8",
+          "offset": 8
+        },
+        {
+          "name": "keys",
+          "type": "u8",
+          "offset": 9
+        },
+        {
+          "name": "leds",
+          "type": "u8",
+          "offset": 10
+        },
+        {
+          "name": "capabilities",
+          "type": "u8",
+          "offset": 11
+        },
+        {
+          "name": "configSize",
+          "type": "u16",
+          "offset": 12
+        },
+        {
+          "name": "firmwareBuild",
+          "type": "u16",
+          "offset": 14
+        }
+      ]
+    },
+    "configChunk": {
+      "size": "4 + n",
+      "fields": [
+        {
+          "name": "index",
+          "type": "u8",
+          "offset": 0
+        },
+        {
+          "name": "count",
+          "type": "u8",
+          "offset": 1
+        },
+        {
+          "name": "n",
+          "type": "u16",
+          "offset": 2,
+          "note": "byte count in this chunk; the last chunk is short"
+        },
+        {
+          "name": "bytes",
+          "type": "bytes",
+          "offset": 4,
+          "length": "n"
+        }
+      ]
+    },
+    "status": {
+      "size": 1,
+      "fields": [
+        {
+          "name": "code",
+          "type": "u8",
+          "offset": 0
+        }
+      ]
+    },
+    "channelIndex": {
+      "size": 1,
+      "fields": [
+        {
+          "name": "index",
+          "type": "u8",
+          "offset": 0
+        }
+      ]
+    },
+    "rawRgb24": {
+      "size": 27,
+      "fields": [
+        {
+          "name": "rgb",
+          "type": "bytes",
+          "offset": 0,
+          "length": 27,
+          "note": "9 LEDs x 3 bytes, in R,G,B order (NOT the strip's GRB — the firmware converts)"
+        }
+      ]
+    },
+    "keyEvent": {
+      "size": 8,
+      "fields": [
+        {
+          "name": "source",
+          "type": "u8",
+          "offset": 0
+        },
+        {
+          "name": "index",
+          "type": "u8",
+          "offset": 1
+        },
+        {
+          "name": "event",
+          "type": "u8",
+          "offset": 2
+        },
+        {
+          "name": "channel",
+          "type": "u8",
+          "offset": 3
+        },
+        {
+          "name": "value",
+          "type": "i16",
+          "offset": 4,
+          "note": "detent count for rotation events"
+        },
+        {
+          "name": "action",
+          "type": "u16",
+          "offset": 6,
+          "note": "actionType that fired, 0 if the slot was empty"
+        }
+      ]
+    }
+  },
+  "structs": {
+    "action": {
+      "size": 40,
+      "note": "One binding slot. Fixed size so the whole config stays flat and memcpy-able; the 4 trailing pad bytes are spare room for a parameter without a format bump.",
+      "fields": [
+        {
+          "name": "type",
+          "type": "u8",
+          "offset": 0,
+          "enum": "actionType"
+        },
+        {
+          "name": "flags",
+          "type": "u8",
+          "offset": 1,
+          "enum": "actionFlag",
+          "note": "ORed bitmask"
+        },
+        {
+          "name": "code",
+          "type": "u16",
+          "offset": 2,
+          "note": "HID usage, media usage, channel index, LED mode, or brightness — meaning depends on type"
+        },
+        {
+          "name": "text",
+          "type": "bytes",
+          "offset": 4,
+          "length": 32,
+          "note": "NUL-terminated; only meaningful for TEXT and WEBHOOK. Validation rejects an unterminated one."
+        },
+        {
+          "name": "pad",
+          "type": "bytes",
+          "offset": 36,
+          "length": 4
+        }
+      ]
+    },
+    "lighting": {
+      "size": 40,
+      "fields": [
+        {
+          "name": "mode",
+          "type": "u8",
+          "offset": 0,
+          "enum": "ledMode"
+        },
+        {
+          "name": "brightness",
+          "type": "u8",
+          "offset": 1
+        },
+        {
+          "name": "speed",
+          "type": "u8",
+          "offset": 2
+        },
+        {
+          "name": "r",
+          "type": "u8",
+          "offset": 3
+        },
+        {
+          "name": "g",
+          "type": "u8",
+          "offset": 4
+        },
+        {
+          "name": "b",
+          "type": "u8",
+          "offset": 5
+        },
+        {
+          "name": "pad0",
+          "type": "u8",
+          "offset": 6
+        },
+        {
+          "name": "perKeyMask",
+          "type": "u16",
+          "offset": 7,
+          "note": "bit n set -> perKey[n] is used for key n instead of the base colour"
+        },
+        {
+          "name": "perKey",
+          "type": "bytes",
+          "offset": 9,
+          "length": 27,
+          "note": "9 x RGB"
+        },
+        {
+          "name": "pad",
+          "type": "bytes",
+          "offset": 36,
+          "length": 4
+        }
+      ]
+    },
+    "channel": {
+      "size": 560,
+      "note": "One complete page: 9 key bindings, 4 knob bindings, and that page's lighting.",
+      "fields": [
+        {
+          "name": "keys",
+          "type": "action[9]",
+          "offset": 0,
+          "note": "key index = position on the pad, left-to-right then top-to-bottom"
+        },
+        {
+          "name": "knobCw",
+          "type": "action",
+          "offset": 360
+        },
+        {
+          "name": "knobCcw",
+          "type": "action",
+          "offset": 400
+        },
+        {
+          "name": "knobTap",
+          "type": "action",
+          "offset": 440
+        },
+        {
+          "name": "knobHold",
+          "type": "action",
+          "offset": 480,
+          "note": "defaults to CHANNEL_NEXT, i.e. the page switch. It is a normal slot, so you CAN repoint it — and then you lose the only hardware way to change page."
+        },
+        {
+          "name": "lighting",
+          "type": "lighting",
+          "offset": 520
+        }
+      ]
+    },
+    "global": {
+      "size": 16,
+      "fields": [
+        {
+          "name": "holdMs",
+          "type": "u16",
+          "offset": 0,
+          "default": 300
+        },
+        {
+          "name": "doubleTapMs",
+          "type": "u16",
+          "offset": 2,
+          "default": 0,
+          "note": "0 means double-tap is disabled, which makes a single tap fire on release with zero added latency. Do not set this to a non-zero value unless you actually bind a double tap: it delays every ordinary tap by that many milliseconds."
+        },
+        {
+          "name": "knobHoldMs",
+          "type": "u16",
+          "offset": 4,
+          "default": 500
+        },
+        {
+          "name": "knobIdleMs",
+          "type": "u16",
+          "offset": 6,
+          "default": 40,
+          "note": "how long the knob must be still before a sub-batch rotation is delivered"
+        },
+        {
+          "name": "knobBatch",
+          "type": "u8",
+          "offset": 8,
+          "default": 4,
+          "note": "detents accumulated before one rotation event is emitted"
+        },
+        {
+          "name": "holdRepeatMs",
+          "type": "u8",
+          "offset": 9,
+          "default": 40
+        },
+        {
+          "name": "bootChannel",
+          "type": "u8",
+          "offset": 10,
+          "default": 0
+        },
+        {
+          "name": "ledInvertOutput",
+          "type": "u8",
+          "offset": 11,
+          "default": 1,
+          "note": "1 when a 74AHCT1G125 (or any inverting buffer) is in the LED data path"
+        },
+        {
+          "name": "usbReportEvents",
+          "type": "u8",
+          "offset": 12,
+          "default": 1
+        },
+        {
+          "name": "pad",
+          "type": "bytes",
+          "offset": 13,
+          "length": 3
+        }
+      ]
+    },
+    "config": {
+      "size": 1708,
+      "note": "The whole saved configuration. This is what SET_CONFIG streams and what lives in flash.",
+      "fields": [
+        {
+          "name": "magic",
+          "type": "u32",
+          "offset": 0,
+          "value": "0x43464733"
+        },
+        {
+          "name": "version",
+          "type": "u16",
+          "offset": 4
+        },
+        {
+          "name": "length",
+          "type": "u16",
+          "offset": 6,
+          "value": 1708
+        },
+        {
+          "name": "global",
+          "type": "global",
+          "offset": 8
+        },
+        {
+          "name": "channels",
+          "type": "channel[3]",
+          "offset": 24
+        },
+        {
+          "name": "crc32",
+          "type": "u32",
+          "offset": 1704,
+          "note": "CRC-32/IEEE over bytes 0..1703 inclusive"
+        }
+      ],
+      "crc": {
+        "algorithm": "CRC-32/IEEE",
+        "poly": "0x04C11DB7",
+        "reflected": "0xEDB88320",
+        "init": "0xFFFFFFFF",
+        "refIn": true,
+        "refOut": true,
+        "xorOut": "0xFFFFFFFF",
+        "check": "0xCBF43926",
+        "coveredBytes": 1704
+      }
+    },
+    "sectorHeader": {
+      "size": 16,
+      "note": "Prepended inside each of the two flash sectors, before the config blob.",
+      "fields": [
+        {
+          "name": "magic",
+          "type": "u32",
+          "offset": 0,
+          "value": "0x53454331"
+        },
+        {
+          "name": "seq",
+          "type": "u32",
+          "offset": 4,
+          "note": "higher wins; this is what makes the A/B ping-pong work"
+        },
+        {
+          "name": "blobCrc",
+          "type": "u32",
+          "offset": 8
+        },
+        {
+          "name": "hdrCrc",
+          "type": "u32",
+          "offset": 12,
+          "note": "CRC-32 over the 12 bytes above"
+        }
+      ]
+    }
+  },
+  "enums": {
+    "actionType": {
+      "0": "NONE",
+      "1": "KEYCODE",
+      "2": "MODS",
+      "3": "TEXT",
+      "4": "MEDIA",
+      "5": "CHANNEL",
+      "6": "CHANNEL_NEXT",
+      "7": "LED_MODE",
+      "8": "LED_BRIGHT",
+      "9": "LAYER_HOLD",
+      "10": "WEBHOOK",
+      "11": "BOOTLOADER",
+      "12": "RESET_CONFIG"
+    },
+    "actionFlag": {
+      "0x01": "HOLD_DOWN",
+      "0x02": "ON_RELEASE",
+      "0x04": "REPEAT",
+      "0x08": "STICKY"
+    },
+    "ledMode": {
+      "0": "OFF",
+      "1": "STATIC",
+      "2": "PER_KEY",
+      "3": "BREATH",
+      "4": "RAINBOW",
+      "5": "SPECTRUM",
+      "6": "REACTIVE",
+      "7": "CHANNEL_TINT"
+    },
+    "status": {
+      "0": "OK",
+      "1": "BAD_CRC",
+      "2": "BAD_MAGIC",
+      "3": "BAD_VERSION",
+      "4": "BAD_LENGTH",
+      "5": "FLASH_FAIL",
+      "6": "BUSY",
+      "7": "UNKNOWN_CMD",
+      "8": "BAD_ARG"
+    },
+    "capabilities": {
+      "0x01": "ENCODER",
+      "0x02": "OLED",
+      "0x04": "FLASH",
+      "0x08": "EVENTS"
+    },
+    "eventSource": {
+      "0": "KEY",
+      "1": "KNOB"
+    },
+    "eventKind": {
+      "0": "NONE",
+      "1": "PRESS",
+      "2": "RELEASE",
+      "3": "TAP",
+      "4": "HOLD",
+      "5": "HOLD_RELEASE",
+      "6": "DOUBLE_TAP",
+      "7": "ENC_CW",
+      "8": "ENC_CCW",
+      "9": "CHANNEL_CHANGE"
+    }
+  },
+  "enumNotes": {
+    "status": [
+      "A malformed frame is reported with the status that says *why*, not a single catch-all. `BAD_CRC` means the frame arrived intact in shape but the checksum did not match, which points at line noise or a byte dropped in transit. `BAD_LENGTH` means the declared payload length could not be satisfied, which points at a truncated write or a host encoder bug. `BAD_VERSION` means the frame was well formed and its `ver` byte is not one this firmware accepts, which points at an app built against a different protocol revision. The three have three different fixes, so an app should surface them differently rather than printing \"bad frame\".",
+      "Bytes that never formed a frame at all are dropped silently while the parser hunts for the `A5 5A` start-of-frame magic. The device does not reply to them: answering garbage would let one line glitch generate a flood of error frames."
+    ]
+  },
+  "layout": {
+    "keys": [
+      {
+        "index": 0,
+        "row": 0,
+        "col": 0,
+        "gpio": 0,
+        "headerPin": 23
+      },
+      {
+        "index": 1,
+        "row": 0,
+        "col": 1,
+        "gpio": 1,
+        "headerPin": 22
+      },
+      {
+        "index": 2,
+        "row": 0,
+        "col": 2,
+        "gpio": 2,
+        "headerPin": 21
+      },
+      {
+        "index": 3,
+        "row": 1,
+        "col": 0,
+        "gpio": 3,
+        "headerPin": 20
+      },
+      {
+        "index": 4,
+        "row": 1,
+        "col": 1,
+        "gpio": 4,
+        "headerPin": 19
+      },
+      {
+        "index": 5,
+        "row": 1,
+        "col": 2,
+        "gpio": 5,
+        "headerPin": 18
+      },
+      {
+        "index": 6,
+        "row": 2,
+        "col": 0,
+        "gpio": 6,
+        "headerPin": 17
+      },
+      {
+        "index": 7,
+        "row": 2,
+        "col": 1,
+        "gpio": 11,
+        "headerPin": 12
+      },
+      {
+        "index": 8,
+        "row": 2,
+        "col": 2,
+        "gpio": 12,
+        "headerPin": 11
+      }
+    ],
+    "encoder": {
+      "a": {
+        "gpio": 7,
+        "headerPin": 16
+      },
+      "b": {
+        "gpio": 8,
+        "headerPin": 15
+      },
+      "switch": {
+        "gpio": 9,
+        "headerPin": 14
+      }
+    },
+    "leds": {
+      "data": {
+        "gpio": 10,
+        "headerPin": 13
+      },
+      "count": 9,
+      "order": "GRB",
+      "indexMatchesKeyIndex": true
+    },
+    "ledIndexNote": "LED n sits under key n, so the lighting array and the key array are indexed identically. That is a deliberate constraint: any per-key effect becomes a one-line lookup instead of a mapping table.",
+    "board": {
+      "name": "Waveshare RP2040-Zero",
+      "mcu": "RP2040, dual Cortex-M0+ @ 133 MHz",
+      "ram": "264 kB",
+      "flash": "2 MB",
+      "headerPins": "23 on the main castellated header: 5V, GND, 3V3, then 20 GPIO (GP0-GP15 and GP26-GP29)",
+      "notOnMainHeader": "GP16 drives the board's own onboard WS2812. GP17-GP25 are on two 5-pin headers on the back and on solder pads, and are unused here",
+      "headerNumbering": "USB-C up, front/component side facing you, pin 1 = 5V at top-left, counter-clockwise: left column 1-11 top to bottom (5V, GND, 3V3, GP29, GP28, GP27, GP26, GP15, GP14, GP13, GP12), right column 12-23 bottom to top (GP11, GP10, GP9, GP8, GP7, GP6, GP5, GP4, GP3, GP2, GP1, GP0)",
+      "spareHeaderGpio": "GP13, GP14, GP15, GP26, GP27 - and GP26-GP29 are the ADC-capable pins, left free on purpose",
+      "configSectors": "0x1FE000 and 0x1FF000 - the last two 4 KiB sectors of the 2 MB flash"
+    },
+    "oled": {
+      "sda": {
+        "gpio": 28,
+        "headerPin": 5
+      },
+      "scl": {
+        "gpio": 29,
+        "headerPin": 4
+      },
+      "present": false,
+      "bus": "i2c0",
+      "address": "0x3C"
+    }
+  }
+}

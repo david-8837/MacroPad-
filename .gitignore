@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# Firmware builds & Pico SDK
+firmware/build/
+pico-sdk/
+*.uf2
+*.elf
+*.hex
+__pycache__/

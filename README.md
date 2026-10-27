@@ -310,12 +310,25 @@ Compact monochrome display mounted horizontally on the top bezel above the key s
 
 ---
 
-### Microcontroller Compatibility
-- **RP2040-Zero / Raspberry Pi Pico (RP2040)** (Recommended)
-- **Arduino Pro Micro (ATmega32U4, 5V/16MHz or 3.3V/8MHz)**
-- **ESP32-S3 (Native USB OTG)**
+### Firmware Options
 
-### Pinout Reference (`firmware/kadowaz_macropad.ino`)
+The project includes two firmware implementations depending on your development workflow:
+
+1. **Native RP2040 Pico SDK C Firmware (`firmware/`)** *(Recommended for Production)*:
+   - Built specifically for the **Waveshare RP2040-Zero**.
+   - **Hardware PIO + DMA WS2812 Driver:** Bit timing is executed by dedicated RP2040 hardware state machines; LED colors never glitch or drop frames during USB data transfer.
+   - **Standalone HID Keyboard & Media Dial:** Enumerates as a true USB Composite device (Keyboard + Consumer Control + CDC). Works seamlessly on Windows, macOS, and Linux without the desktop app running.
+   - **On-Chip Flash Persistence:** Full 1,708-byte layout saved in onboard flash; your bindings and lighting persist through reboots.
+   - **Gesture Engine:** Immediate hold triggering, double-tap detection, and rotational cancellation (turning the knob cancels hold to prevent accidental layer switches).
+   - **Comprehensive Documentation:**
+     - [`docs/HARDWARE.md`](./docs/HARDWARE.md) — Exact 23-pin header pinout, wiring schematics, and level-shifter guide.
+     - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — Modular architecture and state engine design.
+     - [`docs/PROTOCOL.md`](./docs/PROTOCOL.md) — Wire protocol and CRC-16 specification.
+
+2. **Arduino IDE Firmware (`firmware/kadowaz_macropad/`)**:
+   - Single-file Arduino `.ino` sketch for quick hobbyist editing and testing across RP2040, Arduino Pro Micro (ATmega32U4), or ESP32-S3 boards.
+
+### Pinout Reference (RP2040-Zero)
 
 | Hardware Component | Microcontroller Pins | Description |
 | :--- | :--- | :--- |
