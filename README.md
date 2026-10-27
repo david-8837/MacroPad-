@@ -37,12 +37,18 @@
    - [10. Embedded Localhost REST & Webhook Daemon](#10-embedded-localhost-rest--webhook-daemon)
 4. [Hardware & Firmware Integration](#-hardware--firmware-integration)
    - [Recommended Hardware Bill of Materials (BOM)](#-recommended-hardware-bill-of-materials-bom)
-   - [Microcontroller Compatibility](#microcontroller-compatibility)
-   - [Pinout Reference](#pinout-reference-firmwarekadowaz_macropadino)
+   - [Firmware Options (Pico SDK C vs Arduino)](#firmware-options)
+   - [Hardware Wiring & Electrical Guide (`docs/HARDWARE.md`)](./docs/HARDWARE.md)
+   - [Firmware Architecture & Event Pipeline (`docs/ARCHITECTURE.md`)](./docs/ARCHITECTURE.md)
+   - [Binary Wire Protocol Specification (`docs/PROTOCOL.md`)](./docs/PROTOCOL.md)
+   - [RP2040-Zero Pinout Reference](#pinout-reference-rp2040-zero)
    - [Serial Protocol Specification](#serial-protocol-specification-115200-baud)
 5. [Project Structure](#-project-structure)
 6. [Installation & Development Guide](#-installation--development-guide)
-7. [Security & Production Readiness](#-security--production-readiness)
+   - [Desktop App Setup](#1-install-dependencies)
+   - [Firmware Flashing & UF2 Build](#5-firmware-build--flashing-rp2040-zero)
+   - [Testing & Quality Verification](#6-testing--verification)
+7. [Security & Safe Execution](#-security--safe-execution)
 
 ---
 
@@ -389,16 +395,46 @@ void drawChannelScreen(uint8_t channel) {
 
 ```
 desktop-app/
+├── docs/                       # Detailed Hardware, Architecture & Protocol Specs
+│   ├── HARDWARE.md             # Complete RP2040-Zero wiring, pin table & level-shifter guide
+│   ├── ARCHITECTURE.md         # Microcontroller modular design & event pipeline
+│   └── PROTOCOL.md             # Wire protocol & CRC-16 specification
+│
 ├── electron/
+│   ├── actionExecutor.cjs      # Safe Windows process spawner & keystroke executor
 │   ├── appDiscovery.cjs        # Multi-source Windows application discovery & launcher engine
 │   ├── main.cjs                # Electron main process, tray menu, window management & IPC
 │   ├── preload.cjs             # Safe context bridge exposing electronAPI to React
-│   └── run-electron.cjs        # Electron runner script
+│   ├── run-electron.cjs        # Electron runner script
+│   └── webhookServer.cjs       # Localhost REST & webhook daemon (port 38491)
 │
 ├── firmware/
-│   └── kadowaz_macropad.ino    # Arduino / RP2040 C++ firmware sketch for 3x3 + Knob + OLED
+│   ├── CMakeLists.txt          # Native Raspberry Pi Pico SDK C build configuration
+│   ├── Makefile.host           # Host-runner test makefile for C unit tests
+│   ├── include/                # Firmware headers (board.h, gesture.h, leds.h, magic.h, etc.)
+│   ├── src/                    # Firmware C sources (core, drivers, lighting, storage, usb)
+│   ├── tests/                  # 946 C firmware unit test assertions
+│   └── kadowaz_macropad/       # Arduino IDE compatibility sketch (.ino)
 │
-├── src/
+├── host/
+│   ├── protocol/
+│   │   ├── protocol.json       # Wire protocol JSON definition
+│   │   ├── mpad3-protocol.mjs  # Browser & Node JavaScript framing & CRC-16 codec
+│   │   └── generated/          # Generated TypeScript definitions
+│   └── tests/
+│       └── run.mjs             # 113 automated wire protocol & struct tests
+│
+├── scripts/
+│   ├── setup.sh                # Automated toolchain installer and firmware builder
+│   └── test-all.sh             # End-to-end verification test suite
+│
+├── tools/                      # Python verification & simulation tools
+│   ├── check_board.py          # Pin map cross-check validator
+│   ├── check_usb_descriptors.py# HID USB report descriptor checker
+│   ├── gen_protocol.py         # Wire protocol code generator
+│   └── pio_timing.py           # Cycle-accurate WS2812 PIO waveform simulator
+│
+├── src/                        # React Desktop Studio frontend
 │   ├── components/
 │   │   ├── AppLauncherPanel.tsx    # Full Application Library browser & assignment panel
 │   │   ├── DigitalTwin.tsx         # Interactive hardware visualizer & layer controls
@@ -435,6 +471,7 @@ desktop-app/
 │   ├── index.css                   # Tailwind styles, glassmorphism, and keycap shadows
 │   └── main.tsx                    # React application entry point
 │
+├── Makefile                        # Root firmware build & test convenience targets
 ├── package.json                    # Dependencies and run scripts
 ├── tsconfig.json                   # TypeScript compiler configuration
 ├── tailwind.config.js              # Theme colors, glow effects, and typography
@@ -467,11 +504,38 @@ Launches Vite and Electron with full native Windows application discovery, proce
 npm run electron:dev
 ```
 
-### 4. Build Production Bundle
+### 4. Build Desktop Production Bundle
 Compiles TypeScript and bundles assets with Vite:
 ```bash
 npm run build
 ```
+
+### 5. Firmware Build & Flashing (RP2040-Zero)
+
+#### Option A: Native Pico SDK C Firmware (Recommended)
+1. Ensure `cmake` and `gcc-arm-none-eabi` are installed on your system (or run `./scripts/setup.sh` on Linux/macOS/WSL).
+2. Configure and compile the `.uf2` binary:
+   ```bash
+   cmake -S firmware -B firmware/build -DPICO_BOARD=waveshare_rp2040_zero
+   cmake --build firmware/build -j4
+   ```
+3. **Flashing:** Hold down the **BOOT** button on the Waveshare RP2040-Zero, plug the USB-C cable into your PC, and release the button. A drive named **`RPI-RP2`** will appear in File Explorer.
+4. Drag and drop `firmware/build/mpad3.uf2` directly into the `RPI-RP2` drive. The board automatically flashes and reboots into Kadowaz Macropad mode.
+
+#### Option B: Arduino IDE Alternative
+1. Open [`firmware/kadowaz_macropad/kadowaz_macropad.ino`](./firmware/kadowaz_macropad/kadowaz_macropad.ino) in the Arduino IDE.
+2. Select your board (e.g. *Raspberry Pi Pico/RP2040* or *Arduino Leonardo/Micro*).
+3. Click **Upload**.
+
+### 6. Testing & Verification
+
+Run the unified test suite across both desktop and firmware protocol layers:
+```bash
+npm test
+```
+- **17 Desktop Tests:** Action executor key resolution, serial stream line buffering, token-authenticated webhook daemon, and DNS-rebinding protection.
+- **113 Protocol Tests:** Byte-identical C struct layouts, CRC-16 frame encoding/decoding, auto-resynchronization state machine, and chunked flash config streaming.
+- **Total:** 130 automated assertions, 0 failures.
 
 ---
 
