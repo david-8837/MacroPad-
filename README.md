@@ -538,20 +538,80 @@ npm run build
 
 ### 5. Firmware Build & Flashing (RP2040-Zero)
 
-#### Option A: Native Pico SDK C Firmware (Recommended)
-1. Ensure `cmake` and `gcc-arm-none-eabi` are installed on your system (or run `./scripts/setup.sh` on Linux/macOS/WSL).
-2. Configure and compile the `.uf2` binary:
-   ```bash
-   cmake -S firmware -B firmware/build -DPICO_BOARD=waveshare_rp2040_zero
-   cmake --build firmware/build -j4
-   ```
-3. **Flashing:** Hold down the **BOOT** button on the Waveshare RP2040-Zero, plug the USB-C cable into your PC, and release the button. A drive named **`RPI-RP2`** will appear in File Explorer.
-4. Drag and drop `firmware/build/mpad3.uf2` directly into the `RPI-RP2` drive. The board automatically flashes and reboots into Kadowaz Macropad mode.
+You can choose either the **Native Pico SDK C Firmware** (best performance, standalone HID, glitch-free LEDs) or the **Arduino IDE Sketch** (easiest for quick customization).
 
-#### Option B: Arduino IDE Alternative
-1. Open [`firmware/kadowaz_macropad/kadowaz_macropad.ino`](./firmware/kadowaz_macropad/kadowaz_macropad.ino) in the Arduino IDE.
-2. Select your board (e.g. *Raspberry Pi Pico/RP2040* or *Arduino Leonardo/Micro*).
-3. Click **Upload**.
+---
+
+#### 🌟 Option A: Native Pico SDK C Firmware (Recommended)
+
+Building and flashing the native firmware is a simple step-by-step process:
+
+##### Step 1: Install Build Tools (One-Time Setup)
+You need `cmake` and the ARM cross-compiler (`gcc-arm-none-eabi`) to build the `.uf2` file:
+- **Windows (Easiest):**
+  - Install the official [Raspberry Pi Pico VS Code Extension](https://marketplace.visualstudio.com/items?itemName=raspberry-pi.raspberry-pi-pico) (which configures CMake, GCC, and the SDK automatically), OR
+  - Install the [Pico Windows Setup Installer](https://github.com/raspberrypi/pico-setup-windows/releases).
+- **Linux (Debian / Ubuntu / WSL):**
+  Run the automated script included in this repository:
+  ```bash
+  ./scripts/setup.sh
+  ```
+- **macOS:**
+  ```bash
+  brew install cmake arm-none-eabi-gcc
+  ```
+
+##### Step 2: Compile the `.uf2` Firmware File
+Open your terminal in the project directory and run:
+
+```bash
+# 1. Configure the build for Waveshare RP2040-Zero
+cmake -S firmware -B firmware/build -DPICO_BOARD=waveshare_rp2040_zero
+
+# 2. Compile the binary (generates mpad3.uf2)
+cmake --build firmware/build -j4
+```
+
+When finished, your compiled firmware file will be located at:
+📁 **`firmware/build/mpad3.uf2`**
+
+##### Step 3: Put Your RP2040-Zero into Bootloader Mode
+You don't need any special flashing software or programmers! The RP2040 has a built-in hardware bootloader:
+
+1. **Unplug** the USB-C cable from your RP2040-Zero.
+2. Locate the tiny **`BOOT`** button on the RP2040-Zero board (right next to the USB-C connector).
+3. **Press and hold down** the **`BOOT`** button.
+4. While continuing to hold the button, **plug the USB-C cable** into your PC.
+5. **Release** the **`BOOT`** button.
+6. A new removable drive named **`RPI-RP2`** will automatically appear in Windows File Explorer (just like plugging in a USB flash drive).
+
+##### Step 4: Drag & Drop to Flash
+1. Open File Explorer and navigate to `firmware/build/mpad3.uf2`.
+2. **Drag and drop** (or copy & paste) `mpad3.uf2` directly onto the **`RPI-RP2`** drive.
+3. The `RPI-RP2` drive will automatically disconnect and vanish as soon as the file copies.
+4. **Done!** The RP2040-Zero reboots instantly into KADOWAZ Macropad mode, turns on the OLED display, and lights up the RGB LEDs.
+
+> 💡 **Troubleshooting Tip:** If the `RPI-RP2` drive does not appear, verify that your USB-C cable is a **data sync cable**. Some cheap USB cables only have power wires and cannot transmit data.
+
+---
+
+#### ⚡ Option B: Arduino IDE Alternative (Beginner Friendly)
+
+If you prefer using the Arduino IDE without compiling from the command line:
+
+1. Download and open [Arduino IDE](https://www.arduino.cc/en/software).
+2. Go to **File → Preferences** and add this URL to **Additional Boards Manager URLs**:
+   ```
+   https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+   ```
+3. Open **Tools → Board → Boards Manager**, search for **`rp2040`**, and install **Raspberry Pi Pico/RP2040** by Earle F. Philhower.
+4. Install the required libraries in **Sketch → Include Library → Manage Libraries...**:
+   - `Adafruit SSD1306`
+   - `Adafruit GFX Library`
+   - `Adafruit NeoPixel`
+5. Open [`firmware/kadowaz_macropad/kadowaz_macropad.ino`](./firmware/kadowaz_macropad/kadowaz_macropad.ino).
+6. Under **Tools → Board**, select **Waveshare RP2040-Zero** (or *Generic RP2040*).
+7. Connect your board via USB, choose the active COM port under **Tools → Port**, and click **Upload** (the `➔` arrow button).
 
 ### 6. Testing & Verification
 
