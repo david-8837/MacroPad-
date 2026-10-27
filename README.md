@@ -1,0 +1,477 @@
+# KADOWAZ DECK STUDIO
+
+<p align="center">
+  <img src="./b90a1e3c-36e8-45d6-8fec-2b4e8802a836.png" alt="KADOWAZ Deck Studio Banner" width="720" style="border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.6);" />
+</p>
+
+<p align="center">
+  <strong>Next-Generation 9-Key Macropad Desktop Studio & Hardware Companion Engine</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D6?style=flat-square&logo=windows" alt="Platform" />
+  <img src="https://img.shields.io/badge/Electron-33.0.2-47848F?style=flat-square&logo=electron" alt="Electron" />
+  <img src="https://img.shields.io/badge/React-18.3.1-61DAFB?style=flat-square&logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/Vite-5.4.9-646CFF?style=flat-square&logo=vite" alt="Vite" />
+  <img src="https://img.shields.io/badge/TypeScript-5.6.3-3178C6?style=flat-square&logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/TailwindCSS-3.4.14-38B2AC?style=flat-square&logo=tailwind-css" alt="Tailwind" />
+  <img src="https://img.shields.io/badge/Firmware-RP2040%20%2F%20ATmega32U4-00979D?style=flat-square&logo=arduino" alt="Firmware" />
+</p>
+
+---
+
+## 📌 Table of Contents
+
+1. [Overview](#-overview)
+2. [Key Architecture & Dual-Engine Model](#-key-architecture--dual-engine-model)
+3. [Core Feature Breakdown](#-core-feature-breakdown)
+   - [1. Automatic Application Discovery & Launcher](#1-automatic-application-discovery--smart-launcher)
+   - [2. Three Independent Channels (CH 1, CH 2, CH 3)](#2-three-independent-channels-ch-1-ch-2-ch-3)
+   - [3. Digital Twin & Visual Keycaps](#3-digital-twin--visual-keycaps)
+   - [4. Switch Configuration Drawer](#4-switch-configuration-drawer)
+   - [5. Rotary Encoder Engine](#5-rotary-encoder-engine)
+   - [6. OLED Display Control (SSD1306)](#6-oled-display-control-ssd1306)
+   - [7. PC Shortcuts Vault](#7-pc-shortcuts-vault)
+   - [8. VIA Hardware Suite](#8-via-hardware-suite)
+   - [9. Safety Isolation (Long-Press Protection)](#9-safety-isolation-long-press-protection)
+   - [10. Embedded Localhost REST & Webhook Daemon](#10-embedded-localhost-rest--webhook-daemon)
+4. [Hardware & Firmware Integration](#-hardware--firmware-integration)
+   - [Recommended Hardware Bill of Materials (BOM)](#-recommended-hardware-bill-of-materials-bom)
+   - [Microcontroller Compatibility](#microcontroller-compatibility)
+   - [Pinout Reference](#pinout-reference-firmwarekadowaz_macropadino)
+   - [Serial Protocol Specification](#serial-protocol-specification-115200-baud)
+5. [Project Structure](#-project-structure)
+6. [Installation & Development Guide](#-installation--development-guide)
+7. [Security & Production Readiness](#-security--production-readiness)
+
+---
+
+## 🌟 Overview
+
+**KADOWAZ Deck Studio** is a professional desktop suite designed to configure, monitor, and empower physical 9-key mechanical macropads equipped with a rotary encoder, an I2C OLED display (SSD1306), and USB HID / Serial microcontrollers (Raspberry Pi Pico RP2040, Arduino Pro Micro ATmega32U4, ESP32-S3).
+
+It bridges the gap between hardware key actuation and operating-system automation—offering multi-source Windows application discovery, live application launching, 3 isolated operational channels, multi-key combo recording, VIA keycode remapping, safety-isolated long-press actions, and an embedded webhook API server.
+
+---
+
+## 🏗 Key Architecture & Dual-Engine Model
+
+The software uses a dual-engine architecture:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       KADOWAZ Deck Studio Companion                         │
+│                                                                             │
+│  ┌───────────────────────┐  ┌───────────────────────┐  ┌─────────────────┐  │
+│  │  Deck Studio Twin UI  │  │  Application Library  │  │ Shortcuts Vault │  │
+│  └───────────┬───────────┘  └───────────┬───────────┘  └────────┬────────┘  │
+│              │                          │                       │           │
+│              └──────────────────────────┼───────────────────────┘           │
+│                                         ▼                                   │
+│                        ┌─────────────────────────────────┐                  │
+│                        │ Profiles & Channel Layer Store  │                  │
+│                        │ (CH 1, CH 2, CH 3 Isolation)    │                  │
+│                        └────────────────┬────────────────┘                  │
+│                                         │                                   │
+│                    ┌────────────────────┴───────────────────┐               │
+│                    │                                        │               │
+│                    ▼                                        ▼               │
+│      ┌───────────────────────────┐            ┌──────────────────────────┐  │
+│      │  Electron Main Process    │            │  hardwareBridge.ts       │  │
+│      │  • Multi-Source Discovery │            │  • WebHID API            │  │
+│      │  • Native Icon Extractor  │            │  • WebSerial CDC Stream  │  │
+│      │  • Safe Process Spawner   │            │  • EEPROM Packet Sync    │  │
+│      │  • Webhook REST (38491)   │            └─────────────┬────────────┘  │
+│      └─────────────┬─────────────┘                          │               │
+└────────────────────┼────────────────────────────────────────┼───────────────┘
+                     │ OS Shell / Process Spawn               │ USB CDC / HID
+                     ▼                                        ▼
+          ┌─────────────────────┐                 ┌───────────────────────┐
+          │  Windows OS / Apps  │                 │  Micro Pad Hardware   │
+          │  (Code, Chrome,     │                 │  (3x3 Matrix, Knob,   │
+          │   Spotify, Discord) │                 │   SSD1306 OLED)       │
+          └─────────────────────┘                 └───────────────────────┘
+```
+
+1. **Hardware Layer (Physical Macropad):**
+   - Scans the 3x3 mechanical switch matrix and rotary encoder detents with hardware debouncing.
+   - Emits compact ASCII CDC protocol messages (e.g. `KEY:0:DOWN`, `KEY:0:UP`, `ENC:CW`, `ENC:CCW`, `ENC:DOWN`).
+   - Receives text packets to render live telemetry on the 128x32/64 OLED display.
+
+2. **Desktop Companion Layer (Electron + React):**
+   - Handles the complex logic the microcontroller memory cannot perform: process launching, window focusing, file picking, active profile switching, and app discovery.
+   - Listens to physical keystrokes over WebHID / WebSerial, maps them to the active channel, and triggers the configured action.
+
+---
+
+## ⚡ Core Feature Breakdown
+
+### 1. Automatic Application Discovery & Smart Launcher
+
+The application discovery engine (`electron/appDiscovery.cjs`) discovers installed programs across Windows 10 & 11 without executing applications or running slow disk scans:
+
+- **5 Discovery Vectors:**
+  1. **Start Menu Shortcuts (`.lnk`):** Scans `%APPDATA%\Microsoft\Windows\Start Menu\Programs` and `%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs`, resolving targets via `shell.readShortcutLink`.
+  2. **Registry Uninstall Entries:** Queries 64-bit and 32-bit `Uninstall` keys (`HKLM` and `HKCU`) to extract application names, `DisplayIcon` resources, and installation paths.
+  3. **Microsoft Store / Packaged Apps (UWP / MSIX):** Discovers registered modern Windows applications via `Get-StartApps` with their App User Model IDs (AUMIDs).
+  4. **App Paths Registry:** Extracts registered executables from `...\CurrentVersion\App Paths`.
+  5. **PATH Environment:** Discovers CLI tools, compilers, and editors located on the system `PATH`.
+- **High-Resolution Icon Extraction:** Uses Electron's native `app.getFileIcon` API to extract icons from executables and shortcuts into base64 `data:image/png;base64,...` URLs.
+- **Browse for App (`.exe` / `.lnk`):** Native Windows file chooser integration for portable software or utilities located in non-standard directories.
+- **Safe Execution:** Spawns executables using argument arrays without concatenating shell strings, opens packaged apps via `shell:AppsFolder\<AUMID>`, and launches shortcuts via `shell.openPath`.
+- **Advanced Launch Settings:** Focus existing window if already open, launch minimized, custom key labels, and optional command-line flags.
+
+---
+
+### 2. Three Independent Channels (CH 1, CH 2, CH 3)
+
+The Micro Pad supports **three fully independent hardware channels** (`CH 1`, `CH 2`, `CH 3`), each maintaining 9 independent programmable switches:
+
+| Channel | Default Role | Rotary Encoder Mode | Switch Setup Example |
+| :--- | :--- | :--- | :--- |
+| **CH 1** | Primary Desktop / Productivity | Master Volume Control | VS Code, Chrome, Terminal, Slack |
+| **CH 2** | Media Production / Editing | Timeline Scrubbing | Cut, Ripple Delete, Blade, Render |
+| **CH 3** | Audio Session & Streaming | Focused App Audio (Discord/Spotify) | Mute Mic, Toggle Stream, Deafen |
+
+- **Complete Isolation:** Changing a switch or knob action in Channel 1 never modifies Channel 2 or Channel 3.
+- **Dedicated Knob Hold for Channel Switching:** Pressing and holding the rotary knob ($\ge 800\text{ ms}$) is strictly dedicated to cycling through the 3 channels (**CH 1 → CH 2 → CH 3**). It cannot be accidentally overwritten with arbitrary macros.
+- **Total Customizable Action Capacity:**
+
+| Input Control | Per Channel | Total Across 3 Channels | Description |
+| :--- | :---: | :---: | :--- |
+| **Mechanical Switches (#1 – #9)** | 9 keys | **27 keys** | Hotkeys, macros, safety holds, or app launchers |
+| **Knob Tap (Push / Click)** | 1 action | **3 actions** | Momentary push macro (Mute, Play/Pause, Enter) |
+| **Knob Scroll CW (Turn Right)** | 1 action | **3 actions** | Clockwise rotation macro (Vol Up, Zoom In, Scrub) |
+| **Knob Scroll CCW (Turn Left)** | 1 action | **3 actions** | Counter-CW rotation macro (Vol Down, Zoom Out) |
+| **Knob Hold ($\ge 800\text{ ms}$)** | *Dedicated* | **Channel Cycle** | Strictly reserved to cycle CH 1 → CH 2 → CH 3 |
+| **Total Customizable Actions** | **12 / channel** | **36 distinct actions** | 100% independent per channel |
+
+---
+
+### 3. Digital Twin & Visual Keycaps
+
+The **Digital Twin** provides a pixel-perfect, interactive representation of your physical device:
+- **Actual App Icons on Keycaps:** When a switch is configured to launch an application, the switch dish renders the real application icon extracted from Windows.
+- **Live Actuation Feedback:** Depressing keys in the UI or on the physical macropad lights up the key dish with real mechanical switch animations.
+- **Underglow Glow & Colors:** Configurable per-switch accent colors that shine through switch cutouts.
+
+---
+
+### 4. Switch Configuration Drawer
+
+Clicking any switch in Deck Studio opens the unified Configuration Drawer:
+- **Tab 1: Keyboard & Combos:** Full 15u visual keyboard supporting ANSI/ISO layout, modifiers (`Ctrl`, `Alt`, `Shift`, `Win`), and dual recording modes (`append` and `chord`).
+- **Tab 2: Keystroke Recorder:** Records live hardware key chords directly from your computer keyboard.
+- **Tab 3: Text Macro:** Types out boilerplate text snippets, code templates, or emails upon pressing the switch.
+- **Tab 4: Safety Hold:** Isolates destructive actions (e.g. terminating a broadcast or closing processes) behind a sustained long-press (500ms to 4000ms) with animated visual filling.
+- **Tab 5: Open App:** Dedicated application picker featuring instant search, category filters, browse fallback, custom label overrides, and launch arguments.
+
+---
+
+### 5. Rotary Encoder Engine
+
+The rotary knob supports bi-directional rotation and an integrated push button:
+- **Clockwise (CW) & Counter-Clockwise (CCW):** Configurable actions per rotation detent.
+- **Velocity Acceleration Curves:**
+  - `Linear`: 1-to-1 detent response.
+  - `Exponential`: Rotates faster during rapid turns (ideal for volume or long timeline scrubbing).
+  - `Precision Nudge`: Ultra-fine adjustments for color grading or frame-by-frame jog.
+- **Hold-to-Switch Channel:** Sustained hold switches the entire macropad channel without needing extra keys.
+
+---
+
+### 6. OLED Display Control (SSD1306)
+
+Control the 128x32 / 128x64 I2C OLED display directly from software:
+- **Operating Modes:**
+  - `channel`: Minimalist industrial Channel Stepper Track with high-contrast inverted active channel badge (`[01]`, `[02]`, `[03]`).
+  - `kadowaz`: Industrial branding and version indicator.
+  - `system`: Live PC telemetry (CPU load %, GPU load %, RAM %, CPU temperature).
+  - `media`: Now-playing track title, artist name, and progress bar.
+  - `visualizer`: Stereo L/R audio VU peak meter.
+
+#### Channel-Switch Stepper Display (Dual Hardware & Software Parity)
+
+Whenever you switch channels (by pressing and holding the rotary knob for $\ge 800\text{ ms}$, or switching in the desktop software), the OLED screen immediately displays a sleek, high-contrast segmented track with an inverted rounded badge indicating the active channel:
+
+```
+Channel 01 Active:
+┌────────────────────────────────────────────────────────┐
+│   ██████                                               │
+│   █ 01 █ ────────   ──────────   ──────────            │
+│   ██████                                               │
+└────────────────────────────────────────────────────────┘
+
+Channel 02 Active:
+┌────────────────────────────────────────────────────────┐
+│                ██████                                  │
+│   ──────────   █ 02 █ ──────────   ──────────          │
+│                ██████                                  │
+└────────────────────────────────────────────────────────┘
+
+Channel 03 Active:
+┌────────────────────────────────────────────────────────┐
+│                                 ██████                 │
+│   ──────────   ──────────   ────█ 03 █ ────            │
+│                                 ██████                 │
+└────────────────────────────────────────────────────────┘
+```
+
+- **Visual Design:**
+  - **Inverted Active Badge:** Solid white rounded pill with deep black monospace numbers (`01`, `02`, `03`).
+  - **Dashed Stepper Line:** 3.5 px thick horizontal track running across the display, visually showing the current channel position relative to the 3 channels.
+  - **Temporary Pop-Up Overlay:** When you switch channels while using System Metrics or Equalizer modes, the Channel Stepper smoothly pops over the screen for 2.6 seconds before reverting back.
+  - **Persistent Mode:** You can also lock the OLED screen permanently into `Channel Indicator` mode via the Display Config Drawer.
+- **Direct Serial Transmission:** Software pushes display updates via serial protocol commands (`OLED:CH:<1-3>` or `OLED:<text>`).
+
+---
+
+### 7. PC Shortcuts Vault
+
+A built-in curated vault of shortcuts categorized by application:
+- **Creative & Editing:** DaVinci Resolve, Adobe Premiere Pro, Blender 3D, Adobe Photoshop, Figma, Canva.
+- **Developer Tools:** VS Code, Git, Windows Terminal, PowerShell.
+- **Streaming & Voice:** OBS Studio, Discord, Spotify.
+- **Windows Utilities:** Snipping Tool, Task Manager, Virtual Desktop Switcher.
+
+---
+
+### 8. VIA Hardware Suite
+
+Complete compatibility for custom keyboard enthusiasts:
+- **Key Matrix Tester:** Live 3x3 interactive switch tester with actuation count and debounce state tracking.
+- **Lighting Studio:** Control RGB underglow brightness, saturation, hue, and animation effects.
+- **Macro Editor:** Multi-step macro engine supporting up to 16 macros (`M0` to `M15`).
+- **Keycode Remapper:** Direct raw hex keycode assignment compatible with QMK / VIA standards.
+
+---
+
+### 9. Safety Isolation (Long-Press Protection)
+
+Destructive commands (such as stopping a recording, closing active apps, or resetting channels) can be flagged with **Destructive Safety**:
+- Normal taps are ignored.
+- The switch must be continuously held down for the user-configured duration (default: 1500ms).
+- A radial progress indicator fills the keycap before the action is dispatched.
+
+---
+
+### 10. Embedded Localhost REST & Webhook Daemon
+
+KADOWAZ Deck Studio runs an embedded HTTP server on port `38491` (`127.0.0.1:38491`):
+- **Status Endpoint (`GET /api/v1/status`):**
+  ```json
+  { "status": "online", "app": "KADOWAZ Deck Studio", "port": 38491 }
+  ```
+- **Webhook Input (`POST /api/v1/action`):**
+  Accepts external JSON automation payloads from Elgato Stream Deck plugins, Bitfocus Companion, Touch Portal, or cURL scripts to trigger profiles or layer switches remotely.
+
+---
+
+## 🔌 Hardware & Firmware Integration
+
+### 🛠 Recommended Hardware Bill of Materials (BOM)
+
+Here is the recommended component list to build your custom Micro Pad hardware:
+
+#### 1. RP2040-Zero
+*Keep this.* Your main controller. It handles the nine mechanical keys, rotary encoder quadrature decoding, WS2812B RGB effects, and three independent channels over USB CDC/HID serial communication.
+
+#### 2. MX-Style Through-Hole Mechanical Switches × 9
+Best for hand soldering because the electrical contact pins are large and easy to access. Solder the switches directly to the PCB or perfboard; hot-swap sockets are not strictly necessary.
+
+#### 3. WS2812B-Compatible 5050 Addressable RGB LEDs × 9
+Choose a strip or larger 5050 LED package rather than tiny 2020 LEDs. The larger solder pads are much easier to solder by hand, and each LED can still display its own independent color and animation effect.
+> **Assembly Tip:** If using LED strip sections, cut at the marked copper cut points and mount each LED directly beneath its corresponding key switch. Check that the strip's physical dimensions fit your key switch spacing.
+
+#### 4. EC11 Rotary Encoder with Push Switch × 1
+Gives you stepped left rotation (CCW), right rotation (CW), and push button press.
+- **Rotary Macros:** Tap the knob to trigger the assigned channel's knob press action.
+- **Dedicated Channel Switching:** Press and hold the knob ($\ge 800\text{ ms}$) to cycle through the 3 channels (**CH 1 → CH 2 → CH 3**).
+
+#### 5. 0.91-inch I2C OLED Display Module (4-Pin, 128×32, SSD1306) × 1
+Compact monochrome display mounted horizontally on the top bezel above the key switches next to the rotary knob.
+- **Pinout (4 Pins):** `GND`, `VCC` (3.3 V / 5 V compatible), `SCL` (I2C Clock), `SDA` (I2C Data).
+- **Default I2C Address:** `0x3C`.
+- **Role:** Renders the minimalist Channel Stepper track with inverted active badge (`[01]`, `[02]`, `[03]`), real-time PC telemetry (CPU/GPU load & temp), 12-band stereo audio VU equalizer, and media track progress.
+- **Form Factor:** The slim 0.91-inch 128×32 aspect ratio fits the top chassis window perfectly without protruding over the mechanical keycaps.
+
+#### Supporting Components & Circuit Protection
+
+| Component | Quantity | Why & Circuit Rationale |
+| :--- | :---: | :--- |
+| **1N4148 diodes** | 9 | Key matrix isolation and anti-ghosting across simultaneous key actuations |
+| **SN74AHCT125 buffer** | 1 | Reliable 3.3 V to 5 V logic level translation for the WS2812B LED data line |
+| **330 Ω resistor** | 1 | LED data-line current and voltage ringing protection |
+| **470–1000 µF capacitor, 6.3 V or higher** | 1 | Smooths the LED 5 V power rail against inrush current draw |
+| **100 nF ceramic capacitor** | 1 | Local high-frequency bypass capacitor near logic ICs |
+| **Perfboard or custom PCB** | 1 | Rigid structural base plate for switch and wiring mounting |
+| **USB-C data cable** | 1 | High-speed PC connection for USB CDC/HID communication |
+| **Hookup wire, solder and heat-shrink** | As needed | Assembly, wiring runs, and electrical insulation |
+
+---
+
+### Microcontroller Compatibility
+- **RP2040-Zero / Raspberry Pi Pico (RP2040)** (Recommended)
+- **Arduino Pro Micro (ATmega32U4, 5V/16MHz or 3.3V/8MHz)**
+- **ESP32-S3 (Native USB OTG)**
+
+### Pinout Reference (`firmware/kadowaz_macropad.ino`)
+
+| Hardware Component | Microcontroller Pins | Description |
+| :--- | :--- | :--- |
+| **Matrix Rows (3)** | Pins `2`, `3`, `4` | Scanned as digital outputs (`LOW` active) |
+| **Matrix Columns (3)** | Pins `5`, `6`, `7` | Digital inputs with internal `INPUT_PULLUP` |
+| **Encoder Pin A** | Pin `8` | Phase A quadrature input |
+| **Encoder Pin B** | Pin `9` | Phase B quadrature input |
+| **Encoder Push Switch** | Pin `10` | Tactile push switch (`INPUT_PULLUP`) |
+| **I2C OLED SDA** | Pin `SDA` (e.g. Pin 4 on RP2040) | I2C Data (Address `0x3C`) |
+| **I2C OLED SCL** | Pin `SCL` (e.g. Pin 5 on RP2040) | I2C Clock (Address `0x3C`) |
+
+### Serial Protocol Specification (115200 Baud)
+
+| Direction | Command Message | Meaning |
+| :--- | :--- | :--- |
+| **MCU → PC** | `KEY:<0-8>:DOWN` | Switch index (0 to 8) pressed |
+| **MCU → PC** | `KEY:<0-8>:UP` | Switch index (0 to 8) released |
+| **MCU → PC** | `ENC:CW` | Rotary knob rotated clockwise 1 detent |
+| **MCU → PC** | `ENC:CCW` | Rotary knob rotated counter-clockwise 1 detent |
+| **MCU → PC** | `ENC:DOWN` / `ENC:UP` | Rotary knob push button pressed / released |
+| **MCU → PC** | `CHANNEL:<1-3>` | Emitted when rotary knob hold ($\ge 800\text{ ms}$) switches the channel on the hardware |
+| **MCU → PC** | `ENC:HOLD_SWITCH` | Confirmation that hardware knob hold triggered a layer switch |
+| **PC → MCU** | `OLED:CH:<1-3>` | Renders the inverted active channel badge (`[01]`, `[02]`, `[03]`) and stepper track |
+| **PC → MCU** | `OLED:<text>` | Updates text displayed on the OLED screen |
+
+#### OLED Channel Stepper Firmware Implementation (`firmware/kadowaz_macropad.ino`)
+
+The firmware implements high-speed direct hardware rendering using `Adafruit_SSD1306` and `Adafruit_GFX`:
+
+```cpp
+void drawChannelScreen(uint8_t channel) {
+  display.clearDisplay();
+  const int lineY = 14;   // Center vertical baseline
+  const int lineH = 3;    // Dash thickness
+  const int badgeY = 8;
+  const int badgeH = 16;
+  const int badgeW = 28;
+  const int badgeR = 3;   // Rounded corner radius
+
+  if (channel == 2) {
+    // Channel 02 Active: Dash on left, inverted badge in center, two dashes on right
+    display.fillRect(24, lineY, 20, lineH, SSD1306_WHITE);
+    display.fillRoundRect(50, badgeY, badgeW, badgeH, badgeR, SSD1306_WHITE);
+    display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setCursor(58, badgeY + 4);
+    display.print(F("02"));
+    display.fillRect(84, lineY, 18, lineH, SSD1306_WHITE);
+    display.fillRect(108, lineY, 14, lineH, SSD1306_WHITE);
+  }
+  display.display();
+}
+```
+
+---
+
+## 📁 Project Structure
+
+```
+desktop-app/
+├── electron/
+│   ├── appDiscovery.cjs        # Multi-source Windows application discovery & launcher engine
+│   ├── main.cjs                # Electron main process, tray menu, window management & IPC
+│   ├── preload.cjs             # Safe context bridge exposing electronAPI to React
+│   └── run-electron.cjs        # Electron runner script
+│
+├── firmware/
+│   └── kadowaz_macropad.ino    # Arduino / RP2040 C++ firmware sketch for 3x3 + Knob + OLED
+│
+├── src/
+│   ├── components/
+│   │   ├── AppLauncherPanel.tsx    # Full Application Library browser & assignment panel
+│   │   ├── DigitalTwin.tsx         # Interactive hardware visualizer & channel controls
+│   │   ├── DisplayConfigDrawer.tsx # OLED display settings drawer
+│   │   ├── KeyConfigDrawer.tsx     # Switch remap drawer (Keyboard, Macro, Safety, Open App)
+│   │   ├── KeyMatrix.tsx           # 3x3 Keycaps with dynamic app icons & LED underglow
+│   │   ├── KnobConfigDrawer.tsx    # Rotary knob curves, sensitivity & channel hold config
+│   │   ├── OLEDDisplay.tsx         # OLED display component (visualizer, media, system)
+│   │   ├── OSDFlyout.tsx           # On-screen display banner for profile/channel switches
+│   │   ├── ProfileModal.tsx        # Profile creation & deletion modal
+│   │   ├── RotaryEncoder.tsx       # Interactive knob component with rotation physics
+│   │   ├── ShortcutsPanel.tsx      # Curated PC shortcuts vault
+│   │   ├── TopNavbar.tsx           # Navigation bar with connection status & tab switcher
+│   │   └── via/
+│   │       ├── ViaKeycodePicker.tsx # Quick keycode remapping tray
+│   │       ├── ViaKeyTester.tsx     # Matrix switch test suite
+│   │       ├── ViaLightingPanel.tsx # RGB underglow lighting studio
+│   │       └── ViaMacroEditor.tsx   # Multi-step macro recorder & editor
+│   │
+│   ├── data/
+│   │   ├── defaultProfiles.ts      # Initial profiles (DaVinci Resolve, OBS, Spotify DJ)
+│   │   ├── pcShortcuts.ts          # Preset application shortcut definitions
+│   │   └── viaKeycodes.ts          # QMK / VIA standard keycode definitions
+│   │
+│   ├── types/
+│   │   └── index.ts                # TypeScript domain interfaces (KeyBinding, DiscoveredApp, etc.)
+│   │
+│   ├── utils/
+│   │   ├── channelLayers.ts        # Channel layer normalization & channel isolation helpers
+│   │   ├── hardwareBridge.ts       # WebHID & WebSerial communication manager
+│   │   └── soundEffects.ts         # Audio synthesizers for detent clicks and key presses
+│   │
+│   ├── App.tsx                     # Main application orchestrator & state manager
+│   ├── index.css                   # Tailwind styles, glassmorphism, and keycap shadows
+│   └── main.tsx                    # React application entry point
+│
+├── package.json                    # Dependencies and run scripts
+├── tsconfig.json                   # TypeScript compiler configuration
+├── tailwind.config.js              # Theme colors, glow effects, and typography
+└── vite.config.ts                  # Vite production build pipeline
+```
+
+---
+
+## 🚀 Installation & Development Guide
+
+### Prerequisites
+- **Node.js:** v18.0.0 or higher
+- **npm:** v9.0.0 or higher
+- **Operating System:** Windows 10 or Windows 11 (64-bit recommended)
+
+### 1. Install Dependencies
+```bash
+npm install
+```
+
+### 2. Run in Web Development Mode (Browser Sandbox)
+Runs Vite dev server with simulated hardware input:
+```bash
+npm run dev
+```
+
+### 3. Run Native Electron Desktop Studio
+Launches Vite and Electron with full native Windows application discovery, process spawning, and tray support:
+```bash
+npm run electron:dev
+```
+
+### 4. Build Production Bundle
+Compiles TypeScript and bundles assets with Vite:
+```bash
+npm run build
+```
+
+---
+
+## 🔒 Security & Safe Execution
+
+- **Zero Shell Concatenation:** Process execution in `electron/appDiscovery.cjs` parses argument tokens into discrete argument arrays passed directly to `child_process.spawn`, preventing command injection vulnerabilities.
+- **Context Isolation:** The renderer has no direct access to Node.js `fs` or `child_process`. All interactions pass through explicit, validated channels in `preload.cjs`.
+- **Read-Only Discovery:** The discovery engine scans system manifests and shortcuts without modifying, moving, or executing discovered applications during discovery.
+- **Bounded Resources:** Icon extraction operates in batched concurrency limits (10 items per batch) to prevent memory spikes or UI stutter.
+
+---
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for details. Built for makers, streamers, video editors, and audio engineers.
+
