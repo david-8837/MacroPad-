@@ -22,9 +22,9 @@
 
 ## 📌 Table of Contents
 
-1. [Overview](#-overview)
-2. [Key Architecture & Dual-Engine Model](#-key-architecture--dual-engine-model)
-3. [Core Feature Breakdown](#-core-feature-breakdown)
+1. [Overview](#overview)
+2. [Key Architecture & Dual-Engine Model](#key-architecture--dual-engine-model)
+3. [Core Feature Breakdown](#core-feature-breakdown)
    - [1. Automatic Application Discovery & Launcher](#1-automatic-application-discovery--smart-launcher)
    - [2. Three Independent Layers (Layer 1, Layer 2, Layer 3)](#2-three-independent-layers-layer-1-layer-2-layer-3)
    - [3. Digital Twin & Visual Keycaps](#3-digital-twin--visual-keycaps)
@@ -35,20 +35,20 @@
    - [8. VIA Hardware Suite](#8-via-hardware-suite)
    - [9. Safety Isolation (Long-Press Protection)](#9-safety-isolation-long-press-protection)
    - [10. Embedded Localhost REST & Webhook Daemon](#10-embedded-localhost-rest--webhook-daemon)
-4. [Hardware & Firmware Integration](#-hardware--firmware-integration)
-   - [Recommended Hardware Bill of Materials (BOM)](#-recommended-hardware-bill-of-materials-bom)
+4. [Hardware & Firmware Integration](#hardware--firmware-integration)
+   - [Recommended Hardware Bill of Materials (BOM)](#recommended-hardware-bill-of-materials-bom)
    - [Firmware Options (Pico SDK C vs Arduino)](#firmware-options)
    - [Hardware Wiring & Electrical Guide (`docs/HARDWARE.md`)](./docs/HARDWARE.md)
    - [Firmware Architecture & Event Pipeline (`docs/ARCHITECTURE.md`)](./docs/ARCHITECTURE.md)
    - [Binary Wire Protocol Specification (`docs/PROTOCOL.md`)](./docs/PROTOCOL.md)
-   - [RP2040-Zero Pinout Reference](#pinout-reference-rp2040-zero)
+   - [Hardware Pinout & Wiring Configurations](#hardware-pinout--wiring-configurations)
    - [Serial Protocol Specification](#serial-protocol-specification-115200-baud)
-5. [Project Structure](#-project-structure)
-6. [Installation & Development Guide](#-installation--development-guide)
+5. [Project Structure](#project-structure)
+6. [Installation & Development Guide](#installation--development-guide)
    - [Desktop App Setup](#1-install-dependencies)
    - [Firmware Flashing & UF2 Build](#5-firmware-build--flashing-rp2040-zero)
    - [Testing & Quality Verification](#6-testing--verification)
-7. [Security & Safe Execution](#-security--safe-execution)
+7. [Security & Safe Execution](#security--safe-execution)
 
 ---
 
@@ -305,7 +305,7 @@ Compact monochrome display mounted horizontally on the top bezel above the key s
 
 | Component | Quantity | Why & Circuit Rationale |
 | :--- | :---: | :--- |
-| **1N4148 diodes** | 9 | Key matrix isolation and anti-ghosting across simultaneous key actuations |
+| **1N4148 diodes** | 9 | Key matrix isolation and anti-ghosting (*Required for 3x3 Matrix / Method B; 0 diodes needed if using Direct GPIO / Method A*) |
 | **SN74AHCT125 buffer** | 1 | Reliable 3.3 V to 5 V logic level translation for the WS2812B LED data line |
 | **330 Ω resistor** | 1 | LED data-line current and voltage ringing protection |
 | **470–1000 µF capacitor, 6.3 V or higher** | 1 | Smooths the LED 5 V power rail against inrush current draw |
@@ -334,17 +334,43 @@ The project includes two firmware implementations depending on your development 
 2. **Arduino IDE Firmware (`firmware/kadowaz_macropad/`)**:
    - Single-file Arduino `.ino` sketch for quick hobbyist editing and testing across RP2040, Arduino Pro Micro (ATmega32U4), or ESP32-S3 boards.
 
-### Pinout Reference (RP2040-Zero)
+---
 
-| Hardware Component | Microcontroller Pins | Description |
+### Hardware Pinout & Wiring Configurations
+
+Depending on your chosen firmware, two wiring topologies are supported:
+
+#### Method A: Direct GPIO Wiring (Recommended for Native Pico SDK C Firmware)
+Connect each switch directly between its own dedicated GPIO pin and **GND**. The RP2040's internal pull-ups (`PULL_UP`) handle debouncing and sensing. **Zero diodes required!**
+
+| Component | RP2040 Pin | Details |
+| :--- | :--- | :--- |
+| **Key Switches 0 to 6** | `GP0`, `GP1`, `GP2`, `GP3`, `GP4`, `GP5`, `GP6` | Direct switch connection to `GND` (internal pull-up) |
+| **Key Switches 7 & 8** | `GP11`, `GP12` | Direct switch connection to `GND` (internal pull-up) |
+| **WS2812B RGB Data** | `GP7` | PIO0 State Machine 0 via 74AHCT125 level shifter to 5V |
+| **Encoder Pin A (Phase A)** | `GP8` | Quadrature encoder input with glitch filter |
+| **Encoder Pin B (Phase B)** | `GP9` | Quadrature encoder input with glitch filter |
+| **Encoder Push Switch** | `GP10` | Tactile push switch to `GND` (active-low) |
+| **I2C OLED SDA** | `GP14` | I2C1 Data (Address `0x3C`, 4.7kΩ pull-up to 3.3V) |
+| **I2C OLED SCL** | `GP15` | I2C1 Clock (Address `0x3C`, 4.7kΩ pull-up to 3.3V) |
+
+*Full schematic, board layout, and bypass capacitor locations are detailed in [`docs/HARDWARE.md`](./docs/HARDWARE.md).*
+
+#### Method B: 3×3 Matrix Wiring (Arduino IDE Sketch `kadowaz_macropad.ino`)
+Scans switches in a 3×3 grid using 3 row outputs and 3 column inputs. **Requires 9× 1N4148 diodes** (one in series with each switch, cathode facing row) to prevent ghosting during multi-key combos.
+
+| Component | Pin (Arduino Reference) | Details |
 | :--- | :--- | :--- |
 | **Matrix Rows (3)** | Pins `2`, `3`, `4` | Scanned as digital outputs (`LOW` active) |
-| **Matrix Columns (3)** | Pins `5`, `6`, `7` | Digital inputs with internal `INPUT_PULLUP` |
+| **Matrix Columns (3)** | Pins `5`, `6`, `7` | Digital inputs with `INPUT_PULLUP` |
 | **Encoder Pin A** | Pin `8` | Phase A quadrature input |
 | **Encoder Pin B** | Pin `9` | Phase B quadrature input |
 | **Encoder Push Switch** | Pin `10` | Tactile push switch (`INPUT_PULLUP`) |
-| **I2C OLED SDA** | Pin `SDA` (e.g. Pin 4 on RP2040) | I2C Data (Address `0x3C`) |
-| **I2C OLED SCL** | Pin `SCL` (e.g. Pin 5 on RP2040) | I2C Clock (Address `0x3C`) |
+| **I2C OLED SDA** | Pin `4` (RP2040 GP4) | I2C Data (Address `0x3C`) |
+| **I2C OLED SCL** | Pin `5` (RP2040 GP5) | I2C Clock (Address `0x3C`) |
+| **WS2812B RGB Data** | Pin `1` (RP2040 GP1) | Serial NeoPixel data rail |
+
+---
 
 ### Serial Protocol Specification (115200 Baud)
 
@@ -355,12 +381,12 @@ The project includes two firmware implementations depending on your development 
 | **MCU → PC** | `ENC:CW` | Rotary knob rotated clockwise 1 detent |
 | **MCU → PC** | `ENC:CCW` | Rotary knob rotated counter-clockwise 1 detent |
 | **MCU → PC** | `ENC:DOWN` / `ENC:UP` | Rotary knob push button pressed / released |
-| **MCU → PC** | `CHANNEL:<1-3>` | Emitted when rotary knob hold ($\ge 800\text{ ms}$) switches the layer on the hardware |
+| **MCU → PC** | `LAYER:<1-3>` / `CHANNEL:<1-3>` | Emitted when rotary knob hold ($\ge 800\text{ ms}$) switches the layer on the hardware |
 | **MCU → PC** | `ENC:HOLD_SWITCH` | Confirmation that hardware knob hold triggered a layer switch |
-| **PC → MCU** | `OLED:CH:<1-3>` | Renders the inverted active layer badge (`[01]`, `[02]`, `[03]`) and stepper track |
+| **PC → MCU** | `OLED:LAYER:<1-3>` / `OLED:CH:<1-3>` | Renders the inverted active layer badge (`[01]`, `[02]`, `[03]`) and stepper track |
 | **PC → MCU** | `OLED:<text>` | Updates text displayed on the OLED screen |
 
-#### OLED Layer Stepper Firmware Implementation (`firmware/kadowaz_macropad.ino`)
+#### OLED Layer Stepper Firmware Implementation (`firmware/kadowaz_macropad/kadowaz_macropad.ino`)
 
 The firmware implements high-speed direct hardware rendering using `Adafruit_SSD1306` and `Adafruit_GFX`:
 

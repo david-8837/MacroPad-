@@ -186,6 +186,8 @@ void loop() {
       currentChannel = (currentChannel % 3) + 1;
       drawChannelScreen(currentChannel);
       
+      Serial.print(F("LAYER:"));
+      Serial.println(currentChannel);
       Serial.print(F("CHANNEL:"));
       Serial.println(currentChannel);
       Serial.println(F("ENC:HOLD_SWITCH"));
@@ -206,8 +208,9 @@ void loop() {
     String incoming = Serial.readStringUntil('\n');
     incoming.trim();
 
-    if (incoming.startsWith("OLED:CH:")) {
-      int ch = incoming.substring(8).toInt();
+    if (incoming.startsWith("OLED:LAYER:") || incoming.startsWith("OLED:CH:")) {
+      int prefixLen = incoming.startsWith("OLED:LAYER:") ? 11 : 8;
+      int ch = incoming.substring(prefixLen).toInt();
       if (ch >= 1 && ch <= 3) {
         currentChannel = ch;
         drawChannelScreen(currentChannel);
