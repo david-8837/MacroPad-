@@ -101,7 +101,7 @@ export const OLEDDisplay: React.FC<OLEDDisplayProps> = ({
   return (
     <div
       onClick={onCycleMode}
-      title="Click to cycle OLED screen mode (Channel Indicator, System Monitor, VU Equalizer, Now Playing, Deck Status)"
+      title="Click to cycle OLED screen mode (Layer Indicator, System Monitor, VU Equalizer, Now Playing, Deck Status)"
       style={{
         filter: `brightness(${brightnessVal}) ${isInverted ? 'invert(1)' : ''}`.trim(),
       }}
@@ -109,7 +109,7 @@ export const OLEDDisplay: React.FC<OLEDDisplayProps> = ({
     >
       <div className="oled-scanlines absolute inset-0 z-10" />
 
-      {/* Render Channel Stepper Overlay if recently switched OR if mode === 'channel' */}
+      {/* Render Layer Stepper Overlay if recently switched OR if mode === 'channel' */}
       {(showChannelOSD || state.mode === 'channel') ? (
         renderChannelScreen()
       ) : (

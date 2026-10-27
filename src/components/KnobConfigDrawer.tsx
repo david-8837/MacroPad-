@@ -43,9 +43,9 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   onSelectChannel,
 }) => {
   const channelList = [
-    dial?.availableModes?.[0] || 'CH 1: Master Volume',
-    dial?.availableModes?.[1] || 'CH 2: Timeline Scrub',
-    dial?.availableModes?.[2] || 'CH 3: Focused App Audio',
+    dial?.availableModes?.[0] || 'Layer 1: Master Volume',
+    dial?.availableModes?.[1] || 'Layer 2: Timeline Scrub',
+    dial?.availableModes?.[2] || 'Layer 3: Focused App Audio',
   ];
 
   const initialChannelIdx = Math.max(
@@ -80,11 +80,11 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   const [holdAction, setHoldAction] = useState<ActionDefinition>({
     id: dial?.holdAction?.id || 'hold-def',
     category: dial?.holdAction?.category || 'navigation',
-    name: dial?.holdAction?.name || 'Cycle Channels (CH 1 → 2 → 3)',
+    name: dial?.holdAction?.name || 'Cycle Layers (Layer 1 → 2 → 3)',
     payload: { ...(dial?.holdAction?.payload || {}) },
   });
 
-  // Selected rotary key: 'cw', 'ccw', or 'press' (Hold is strictly for channel switching)
+  // Selected rotary key: 'cw', 'ccw', or 'press' (Hold is strictly for layer switching)
   const [selectedRotaryKey, setSelectedRotaryKey] = useState<'cw' | 'ccw' | 'press'>('cw');
 
   // Settings & Dynamics
@@ -115,9 +115,9 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
 
   useEffect(() => {
     const list = [
-      dial.availableModes[0] || 'CH 1: Master Volume',
-      dial.availableModes[1] || 'CH 2: Timeline Scrub',
-      dial.availableModes[2] || 'CH 3: Focused App Audio',
+      dial.availableModes[0] || 'Layer 1: Master Volume',
+      dial.availableModes[1] || 'Layer 2: Timeline Scrub',
+      dial.availableModes[2] || 'Layer 3: Focused App Audio',
     ];
     setChannelNames(list);
     const idx = list.findIndex(m => m === dial.activeModeName);
@@ -128,7 +128,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     setHoldAction(dial.holdAction || {
       id: 'hold-def',
       category: 'navigation',
-      name: 'Cycle Channels (CH 1 → 2 → 3)',
+      name: 'Cycle Layers (Layer 1 → 2 → 3)',
       payload: {},
     });
     setChannelHoldThresholdMs(dial.channelHoldThresholdMs || 800);
@@ -311,10 +311,10 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
         setTestHoldProgress(100);
         playDetentClick('cw');
         setTestLog({
-          message: `★ HOLD TRIGGERED (${elapsed}ms) -> Switched Channel bank!`,
+          message: `★ HOLD TRIGGERED (${elapsed}ms) -> Switched Layer bank!`,
           type: 'hold'
         });
-        onTriggerAction('test-hold', `[TEST RIG HOLD] Channel Switch (${elapsed}ms)`, 'navigation');
+        onTriggerAction('test-hold', `[TEST RIG HOLD] Layer Switch (${elapsed}ms)`, 'navigation');
         return;
       }
 
@@ -576,14 +576,14 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
       {/* DRAWER BODY */}
       <div className="flex-1 p-3.5 overflow-y-auto space-y-3">
 
-        {/* DEDICATED HOLD CHANNEL SWITCH CARD (Hold is only for Channel Switch) */}
+        {/* DEDICATED HOLD LAYER SWITCH CARD (Hold is only for Layer Switch) */}
         <div className="p-3 bg-gradient-to-r from-purple-950/40 via-[#161224] to-[#0D101A] rounded-xl border border-purple-500/30 shadow-md space-y-2">
           <div className="flex items-center justify-between font-mono text-xs">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#A855F7] animate-pulse" />
-              <span className="text-white font-bold tracking-wide">HOLD KNOB TO SWITCH CHANNELS:</span>
+              <span className="text-white font-bold tracking-wide">HOLD KNOB TO SWITCH LAYERS:</span>
               <span className="text-[10px] text-white/50 hidden sm:inline">
-                (Hold knob down to cycle CH 1 → CH 2 → CH 3)
+                (Hold knob down to cycle Layer 1 → Layer 2 → Layer 3)
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -799,7 +799,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
       {/* FOOTER SAVE BAR */}
       <div className="p-3 border-t border-white/10 bg-[#0B0E16] flex items-center justify-between shrink-0">
         <div className="text-[10px] font-mono text-white/40">
-          Configuring <span className="text-white font-bold">{activeKeyMeta.badge}</span> on {channelNames[activeChannel] || 'Active Channel'}
+          Configuring <span className="text-white font-bold">{activeKeyMeta.badge}</span> on {channelNames[activeChannel] || 'Active Layer'}
         </div>
         <div className="flex items-center gap-2">
           <button

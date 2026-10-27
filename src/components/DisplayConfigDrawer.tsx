@@ -83,11 +83,11 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
     },
     {
       mode: 'channel',
-      label: 'Channel Indicator',
+      label: 'Layer Indicator',
       sublabel: 'Dashed Stepper & Badge [01/02/03]',
       icon: <Layers className="w-4 h-4" />,
       color: '#A855F7',
-      description: 'Minimalist industrial channel stepper track with high-contrast inverted active channel badge [01], [02], [03].',
+      description: 'Minimalist industrial layer stepper track with high-contrast inverted active layer badge [01], [02], [03].',
     },
   ];
 

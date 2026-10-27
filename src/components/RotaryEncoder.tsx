@@ -34,11 +34,11 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
   const didTriggerHoldRef = useRef(false);
   const animFrameRef = useRef<number | null>(null);
 
-  // Derive active channel (0, 1, or 2)
+  // Derive active layer (0, 1, or 2)
   const channels = [
-    dial.availableModes[0] || 'CH 1: Master Volume',
-    dial.availableModes[1] || 'CH 2: Timeline Scrub',
-    dial.availableModes[2] || 'CH 3: Focused App Audio',
+    dial.availableModes[0] || 'Layer 1: Master Volume',
+    dial.availableModes[1] || 'Layer 2: Timeline Scrub',
+    dial.availableModes[2] || 'Layer 3: Focused App Audio',
   ];
   
   let currentChannelIdx = channelIndex !== undefined
@@ -150,7 +150,7 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
         setHoldSuccess(true);
         playDetentClick('cw');
 
-        // Hold is strictly reserved for cycling through the 3 channels (CH 1 -> CH 2 -> CH 3)
+        // Hold is strictly reserved for cycling through the 3 layers (Layer 1 -> Layer 2 -> Layer 3)
         const nextChannel = (currentChannelIdx + 1) % 3;
         onCycleMode(nextChannel);
 
@@ -269,14 +269,14 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
                 onMouseLeave={handleHoldEnd}
                 onTouchStart={handleHoldStart}
                 onTouchEnd={handleHoldEnd}
-                title={`Tap: ${dial.pressAction.name} | Hold ${holdThresholdMs}ms: Switch Channel`}
+                title={`Tap: ${dial.pressAction.name} | Hold ${holdThresholdMs}ms: Switch Layer`}
                 className={`w-7 h-7 rounded-full bg-gradient-to-b from-[#2b2f38] to-[#15171c] border flex items-center justify-center text-[7.5px] font-mono font-bold transition-all shadow-md z-20 ${
                   isHolding
                     ? 'border-[#00F0FF] text-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.6)] scale-90'
                     : 'border-white/20 text-white/80 hover:text-white hover:border-[#FF5E00]/60 active:scale-90'
                 }`}
               >
-                CH {currentChannelIdx + 1}
+                L{currentChannelIdx + 1}
               </button>
             </div>
           </div>

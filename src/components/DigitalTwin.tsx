@@ -44,11 +44,11 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
   connectionStatus,
   onToggleConnection,
 }) => {
-  // Derive current active channel index (0, 1, or 2)
+  // Derive current active layer index (0, 1, or 2)
   const channels = [
-    layer.dial.availableModes[0] || 'CH 1: Master Volume',
-    layer.dial.availableModes[1] || 'CH 2: Timeline Scrub',
-    layer.dial.availableModes[2] || 'CH 3: Focused App Audio',
+    layer.dial.availableModes[0] || 'Layer 1: Master Volume',
+    layer.dial.availableModes[1] || 'Layer 2: Timeline Scrub',
+    layer.dial.availableModes[2] || 'Layer 3: Focused App Audio',
   ];
   let currentChannelIdx = channelIndex !== undefined
     ? channelIndex
@@ -128,19 +128,19 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
 
         {/* SIDE SPACE CONTROL DOCK */}
         <div className="flex flex-col gap-3.5 w-[215px] select-none pt-1">
-          {/* Top: Channel Switch */}
+          {/* Top: Layer Switch */}
           <div className="glass-panel p-3 rounded-2xl border border-white/10 shadow-lg flex flex-col gap-2.5 bg-[#12151C]/95">
             <div className="flex items-center justify-between text-[10px] font-mono font-bold tracking-wider text-white/50 px-1">
               <span className="flex items-center gap-1.5 text-[#FF5E00]">
                 <Layers className="w-3.5 h-3.5 text-[#FF5E00]" />
-                CHANNEL SWITCH
+                LAYER SWITCH
               </span>
               <span className="text-[9px] font-mono text-[#38EF7D] bg-[#38EF7D]/10 px-2 py-0.5 rounded-full border border-[#38EF7D]/25 font-bold">
-                CH {currentChannelIdx + 1}
+                Layer {currentChannelIdx + 1}
               </span>
             </div>
 
-            {/* 3 Channels Switch Buttons */}
+            {/* 3 Layers Switch Buttons */}
             <div className="grid grid-cols-3 gap-1.5 bg-[#0A0C12] p-1.5 rounded-xl border border-white/5">
               {[0, 1, 2].map((ch) => {
                 const isActive = currentChannelIdx === ch;
@@ -155,7 +155,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
                         : 'text-white/50 hover:text-white hover:bg-white/10'
                     }`}
                   >
-                    <span className="tracking-wider">CH {ch + 1}</span>
+                    <span className="tracking-wider">Layer {ch + 1}</span>
                     <span className="text-[7.5px] font-medium opacity-85 uppercase truncate max-w-full">
                       {ch === 0 ? 'Vol' : ch === 1 ? 'Scrub' : 'Audio'}
                     </span>
@@ -165,7 +165,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
             </div>
 
             <div className="text-[10px] font-mono text-white/40 truncate px-1 text-center">
-              {layer.dial.availableModes[currentChannelIdx] || `Channel ${currentChannelIdx + 1}`}
+              {layer.dial.availableModes[currentChannelIdx] || `Layer ${currentChannelIdx + 1}`}
             </div>
 
             <div className="text-[8.5px] font-mono text-[#00F0FF]/60 bg-[#00F0FF]/5 rounded px-1.5 py-0.5 text-center border border-[#00F0FF]/15">
@@ -238,7 +238,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
                     isDrawerKnobOpen ? 'text-black/80 font-bold' : 'text-white/40'
                   }`}
                 >
-                  {`CH ${currentChannelIdx + 1} Actions & Dial`}
+                  {`Layer ${currentChannelIdx + 1} Actions & Dial`}
                 </div>
               </div>
             </div>

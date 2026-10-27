@@ -26,7 +26,7 @@
 2. [Key Architecture & Dual-Engine Model](#-key-architecture--dual-engine-model)
 3. [Core Feature Breakdown](#-core-feature-breakdown)
    - [1. Automatic Application Discovery & Launcher](#1-automatic-application-discovery--smart-launcher)
-   - [2. Three Independent Channels (CH 1, CH 2, CH 3)](#2-three-independent-channels-ch-1-ch-2-ch-3)
+   - [2. Three Independent Layers (Layer 1, Layer 2, Layer 3)](#2-three-independent-layers-layer-1-layer-2-layer-3)
    - [3. Digital Twin & Visual Keycaps](#3-digital-twin--visual-keycaps)
    - [4. Switch Configuration Drawer](#4-switch-configuration-drawer)
    - [5. Rotary Encoder Engine](#5-rotary-encoder-engine)
@@ -50,7 +50,7 @@
 
 **KADOWAZ Deck Studio** is a professional desktop suite designed to configure, monitor, and empower physical 9-key mechanical macropads equipped with a rotary encoder, an I2C OLED display (SSD1306), and USB HID / Serial microcontrollers (Raspberry Pi Pico RP2040, Arduino Pro Micro ATmega32U4, ESP32-S3).
 
-It bridges the gap between hardware key actuation and operating-system automation—offering multi-source Windows application discovery, live application launching, 3 isolated operational channels, multi-key combo recording, VIA keycode remapping, safety-isolated long-press actions, and an embedded webhook API server.
+It bridges the gap between hardware key actuation and operating-system automation—offering multi-source Windows application discovery, live application launching, 3 isolated operational layers, multi-key combo recording, VIA keycode remapping, safety-isolated long-press actions, and an embedded webhook API server.
 
 ---
 
@@ -69,8 +69,8 @@ The software uses a dual-engine architecture:
 │              └──────────────────────────┼───────────────────────┘           │
 │                                         ▼                                   │
 │                        ┌─────────────────────────────────┐                  │
-│                        │ Profiles & Channel Layer Store  │                  │
-│                        │ (CH 1, CH 2, CH 3 Isolation)    │                  │
+│                        │ Profiles & Multi-Layer Store    │                  │
+│                        │ (Layer 1, Layer 2, Layer 3)     │                  │
 │                        └────────────────┬────────────────┘                  │
 │                                         │                                   │
 │                    ┌────────────────────┴───────────────────┐               │
@@ -100,7 +100,7 @@ The software uses a dual-engine architecture:
 
 2. **Desktop Companion Layer (Electron + React):**
    - Handles the complex logic the microcontroller memory cannot perform: process launching, window focusing, file picking, active profile switching, and app discovery.
-   - Listens to physical keystrokes over WebHID / WebSerial, maps them to the active channel, and triggers the configured action.
+   - Listens to physical keystrokes over WebHID / WebSerial, maps them to the active layer, and triggers the configured action.
 
 ---
 
@@ -123,28 +123,28 @@ The application discovery engine (`electron/appDiscovery.cjs`) discovers install
 
 ---
 
-### 2. Three Independent Channels (CH 1, CH 2, CH 3)
+### 2. Three Independent Layers (Layer 1, Layer 2, Layer 3)
 
-The Micro Pad supports **three fully independent hardware channels** (`CH 1`, `CH 2`, `CH 3`), each maintaining 9 independent programmable switches:
+The Micro Pad supports **three fully independent hardware layers** (`Layer 1`, `Layer 2`, `Layer 3`), each maintaining 9 independent programmable switches:
 
-| Channel | Default Role | Rotary Encoder Mode | Switch Setup Example |
+| Layer | Default Role | Rotary Encoder Mode | Switch Setup Example |
 | :--- | :--- | :--- | :--- |
-| **CH 1** | Primary Desktop / Productivity | Master Volume Control | VS Code, Chrome, Terminal, Slack |
-| **CH 2** | Media Production / Editing | Timeline Scrubbing | Cut, Ripple Delete, Blade, Render |
-| **CH 3** | Audio Session & Streaming | Focused App Audio (Discord/Spotify) | Mute Mic, Toggle Stream, Deafen |
+| **Layer 1** | Primary Desktop / Productivity | Master Volume Control | VS Code, Chrome, Terminal, Slack |
+| **Layer 2** | Media Production / Editing | Timeline Scrubbing | Cut, Ripple Delete, Blade, Render |
+| **Layer 3** | Audio Session & Streaming | Focused App Audio (Discord/Spotify) | Mute Mic, Toggle Stream, Deafen |
 
-- **Complete Isolation:** Changing a switch or knob action in Channel 1 never modifies Channel 2 or Channel 3.
-- **Dedicated Knob Hold for Channel Switching:** Pressing and holding the rotary knob ($\ge 800\text{ ms}$) is strictly dedicated to cycling through the 3 channels (**CH 1 → CH 2 → CH 3**). It cannot be accidentally overwritten with arbitrary macros.
+- **Complete Isolation:** Changing a switch or knob action in Layer 1 never modifies Layer 2 or Layer 3.
+- **Dedicated Knob Hold for Layer Switching:** Pressing and holding the rotary knob ($\ge 800\text{ ms}$) is strictly dedicated to cycling through the 3 layers (**Layer 1 → Layer 2 → Layer 3**). It cannot be accidentally overwritten with arbitrary macros.
 - **Total Customizable Action Capacity:**
 
-| Input Control | Per Channel | Total Across 3 Channels | Description |
+| Input Control | Per Layer | Total Across 3 Layers | Description |
 | :--- | :---: | :---: | :--- |
 | **Mechanical Switches (#1 – #9)** | 9 keys | **27 keys** | Hotkeys, macros, safety holds, or app launchers |
 | **Knob Tap (Push / Click)** | 1 action | **3 actions** | Momentary push macro (Mute, Play/Pause, Enter) |
 | **Knob Scroll CW (Turn Right)** | 1 action | **3 actions** | Clockwise rotation macro (Vol Up, Zoom In, Scrub) |
 | **Knob Scroll CCW (Turn Left)** | 1 action | **3 actions** | Counter-CW rotation macro (Vol Down, Zoom Out) |
-| **Knob Hold ($\ge 800\text{ ms}$)** | *Dedicated* | **Channel Cycle** | Strictly reserved to cycle CH 1 → CH 2 → CH 3 |
-| **Total Customizable Actions** | **12 / channel** | **36 distinct actions** | 100% independent per channel |
+| **Knob Hold ($\ge 800\text{ ms}$)** | *Dedicated* | **Layer Cycle** | Strictly reserved to cycle Layer 1 → Layer 2 → Layer 3 |
+| **Total Customizable Actions** | **12 / layer** | **36 distinct actions** | 100% independent per layer |
 
 ---
 
@@ -176,7 +176,7 @@ The rotary knob supports bi-directional rotation and an integrated push button:
   - `Linear`: 1-to-1 detent response.
   - `Exponential`: Rotates faster during rapid turns (ideal for volume or long timeline scrubbing).
   - `Precision Nudge`: Ultra-fine adjustments for color grading or frame-by-frame jog.
-- **Hold-to-Switch Channel:** Sustained hold switches the entire macropad channel without needing extra keys.
+- **Hold-to-Switch Layer:** Sustained hold switches the entire macropad layer without needing extra keys.
 
 ---
 
@@ -184,32 +184,32 @@ The rotary knob supports bi-directional rotation and an integrated push button:
 
 Control the 128x32 / 128x64 I2C OLED display directly from software:
 - **Operating Modes:**
-  - `channel`: Minimalist industrial Channel Stepper Track with high-contrast inverted active channel badge (`[01]`, `[02]`, `[03]`).
+  - `channel`: Minimalist industrial Layer Stepper Track with high-contrast inverted active layer badge (`[01]`, `[02]`, `[03]`).
   - `kadowaz`: Industrial branding and version indicator.
   - `system`: Live PC telemetry (CPU load %, GPU load %, RAM %, CPU temperature).
   - `media`: Now-playing track title, artist name, and progress bar.
   - `visualizer`: Stereo L/R audio VU peak meter.
 
-#### Channel-Switch Stepper Display (Dual Hardware & Software Parity)
+#### Layer-Switch Stepper Display (Dual Hardware & Software Parity)
 
-Whenever you switch channels (by pressing and holding the rotary knob for $\ge 800\text{ ms}$, or switching in the desktop software), the OLED screen immediately displays a sleek, high-contrast segmented track with an inverted rounded badge indicating the active channel:
+Whenever you switch layers (by pressing and holding the rotary knob for $\ge 800\text{ ms}$, or switching in the desktop software), the OLED screen immediately displays a sleek, high-contrast segmented track with an inverted rounded badge indicating the active layer:
 
 ```
-Channel 01 Active:
+Layer 01 Active:
 ┌────────────────────────────────────────────────────────┐
 │   ██████                                               │
 │   █ 01 █ ────────   ──────────   ──────────            │
 │   ██████                                               │
 └────────────────────────────────────────────────────────┘
 
-Channel 02 Active:
+Layer 02 Active:
 ┌────────────────────────────────────────────────────────┐
 │                ██████                                  │
 │   ──────────   █ 02 █ ──────────   ──────────          │
 │                ██████                                  │
 └────────────────────────────────────────────────────────┘
 
-Channel 03 Active:
+Layer 03 Active:
 ┌────────────────────────────────────────────────────────┐
 │                                 ██████                 │
 │   ──────────   ──────────   ────█ 03 █ ────            │
@@ -219,9 +219,9 @@ Channel 03 Active:
 
 - **Visual Design:**
   - **Inverted Active Badge:** Solid white rounded pill with deep black monospace numbers (`01`, `02`, `03`).
-  - **Dashed Stepper Line:** 3.5 px thick horizontal track running across the display, visually showing the current channel position relative to the 3 channels.
-  - **Temporary Pop-Up Overlay:** When you switch channels while using System Metrics or Equalizer modes, the Channel Stepper smoothly pops over the screen for 2.6 seconds before reverting back.
-  - **Persistent Mode:** You can also lock the OLED screen permanently into `Channel Indicator` mode via the Display Config Drawer.
+  - **Dashed Stepper Line:** 3.5 px thick horizontal track running across the display, visually showing the current layer position relative to the 3 layers.
+  - **Temporary Pop-Up Overlay:** When you switch layers while using System Metrics or Equalizer modes, the Layer Stepper smoothly pops over the screen for 2.6 seconds before reverting back.
+  - **Persistent Mode:** You can also lock the OLED screen permanently into `Layer Indicator` mode via the Display Config Drawer.
 - **Direct Serial Transmission:** Software pushes display updates via serial protocol commands (`OLED:CH:<1-3>` or `OLED:<text>`).
 
 ---
@@ -274,7 +274,7 @@ KADOWAZ Deck Studio runs an embedded HTTP server on port `38491` (`127.0.0.1:384
 Here is the recommended component list to build your custom Micro Pad hardware:
 
 #### 1. RP2040-Zero
-*Keep this.* Your main controller. It handles the nine mechanical keys, rotary encoder quadrature decoding, WS2812B RGB effects, and three independent channels over USB CDC/HID serial communication.
+*Keep this.* Your main controller. It handles the nine mechanical keys, rotary encoder quadrature decoding, WS2812B RGB effects, and three independent layers over USB CDC/HID serial communication.
 
 #### 2. MX-Style Through-Hole Mechanical Switches × 9
 Best for hand soldering because the electrical contact pins are large and easy to access. Solder the switches directly to the PCB or perfboard; hot-swap sockets are not strictly necessary.
@@ -285,14 +285,14 @@ Choose a strip or larger 5050 LED package rather than tiny 2020 LEDs. The larger
 
 #### 4. EC11 Rotary Encoder with Push Switch × 1
 Gives you stepped left rotation (CCW), right rotation (CW), and push button press.
-- **Rotary Macros:** Tap the knob to trigger the assigned channel's knob press action.
-- **Dedicated Channel Switching:** Press and hold the knob ($\ge 800\text{ ms}$) to cycle through the 3 channels (**CH 1 → CH 2 → CH 3**).
+- **Rotary Macros:** Tap the knob to trigger the assigned layer's knob press action.
+- **Dedicated Layer Switching:** Press and hold the knob ($\ge 800\text{ ms}$) to cycle through the 3 layers (**Layer 1 → Layer 2 → Layer 3**).
 
 #### 5. 0.91-inch I2C OLED Display Module (4-Pin, 128×32, SSD1306) × 1
 Compact monochrome display mounted horizontally on the top bezel above the key switches next to the rotary knob.
 - **Pinout (4 Pins):** `GND`, `VCC` (3.3 V / 5 V compatible), `SCL` (I2C Clock), `SDA` (I2C Data).
 - **Default I2C Address:** `0x3C`.
-- **Role:** Renders the minimalist Channel Stepper track with inverted active badge (`[01]`, `[02]`, `[03]`), real-time PC telemetry (CPU/GPU load & temp), 12-band stereo audio VU equalizer, and media track progress.
+- **Role:** Renders the minimalist Layer Stepper track with inverted active badge (`[01]`, `[02]`, `[03]`), real-time PC telemetry (CPU/GPU load & temp), 12-band stereo audio VU equalizer, and media track progress.
 - **Form Factor:** The slim 0.91-inch 128×32 aspect ratio fits the top chassis window perfectly without protruding over the mechanical keycaps.
 
 #### Supporting Components & Circuit Protection
@@ -336,12 +336,12 @@ Compact monochrome display mounted horizontally on the top bezel above the key s
 | **MCU → PC** | `ENC:CW` | Rotary knob rotated clockwise 1 detent |
 | **MCU → PC** | `ENC:CCW` | Rotary knob rotated counter-clockwise 1 detent |
 | **MCU → PC** | `ENC:DOWN` / `ENC:UP` | Rotary knob push button pressed / released |
-| **MCU → PC** | `CHANNEL:<1-3>` | Emitted when rotary knob hold ($\ge 800\text{ ms}$) switches the channel on the hardware |
+| **MCU → PC** | `CHANNEL:<1-3>` | Emitted when rotary knob hold ($\ge 800\text{ ms}$) switches the layer on the hardware |
 | **MCU → PC** | `ENC:HOLD_SWITCH` | Confirmation that hardware knob hold triggered a layer switch |
-| **PC → MCU** | `OLED:CH:<1-3>` | Renders the inverted active channel badge (`[01]`, `[02]`, `[03]`) and stepper track |
+| **PC → MCU** | `OLED:CH:<1-3>` | Renders the inverted active layer badge (`[01]`, `[02]`, `[03]`) and stepper track |
 | **PC → MCU** | `OLED:<text>` | Updates text displayed on the OLED screen |
 
-#### OLED Channel Stepper Firmware Implementation (`firmware/kadowaz_macropad.ino`)
+#### OLED Layer Stepper Firmware Implementation (`firmware/kadowaz_macropad.ino`)
 
 The firmware implements high-speed direct hardware rendering using `Adafruit_SSD1306` and `Adafruit_GFX`:
 
@@ -356,7 +356,7 @@ void drawChannelScreen(uint8_t channel) {
   const int badgeR = 3;   // Rounded corner radius
 
   if (channel == 2) {
-    // Channel 02 Active: Dash on left, inverted badge in center, two dashes on right
+    // Layer 02 Active: Dash on left, inverted badge in center, two dashes on right
     display.fillRect(24, lineY, 20, lineH, SSD1306_WHITE);
     display.fillRoundRect(50, badgeY, badgeW, badgeH, badgeR, SSD1306_WHITE);
     display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
@@ -388,13 +388,13 @@ desktop-app/
 ├── src/
 │   ├── components/
 │   │   ├── AppLauncherPanel.tsx    # Full Application Library browser & assignment panel
-│   │   ├── DigitalTwin.tsx         # Interactive hardware visualizer & channel controls
+│   │   ├── DigitalTwin.tsx         # Interactive hardware visualizer & layer controls
 │   │   ├── DisplayConfigDrawer.tsx # OLED display settings drawer
 │   │   ├── KeyConfigDrawer.tsx     # Switch remap drawer (Keyboard, Macro, Safety, Open App)
 │   │   ├── KeyMatrix.tsx           # 3x3 Keycaps with dynamic app icons & LED underglow
-│   │   ├── KnobConfigDrawer.tsx    # Rotary knob curves, sensitivity & channel hold config
+│   │   ├── KnobConfigDrawer.tsx    # Rotary knob curves, sensitivity & layer hold config
 │   │   ├── OLEDDisplay.tsx         # OLED display component (visualizer, media, system)
-│   │   ├── OSDFlyout.tsx           # On-screen display banner for profile/channel switches
+│   │   ├── OSDFlyout.tsx           # On-screen display banner for profile/layer switches
 │   │   ├── ProfileModal.tsx        # Profile creation & deletion modal
 │   │   ├── RotaryEncoder.tsx       # Interactive knob component with rotation physics
 │   │   ├── ShortcutsPanel.tsx      # Curated PC shortcuts vault
@@ -414,7 +414,7 @@ desktop-app/
 │   │   └── index.ts                # TypeScript domain interfaces (KeyBinding, DiscoveredApp, etc.)
 │   │
 │   ├── utils/
-│   │   ├── channelLayers.ts        # Channel layer normalization & channel isolation helpers
+│   │   ├── channelLayers.ts        # Layer normalization & layer isolation helpers
 │   │   ├── hardwareBridge.ts       # WebHID & WebSerial communication manager
 │   │   └── soundEffects.ts         # Audio synthesizers for detent clicks and key presses
 │   │

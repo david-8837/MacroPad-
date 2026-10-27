@@ -48,20 +48,20 @@ export function createChannel2DefaultKeys(profileId: string): KeyBinding[] {
 export function normalizeProfileChannels(profile: Profile): Profile {
   const existingLayers = [...profile.layers];
 
-  // Channel 1: Primary
+  // Layer 1: Primary
   if (!existingLayers[0]) {
     existingLayers[0] = {
-      id: `${profile.id}-ch-1`,
-      name: `${profile.name} (CH 1)`,
-      badge: 'CH 1',
+      id: `${profile.id}-layer-1`,
+      name: `${profile.name} (Layer 1)`,
+      badge: 'Layer 1',
       accentColor: '#FF5E00',
       dial: {
-        label: 'Dial CH 1',
-        activeModeName: 'CH 1: Master Volume',
-        availableModes: ['CH 1: Master Volume', 'CH 2: Timeline Scrub', 'CH 3: Focused App Audio'],
-        cwAction: { id: `${profile.id}-cw-ch1`, category: 'audio_session', name: 'Volume Up (+5%)', payload: { audioDelta: 5 } },
-        ccwAction: { id: `${profile.id}-ccw-ch1`, category: 'audio_session', name: 'Volume Down (-5%)', payload: { audioDelta: -5 } },
-        pressAction: { id: `${profile.id}-press-ch1`, category: 'audio_session', name: 'Toggle Mute', payload: { toggleMute: true } },
+        label: 'Dial Layer 1',
+        activeModeName: 'Layer 1: Master Volume',
+        availableModes: ['Layer 1: Master Volume', 'Layer 2: Timeline Scrub', 'Layer 3: Focused App Audio'],
+        cwAction: { id: `${profile.id}-cw-l1`, category: 'audio_session', name: 'Volume Up (+5%)', payload: { audioDelta: 5 } },
+        ccwAction: { id: `${profile.id}-ccw-l1`, category: 'audio_session', name: 'Volume Down (-5%)', payload: { audioDelta: -5 } },
+        pressAction: { id: `${profile.id}-press-l1`, category: 'audio_session', name: 'Toggle Mute', payload: { toggleMute: true } },
         accelerationCurve: 'exponential',
         sensitivity: 6,
         channelHoldThresholdMs: 800,
@@ -69,29 +69,30 @@ export function normalizeProfileChannels(profile: Profile): Profile {
       keys: createEmptyChannelKeys(1),
     };
   } else {
-    existingLayers[0].badge = 'CH 1';
-    if (!existingLayers[0].name.includes('CH 1')) {
-      existingLayers[0].name = `${existingLayers[0].name} (CH 1)`;
+    existingLayers[0].badge = 'Layer 1';
+    existingLayers[0].name = existingLayers[0].name.replace(/\(CH 1\)/g, '(Layer 1)');
+    if (!existingLayers[0].name.includes('Layer 1')) {
+      existingLayers[0].name = `${existingLayers[0].name} (Layer 1)`;
     }
     if (existingLayers[0].dial && !existingLayers[0].dial.channelHoldThresholdMs) {
       existingLayers[0].dial.channelHoldThresholdMs = 800;
     }
   }
 
-  // Channel 2: Tools / Secondary (independent keys!)
+  // Layer 2: Tools / Secondary (independent keys!)
   if (!existingLayers[1]) {
     existingLayers[1] = {
-      id: `${profile.id}-ch-2`,
-      name: `Tools & Navigation (CH 2)`,
-      badge: 'CH 2',
+      id: `${profile.id}-layer-2`,
+      name: `Tools & Navigation (Layer 2)`,
+      badge: 'Layer 2',
       accentColor: '#00F0FF',
       dial: {
-        label: 'Dial CH 2',
-        activeModeName: 'CH 2: Timeline Scrub',
-        availableModes: ['CH 1: Master Volume', 'CH 2: Timeline Scrub', 'CH 3: Focused App Audio'],
-        cwAction: { id: `${profile.id}-cw-ch2`, category: 'hotkey', name: 'Scrub Forward', payload: { keys: ['ArrowRight'] } },
-        ccwAction: { id: `${profile.id}-ccw-ch2`, category: 'hotkey', name: 'Scrub Backward', payload: { keys: ['ArrowLeft'] } },
-        pressAction: { id: `${profile.id}-press-ch2`, category: 'media', name: 'Play / Pause', payload: { mediaAction: 'play_pause' } },
+        label: 'Dial Layer 2',
+        activeModeName: 'Layer 2: Timeline Scrub',
+        availableModes: ['Layer 1: Master Volume', 'Layer 2: Timeline Scrub', 'Layer 3: Focused App Audio'],
+        cwAction: { id: `${profile.id}-cw-l2`, category: 'hotkey', name: 'Scrub Forward', payload: { keys: ['ArrowRight'] } },
+        ccwAction: { id: `${profile.id}-ccw-l2`, category: 'hotkey', name: 'Scrub Backward', payload: { keys: ['ArrowLeft'] } },
+        pressAction: { id: `${profile.id}-press-l2`, category: 'media', name: 'Play / Pause', payload: { mediaAction: 'play_pause' } },
         accelerationCurve: 'exponential',
         sensitivity: 7,
         channelHoldThresholdMs: 800,
@@ -99,29 +100,30 @@ export function normalizeProfileChannels(profile: Profile): Profile {
       keys: createChannel2DefaultKeys(profile.id),
     };
   } else {
-    existingLayers[1].badge = 'CH 2';
-    if (!existingLayers[1].name.includes('CH 2')) {
-      existingLayers[1].name = `${existingLayers[1].name} (CH 2)`;
+    existingLayers[1].badge = 'Layer 2';
+    existingLayers[1].name = existingLayers[1].name.replace(/\(CH 2\)/g, '(Layer 2)');
+    if (!existingLayers[1].name.includes('Layer 2')) {
+      existingLayers[1].name = `${existingLayers[1].name} (Layer 2)`;
     }
     if (existingLayers[1].dial && !existingLayers[1].dial.channelHoldThresholdMs) {
       existingLayers[1].dial.channelHoldThresholdMs = 800;
     }
   }
 
-  // Channel 3: Custom / Empty Bank (clean slots ready to add custom keys!)
+  // Layer 3: Custom / Empty Bank (clean slots ready to add custom keys!)
   if (!existingLayers[2]) {
     existingLayers[2] = {
-      id: `${profile.id}-ch-3`,
-      name: `Custom Bank (CH 3)`,
-      badge: 'CH 3',
+      id: `${profile.id}-layer-3`,
+      name: `Custom Bank (Layer 3)`,
+      badge: 'Layer 3',
       accentColor: '#38EF7D',
       dial: {
-        label: 'Dial CH 3',
-        activeModeName: 'CH 3: Focused App Audio',
-        availableModes: ['CH 1: Master Volume', 'CH 2: Timeline Scrub', 'CH 3: Focused App Audio'],
-        cwAction: { id: `${profile.id}-cw-ch3`, category: 'hotkey', name: 'Zoom In', payload: { keys: ['Control', 'Equal'] } },
-        ccwAction: { id: `${profile.id}-ccw-ch3`, category: 'hotkey', name: 'Zoom Out', payload: { keys: ['Control', 'Minus'] } },
-        pressAction: { id: `${profile.id}-press-ch3`, category: 'hotkey', name: 'Reset Zoom', payload: { keys: ['Control', 'Digit0'] } },
+        label: 'Dial Layer 3',
+        activeModeName: 'Layer 3: Focused App Audio',
+        availableModes: ['Layer 1: Master Volume', 'Layer 2: Timeline Scrub', 'Layer 3: Focused App Audio'],
+        cwAction: { id: `${profile.id}-cw-l3`, category: 'hotkey', name: 'Zoom In', payload: { keys: ['Control', 'Equal'] } },
+        ccwAction: { id: `${profile.id}-ccw-l3`, category: 'hotkey', name: 'Zoom Out', payload: { keys: ['Control', 'Minus'] } },
+        pressAction: { id: `${profile.id}-press-l3`, category: 'hotkey', name: 'Reset Zoom', payload: { keys: ['Control', 'Digit0'] } },
         accelerationCurve: 'exponential',
         sensitivity: 5,
         channelHoldThresholdMs: 800,
@@ -129,9 +131,10 @@ export function normalizeProfileChannels(profile: Profile): Profile {
       keys: createEmptyChannelKeys(3),
     };
   } else {
-    existingLayers[2].badge = 'CH 3';
-    if (!existingLayers[2].name.includes('CH 3')) {
-      existingLayers[2].name = `${existingLayers[2].name} (CH 3)`;
+    existingLayers[2].badge = 'Layer 3';
+    existingLayers[2].name = existingLayers[2].name.replace(/\(CH 3\)/g, '(Layer 3)');
+    if (!existingLayers[2].name.includes('Layer 3')) {
+      existingLayers[2].name = `${existingLayers[2].name} (Layer 3)`;
     }
     if (existingLayers[2].dial && !existingLayers[2].dial.channelHoldThresholdMs) {
       existingLayers[2].dial.channelHoldThresholdMs = 800;

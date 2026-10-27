@@ -58,7 +58,7 @@ interface ActionLogItem {
 }
 
 export const App: React.FC = () => {
-  // Profiles initialized with 3 independent channels (CH 1, CH 2, CH 3)
+  // Profiles initialized with 3 independent layers (Layer 1, Layer 2, Layer 3)
   const [profiles, setProfiles] = useState<Profile[]>(() => {
     const saved = localStorage.getItem('kadowaz_profiles');
     if (saved) {
@@ -325,7 +325,7 @@ export const App: React.FC = () => {
 
     handleTriggerAction(
       `assign-app-${app.id}`,
-      `Assigned ${app.name} to Switch #${keyIndex + 1} (CH ${targetChannel + 1})`,
+      `Assigned ${app.name} to Switch #${keyIndex + 1} (Layer ${targetChannel + 1})`,
       'info'
     );
   };
@@ -377,8 +377,8 @@ export const App: React.FC = () => {
     });
   };
 
-  // Switch or Cycle Channel across the 3 Channels (CH 1, CH 2, CH 3)
-  // This switches the active layer so ALL 9 KEYS switch with the channel!
+  // Switch or Cycle Layer across the 3 Layers (Layer 1, Layer 2, Layer 3)
+  // This switches the active layer so ALL 9 KEYS switch with the layer!
   const handleCycleDialMode = (explicitChannelIdx?: number) => {
     let nextIdx = 0;
     if (explicitChannelIdx !== undefined && explicitChannelIdx >= 0 && explicitChannelIdx < 3) {
@@ -391,17 +391,17 @@ export const App: React.FC = () => {
     if (targetLayer) {
       setActiveLayerId(targetLayer.id);
 
-      // If drawer is open, smoothly switch drawer to inspect the same switch on the new channel!
+      // If drawer is open, smoothly switch drawer to inspect the same switch on the new layer!
       if (editingKeyBinding) {
         const k = targetLayer.keys.find(item => item.keyIndex === (selectedKeyIndex ?? 0));
         if (k) setEditingKeyBinding(k);
       }
     }
 
-    // Send visual channel stepper update to physical OLED display (e.g. OLED:CH:2)
+    // Send visual layer stepper update to physical OLED display (e.g. OLED:CH:2)
     hardwareBridge.sendSerialCommand(`OLED:CH:${nextIdx + 1}`);
 
-    handleTriggerAction('channel-switch', `Switched Macropad to Channel ${nextIdx + 1} (${targetLayer?.name || `CH ${nextIdx + 1}`})`, 'navigation');
+    handleTriggerAction('layer-switch', `Switched Macropad to Layer ${nextIdx + 1} (${targetLayer?.name || `Layer ${nextIdx + 1}`})`, 'navigation');
   };
 
   // Subscribe to hardware bridge status & input reports from physical microcontroller
@@ -469,7 +469,7 @@ export const App: React.FC = () => {
             hwDialTimer = setTimeout(() => {
               hwDialHoldTriggered = true;
               handleCycleDialMode();
-              handleTriggerAction('hw-hold-ch', `[HARDWARE HOLD] Channel Switched (${threshold}ms)`, 'navigation');
+              handleTriggerAction('hw-hold-ch', `[HARDWARE HOLD] Layer Switched (${threshold}ms)`, 'navigation');
             }, threshold);
           }
         } else if (actionType === 'up') {
@@ -667,9 +667,9 @@ export const App: React.FC = () => {
   // Sync Keymap to Microcontroller Flash
   // Sync Keymap to Microcontroller Flash (Send to Micro Pad)
   const handleSyncEEPROM = async () => {
-    // 1. Validate all 3 channel configurations
+    // 1. Validate all 3 layer configurations
     if (!activeProfile.layers || activeProfile.layers.length < 3) {
-      handleTriggerAction('sync-fail', 'Profile must contain all 3 independent channels (CH 1, CH 2, CH 3)', 'safety');
+      handleTriggerAction('sync-fail', 'Profile must contain all 3 independent layers (Layer 1, Layer 2, Layer 3)', 'safety');
       return;
     }
 
@@ -677,10 +677,10 @@ export const App: React.FC = () => {
     const channelSummary = activeProfile.layers.map((layer, chIdx) => {
       const appCount = layer.keys.filter(k => k.tapAction?.category === 'app_launch').length;
       totalAppLaunchers += appCount;
-      return `CH ${chIdx + 1}: ${layer.keys.length} keys (${appCount} apps)`;
+      return `Layer ${chIdx + 1}: ${layer.keys.length} keys (${appCount} apps)`;
     });
 
-    handleTriggerAction('sync-validating', `Validating 3 channels: ${channelSummary.join(' • ')}`, 'info');
+    handleTriggerAction('sync-validating', `Validating 3 layers: ${channelSummary.join(' • ')}`, 'info');
 
     // 2. Format protocol packet with all 3 channels
     const encoder = new TextEncoder();
@@ -705,7 +705,7 @@ export const App: React.FC = () => {
     if (success) {
       handleTriggerAction(
         'sync-eeprom',
-        `Synchronized to Micro Pad! (3 Channels, ${totalAppLaunchers} App Launchers bridged with Desktop Companion)`,
+        `Synchronized to Micro Pad! (3 Layers, ${totalAppLaunchers} App Launchers bridged with Desktop Companion)`,
         'info'
       );
     } else {
@@ -734,7 +734,7 @@ export const App: React.FC = () => {
         const index = Number(data.index);
         const key = activeLayer.keys.find(k => k.keyIndex === index);
         if (!key) {
-          note(`Switch #${index + 1} not found on this channel`, 'safety');
+          note(`Switch #${index + 1} not found on this layer`, 'safety');
           return;
         }
         if (key.isDestructiveSafety) {

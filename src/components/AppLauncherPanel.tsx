@@ -396,9 +396,9 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
             </button>
           )}
 
-          {/* Channel Selector */}
+          {/* Layer Selector */}
           <div className="flex items-center gap-1 bg-black/40 px-2 py-1.5 rounded-xl border border-white/10 text-xs font-mono">
-            <span className="text-[10px] text-white/40 uppercase mr-1">CH:</span>
+            <span className="text-[10px] text-white/40 uppercase mr-1">Layer:</span>
             {[0, 1, 2].map((ch) => (
               <button
                 key={ch}
@@ -413,7 +413,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
                     : 'text-white/60 hover:text-white hover:bg-white/10'
                 }`}
               >
-                CH {ch + 1}
+                Layer {ch + 1}
               </button>
             ))}
           </div>
@@ -853,7 +853,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
                       <>
                         <Zap className="w-4 h-4" />
                         <span>
-                          Assign to Switch #{targetSwitchIndex + 1} (CH {targetChannelIndex + 1})
+                          Assign to Switch #{targetSwitchIndex + 1} (Layer {targetChannelIndex + 1})
                         </span>
                       </>
                     )}

@@ -56,7 +56,12 @@ class HardwareBridgeManager {
     };
   }
 
-  // Subscribe to the firmware's confirmation that a knob hold already switched channel on-device
+  // Alias for onChannelSwitch
+  public onLayerSwitch(callback: (layerIndex: number) => void) {
+    return this.onChannelSwitch(callback);
+  }
+
+  // Subscribe to the firmware's confirmation that a knob hold already switched layer on-device
   public onHoldSwitch(callback: () => void) {
     this.holdSwitchListeners.push(callback);
     return () => {
@@ -211,7 +216,7 @@ class HardwareBridgeManager {
       else if (parts[1] === 'DOWN' || parts[1] === 'PUSH') this.notifyInput(9, 'down');
       else if (parts[1] === 'UP') this.notifyInput(9, 'up');
       else if (parts[1] === 'HOLD_SWITCH') this.notifyHoldSwitch();
-    } else if (parts[0] === 'CHANNEL' && parts.length >= 2) {
+    } else if ((parts[0] === 'CHANNEL' || parts[0] === 'LAYER') && parts.length >= 2) {
       const ch = parseInt(parts[1], 10) - 1;
       if (!Number.isNaN(ch) && ch >= 0 && ch < 3) {
         this.notifyChannel(ch);

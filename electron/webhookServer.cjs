@@ -49,11 +49,14 @@ const ROUTES = {
     return null;
   },
   '/api/v1/action': (b) => {
+    if (b.channel === undefined && b.layer !== undefined) {
+      b.channel = b.layer;
+    }
     const hasChannel = b.channel !== undefined;
     const hasProfile = b.profileId !== undefined;
-    if (!hasChannel && !hasProfile) return 'provide "channel" (1-3) and/or "profileId"';
+    if (!hasChannel && !hasProfile) return 'provide "layer" (1-3) and/or "profileId"';
     if (hasChannel && (!Number.isInteger(b.channel) || b.channel < 1 || b.channel > 3)) {
-      return 'channel must be an integer 1-3';
+      return 'layer must be an integer 1-3';
     }
     if (hasProfile && (typeof b.profileId !== 'string' || !b.profileId)) {
       return 'profileId must be a non-empty string';
