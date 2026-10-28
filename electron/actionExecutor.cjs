@@ -5,6 +5,13 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+let audioNative = null;
+try {
+  audioNative = require('./native/audio.cjs');
+} catch (e) {
+  // Graceful fallback
+}
+
 const KEYEVENTF_KEYUP = 2;
 
 const VK = {
@@ -221,6 +228,46 @@ async function executeAction(action) {
   }
 
   if (category === 'audio_session') {
+    const processName = payload.processName || payload.target || 'master';
+    const isMaster = !processName || processName.toLowerCase() === 'master';
+
+    if (audioNative) {
+      try {
+        if (payload.toggleMute) {
+          if (isMaster) {
+            const res = await audioNative.toggleMasterMute();
+            if (res.ok) return { success: true, muted: res.value };
+          } else {
+            const muted = payload.muted !== undefined ? Boolean(payload.muted) : true;
+            const res = await audioNative.setProcessMute(processName, muted);
+            if (res.ok) return { success: true };
+          }
+        }
+
+        if (typeof payload.targetVolume === 'number') {
+          if (isMaster) {
+            const res = await audioNative.setMasterVolume(payload.targetVolume);
+            if (res.ok) return { success: true, volume: res.value };
+          } else {
+            const res = await audioNative.setProcessVolume(processName, payload.targetVolume);
+            if (res.ok) return { success: true };
+          }
+        }
+
+        if (typeof payload.audioDelta === 'number') {
+          if (isMaster) {
+            const res = await audioNative.adjustMasterVolume(payload.audioDelta);
+            if (res.ok) return { success: true, volume: res.value };
+          } else {
+            const res = await audioNative.adjustProcessVolume(processName, payload.audioDelta);
+            if (res.ok) return { success: true, volume: res.value };
+          }
+        }
+      } catch {
+        // Fall back to keybd_event sendChord below
+      }
+    }
+
     if (payload.toggleMute) return sendChord(['VolumeMute']);
     if (typeof payload.audioDelta === 'number') {
       const key = payload.audioDelta >= 0 ? 'VolumeUp' : 'VolumeDown';

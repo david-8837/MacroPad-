@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Volume2, VolumeX, Mic, MicOff, Music, MessageSquare, Gamepad2, Laptop } from 'lucide-react';
 import { AudioSessionItem } from '../types';
 
 interface AudioMixerPanelProps {
-  onAdjustVolume: (processName: string, delta: number) => void;
+  onAdjustVolume?: (processName: string, delta: number) => void;
 }
 
 export const AudioMixerPanel: React.FC<AudioMixerPanelProps> = ({ onAdjustVolume }) => {
@@ -15,16 +15,70 @@ export const AudioMixerPanel: React.FC<AudioMixerPanelProps> = ({ onAdjustVolume
     { id: 'mic', name: 'Microphone Input', process: 'mic', icon: 'Mic', volume: 90, isMuted: false, peakDb: -3 },
   ]);
 
-  const toggleMute = (id: string) => {
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    window.electronAPI.getMasterVolume?.().then(res => {
+      if (res && res.ok && typeof res.value === 'number') {
+        setSessions(prev => prev.map(s => s.id === 'master' ? { ...s, volume: res.value! } : s));
+      }
+    });
+
+    window.electronAPI.getMasterMute?.().then(res => {
+      if (res && res.ok && typeof res.value === 'boolean') {
+        setSessions(prev => prev.map(s => s.id === 'master' ? { ...s, isMuted: res.value! } : s));
+      }
+    });
+
+    window.electronAPI.getMic?.().then(res => {
+      if (res && res.ok && res.value) {
+        setSessions(prev => prev.map(s => s.id === 'mic' ? { ...s, volume: res.value!.level, isMuted: res.value!.muted } : s));
+      }
+    });
+  }, []);
+
+  const toggleMute = async (id: string) => {
+    const targetSession = sessions.find(s => s.id === id);
+    if (!targetSession) return;
+    const nextMuted = !targetSession.isMuted;
+
     setSessions(prev =>
-      prev.map(s => s.id === id ? { ...s, isMuted: !s.isMuted } : s)
+      prev.map(s => s.id === id ? { ...s, isMuted: nextMuted } : s)
     );
+
+    if (window.electronAPI) {
+      if (id === 'master') {
+        await window.electronAPI.toggleMasterMute?.();
+      } else if (id === 'mic') {
+        await window.electronAPI.setMic?.({ muted: nextMuted });
+      } else {
+        await window.electronAPI.setProcessMute?.(targetSession.process, nextMuted);
+      }
+    }
   };
 
-  const setVolume = (id: string, vol: number) => {
+  const setVolume = async (id: string, vol: number) => {
+    const targetSession = sessions.find(s => s.id === id);
+    if (!targetSession) return;
+
     setSessions(prev =>
       prev.map(s => s.id === id ? { ...s, volume: vol } : s)
     );
+
+    if (onAdjustVolume) {
+      const delta = vol - targetSession.volume;
+      onAdjustVolume(targetSession.process, delta);
+    }
+
+    if (window.electronAPI) {
+      if (id === 'master') {
+        await window.electronAPI.setMasterVolume?.(vol);
+      } else if (id === 'mic') {
+        await window.electronAPI.setMic?.({ level: vol });
+      } else {
+        await window.electronAPI.setProcessVolume?.(targetSession.process, vol);
+      }
+    }
   };
 
   return (

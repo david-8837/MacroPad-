@@ -69,3 +69,4 @@ runTests().catch((err) => {
   console.error('windowTracker test failed:', err);
   process.exit(1);
 });
+

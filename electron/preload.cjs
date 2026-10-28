@@ -31,4 +31,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('active-window-changed', listener);
     return () => ipcRenderer.removeListener('active-window-changed', listener);
   },
+
+  // Real Windows Audio & Per-App Mixer
+  getMasterVolume: () => ipcRenderer.invoke('audio:volume:get'),
+  setMasterVolume: (percent) => ipcRenderer.invoke('audio:volume:set', percent),
+  adjustMasterVolume: (delta) => ipcRenderer.invoke('audio:volume:adjust', delta),
+  getMasterMute: () => ipcRenderer.invoke('audio:mute:get'),
+  setMasterMute: (muted) => ipcRenderer.invoke('audio:mute:set', muted),
+  toggleMasterMute: () => ipcRenderer.invoke('audio:mute:toggle'),
+  getMic: () => ipcRenderer.invoke('audio:mic:get'),
+  setMic: (opts) => ipcRenderer.invoke('audio:mic:set', opts),
+  listAudioDevices: () => ipcRenderer.invoke('audio:devices:list'),
+  setActiveAudioDevice: (id) => ipcRenderer.invoke('audio:devices:set', id),
+  getProcessVolume: (target) => ipcRenderer.invoke('audio:process:volume:get', target),
+  setProcessVolume: (target, percent) => ipcRenderer.invoke('audio:process:volume:set', target, percent),
+  adjustProcessVolume: (target, delta) => ipcRenderer.invoke('audio:process:volume:adjust', target, delta),
+  setProcessMute: (target, muted) => ipcRenderer.invoke('audio:process:mute:set', target, muted),
+  sampleAudioLevels: () => ipcRenderer.invoke('audio:levels:sample'),
+  getNowPlaying: () => ipcRenderer.invoke('audio:now-playing:get'),
 });

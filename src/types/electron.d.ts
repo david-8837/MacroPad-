@@ -30,6 +30,20 @@ export interface ActiveWindowInfo {
   pid?: number;
 }
 
+export interface AudioDevice {
+  id: string;
+  name: string;
+  kind: 'input' | 'output';
+  active: boolean;
+}
+
+export interface NowPlayingInfo {
+  title: string;
+  artist: string;
+  position: number;
+  duration: number;
+}
+
 export interface ElectronAPI {
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   execAction: (action: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
@@ -45,6 +59,23 @@ export interface ElectronAPI {
   onSystemMetrics?: (callback: (metrics: SystemMetrics) => void) => () => void;
   getActiveWindow?: () => Promise<{ ok: boolean; value?: ActiveWindowInfo; error?: string }>;
   onActiveWindowChanged?: (callback: (win: ActiveWindowInfo) => void) => () => void;
+
+  getMasterVolume?: () => Promise<{ ok: boolean; value?: number; error?: string }>;
+  setMasterVolume?: (percent: number) => Promise<{ ok: boolean; value?: number; error?: string }>;
+  adjustMasterVolume?: (delta: number) => Promise<{ ok: boolean; value?: number; error?: string }>;
+  getMasterMute?: () => Promise<{ ok: boolean; value?: boolean; error?: string }>;
+  setMasterMute?: (muted: boolean) => Promise<{ ok: boolean; value?: boolean; error?: string }>;
+  toggleMasterMute?: () => Promise<{ ok: boolean; value?: boolean; error?: string }>;
+  getMic?: () => Promise<{ ok: boolean; value?: { muted: boolean; level: number }; error?: string }>;
+  setMic?: (opts: { muted?: boolean; level?: number }) => Promise<{ ok: boolean; error?: string }>;
+  listAudioDevices?: () => Promise<{ ok: boolean; value?: AudioDevice[]; error?: string }>;
+  setActiveAudioDevice?: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  getProcessVolume?: (target: string | number) => Promise<{ ok: boolean; value?: number; error?: string }>;
+  setProcessVolume?: (target: string | number, percent: number) => Promise<{ ok: boolean; error?: string }>;
+  adjustProcessVolume?: (target: string | number, delta: number) => Promise<{ ok: boolean; value?: number; error?: string }>;
+  setProcessMute?: (target: string | number, muted: boolean) => Promise<{ ok: boolean; error?: string }>;
+  sampleAudioLevels?: () => Promise<{ master: number; mic: number }>;
+  getNowPlaying?: () => Promise<{ ok: boolean; value?: NowPlayingInfo | null; error?: string }>;
 }
 
 declare global {

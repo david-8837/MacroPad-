@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && node electron/run-electron.cjs\"",
     "electron:build": "vite build && electron-builder",
-    "test": "node tests/actionExecutor.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/windowTracker.test.cjs && node host/tests/run.mjs"
+    "test": "node tests/actionExecutor.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/windowTracker.test.cjs && node tests/audioControl.test.cjs && node host/tests/run.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

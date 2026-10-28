@@ -11,6 +11,7 @@ const {
 const { executeAction } = require('./actionExecutor.cjs');
 const { getMetrics } = require('./native/system.cjs');
 const { getActiveWindow, subscribe: subscribeWindow } = require('./native/window.cjs');
+const audio = require('./native/audio.cjs');
 
 let mainWindow = null;
 let tray = null;
@@ -258,6 +259,24 @@ ipcMain.handle('launch-app', async (_event, appInfo) => launchApplication(appInf
 
 ipcMain.handle('get-system-metrics', async () => getMetrics());
 ipcMain.handle('get-active-window', async () => getActiveWindow());
+
+// Real Windows Audio & Per-App Mixer IPC handlers
+ipcMain.handle('audio:volume:get', async () => audio.getMasterVolume());
+ipcMain.handle('audio:volume:set', async (_event, percent) => audio.setMasterVolume(percent));
+ipcMain.handle('audio:volume:adjust', async (_event, delta) => audio.adjustMasterVolume(delta));
+ipcMain.handle('audio:mute:get', async () => audio.getMasterMute());
+ipcMain.handle('audio:mute:set', async (_event, muted) => audio.setMasterMute(muted));
+ipcMain.handle('audio:mute:toggle', async () => audio.toggleMasterMute());
+ipcMain.handle('audio:mic:get', async () => audio.getMic());
+ipcMain.handle('audio:mic:set', async (_event, opts) => audio.setMic(opts));
+ipcMain.handle('audio:devices:list', async () => audio.listDevices());
+ipcMain.handle('audio:devices:set', async (_event, id) => audio.setActiveDevice(id));
+ipcMain.handle('audio:process:volume:get', async (_event, target) => audio.getProcessVolume(target));
+ipcMain.handle('audio:process:volume:set', async (_event, target, percent) => audio.setProcessVolume(target, percent));
+ipcMain.handle('audio:process:volume:adjust', async (_event, target, delta) => audio.adjustProcessVolume(target, delta));
+ipcMain.handle('audio:process:mute:set', async (_event, target, muted) => audio.setProcessMute(target, muted));
+ipcMain.handle('audio:levels:sample', async () => audio.sampleLevels());
+ipcMain.handle('audio:now-playing:get', async () => audio.getNowPlaying());
 
 function startMetricsBroadcasting() {
   if (metricsTimer) return;
