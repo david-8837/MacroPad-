@@ -44,6 +44,17 @@ export interface NowPlayingInfo {
   duration: number;
 }
 
+export interface ObsState {
+  connected: boolean;
+  streaming: boolean;
+  recording: boolean;
+  currentScene: string | null;
+  scenes: string[];
+  sources: string[];
+  mutedSources: string[];
+  error?: string;
+}
+
 export interface ElectronAPI {
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   execAction: (action: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
@@ -76,6 +87,12 @@ export interface ElectronAPI {
   setProcessMute?: (target: string | number, muted: boolean) => Promise<{ ok: boolean; error?: string }>;
   sampleAudioLevels?: () => Promise<{ master: number; mic: number }>;
   getNowPlaying?: () => Promise<{ ok: boolean; value?: NowPlayingInfo | null; error?: string }>;
+
+  obsConnect?: (url?: string, password?: string) => Promise<{ ok: boolean; error?: string }>;
+  obsDisconnect?: () => Promise<{ ok: boolean }>;
+  obsGetState?: () => Promise<{ ok: boolean; value: ObsState }>;
+  obsCommand?: (action: string, arg?: unknown) => Promise<{ ok: boolean; error?: string }>;
+  onObsStateChanged?: (callback: (state: ObsState) => void) => () => void;
 }
 
 declare global {

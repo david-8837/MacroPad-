@@ -12,6 +12,13 @@ try {
   // Graceful fallback
 }
 
+let obsNative = null;
+try {
+  obsNative = require('./native/obs.cjs');
+} catch (e) {
+  // Graceful fallback
+}
+
 const KEYEVENTF_KEYUP = 2;
 
 const VK = {
@@ -284,7 +291,34 @@ async function executeAction(action) {
     return runUserCommand(payload.command || '');
   }
 
-  if (category === 'obs' || category === 'midi' || category === 'navigation') {
+  if (category === 'obs') {
+    if (obsNative) {
+      const act = payload.obsAction || payload.action;
+      const target = payload.obsTarget || payload.target || payload.sceneName || payload.sourceName;
+      let cmd = null;
+      let arg = target;
+
+      if (act === 'switch_scene' || act === 'setScene') cmd = 'setScene';
+      else if (act === 'toggle_stream' || act === 'toggleStreaming') cmd = 'toggleStreaming';
+      else if (act === 'start_stream' || act === 'startStreaming') cmd = 'startStreaming';
+      else if (act === 'stop_stream' || act === 'stopStreaming') cmd = 'stopStreaming';
+      else if (act === 'toggle_record' || act === 'toggleRecording') cmd = 'toggleRecording';
+      else if (act === 'start_record' || act === 'startRecording') cmd = 'startRecording';
+      else if (act === 'stop_record' || act === 'stopRecording') cmd = 'stopRecording';
+      else if (act === 'mute_source' || act === 'toggleSourceMute' || act === 'toggle_source_mute') cmd = 'toggleSourceMute';
+      else if (act === 'next_scene' || act === 'nextScene') cmd = 'nextScene';
+      else if (act === 'previous_scene' || act === 'prev_scene' || act === 'previousScene') cmd = 'previousScene';
+      else if (typeof act === 'string') cmd = act;
+
+      if (cmd) {
+        const res = await obsNative.command(cmd, arg);
+        return { success: res.ok, error: res.error };
+      }
+    }
+    return { success: false, error: 'OBS action execution failed or OBS client unavailable' };
+  }
+
+  if (category === 'midi' || category === 'navigation') {
     return { success: true, skipped: true, reason: `${category} is handled in the desktop UI, not as a native OS event` };
   }
 

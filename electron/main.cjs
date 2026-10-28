@@ -12,6 +12,7 @@ const { executeAction } = require('./actionExecutor.cjs');
 const { getMetrics } = require('./native/system.cjs');
 const { getActiveWindow, subscribe: subscribeWindow } = require('./native/window.cjs');
 const audio = require('./native/audio.cjs');
+const obs = require('./native/obs.cjs');
 
 let mainWindow = null;
 let tray = null;
@@ -20,6 +21,7 @@ let webhookServer = null;
 let webhookToken = '';
 let metricsTimer = null;
 let unsubscribeWindowTracker = null;
+let unsubscribeObs = null;
 const WEBHOOK_PORT = 38491;
 
 const profileMenuState = {
@@ -278,6 +280,28 @@ ipcMain.handle('audio:process:mute:set', async (_event, target, muted) => audio.
 ipcMain.handle('audio:levels:sample', async () => audio.sampleLevels());
 ipcMain.handle('audio:now-playing:get', async () => audio.getNowPlaying());
 
+// OBS Studio WebSocket 5.x IPC Handlers
+ipcMain.handle('obs:connect', async (_event, url, password) => obs.connect(url, password));
+ipcMain.handle('obs:disconnect', async () => obs.disconnect());
+ipcMain.handle('obs:get-state', async () => obs.getState());
+ipcMain.handle('obs:command', async (_event, action, arg) => obs.command(action, arg));
+
+function startObsTracking() {
+  if (unsubscribeObs) return;
+  unsubscribeObs = obs.onState((state) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('obs-state-changed', state);
+    }
+  });
+}
+
+function stopObsTracking() {
+  if (unsubscribeObs) {
+    unsubscribeObs();
+    unsubscribeObs = null;
+  }
+}
+
 function startMetricsBroadcasting() {
   if (metricsTimer) return;
   metricsTimer = setInterval(async () => {
@@ -390,6 +414,7 @@ if (!gotSingleInstanceLock) {
     createTray();
     startMetricsBroadcasting();
     startWindowTracking();
+    startObsTracking();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -402,6 +427,8 @@ app.on('before-quit', () => {
   isQuitting = true;
   stopMetricsBroadcasting();
   stopWindowTracking();
+  stopObsTracking();
+  obs.disconnect();
   if (webhookServer) {
     webhookServer.close();
     webhookServer = null;

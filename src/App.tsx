@@ -22,6 +22,7 @@ import { hardwareBridge, HardwareConnectionState, ConnectedDeviceInfo } from './
 import { executeDeckAction } from './utils/executeDeckAction';
 import { WebhookDocPanel } from './components/WebhookDocPanel';
 import { AudioMixerPanel } from './components/AudioMixerPanel';
+import { OBSPanel } from './components/OBSPanel';
 import type { ElectronHardwareEvent } from './types/electron';
 import {
   Terminal,
@@ -1075,6 +1076,17 @@ export const App: React.FC = () => {
                       </p>
                     )}
                   </div>
+
+                  {/* OBS Studio WebSocket v5 Bridge */}
+                  <details className="glass-panel rounded-2xl border border-white/10 mb-4" open={activeProfile.id === 'profile-obs'}>
+                    <summary className="px-4 py-3 cursor-pointer text-xs font-mono font-bold text-[#FF5E00] select-none flex items-center justify-between">
+                      <span>OBS STUDIO CONTROLLER</span>
+                      <span className="text-[10px] text-white/40 font-normal">WebSocket v5 RPC</span>
+                    </summary>
+                    <div className="p-2 pt-0">
+                      <OBSPanel />
+                    </div>
+                  </details>
 
                   {/* Real Windows WASAPI Audio Mixer */}
                   <details className="glass-panel rounded-2xl border border-white/10 mb-4">

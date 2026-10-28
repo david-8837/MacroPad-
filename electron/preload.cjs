@@ -49,4 +49,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setProcessMute: (target, muted) => ipcRenderer.invoke('audio:process:mute:set', target, muted),
   sampleAudioLevels: () => ipcRenderer.invoke('audio:levels:sample'),
   getNowPlaying: () => ipcRenderer.invoke('audio:now-playing:get'),
+
+  // OBS Studio WebSocket 5.x Integration
+  obsConnect: (url, password) => ipcRenderer.invoke('obs:connect', url, password),
+  obsDisconnect: () => ipcRenderer.invoke('obs:disconnect'),
+  obsGetState: () => ipcRenderer.invoke('obs:get-state'),
+  obsCommand: (action, arg) => ipcRenderer.invoke('obs:command', action, arg),
+  onObsStateChanged: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('obs-state-changed', listener);
+    return () => ipcRenderer.removeListener('obs-state-changed', listener);
+  },
 });
