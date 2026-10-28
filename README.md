@@ -66,6 +66,8 @@
 
 It bridges the gap between hardware key actuation and operating-system automation—offering multi-source Windows application discovery, live application launching, 3 isolated operational layers, multi-key combo recording, VIA keycode remapping, safety-isolated long-press actions, and an embedded webhook API server.
 
+> 📖 **User Manual & Hardware Companion Guide:** For step-by-step instructions on connecting your pad, configuring keys, setting up auto-profile switching, audio mixer controls, and OBS WebSocket automation, read the complete [**User Guide (`docs/USER_GUIDE.md`)**](./docs/USER_GUIDE.md).
+
 ---
 
 ## 🏗 Key Architecture & Dual-Engine Model
