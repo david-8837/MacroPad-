@@ -25,6 +25,7 @@ import { AudioMixerPanel } from './components/AudioMixerPanel';
 import { OBSPanel } from './components/OBSPanel';
 import { DiagnosticLogDrawer, ActionHistoryEntry } from './components/DiagnosticLogDrawer';
 import { FirmwareModal } from './components/FirmwareModal';
+import { UploadModal } from './components/UploadModal';
 import { CommandPalette } from './components/CommandPalette';
 import type { ElectronHardwareEvent } from './types/electron';
 import {
@@ -228,6 +229,7 @@ export const App: React.FC = () => {
   const [actionLogs, setActionLogs] = useState<ActionHistoryEntry[]>([]);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const [isFirmwareModalOpen, setIsFirmwareModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   // Live OLED state
@@ -927,6 +929,7 @@ export const App: React.FC = () => {
         onConnectSerial={() => hardwareBridge.connectSerial()}
         onDisconnectHardware={() => hardwareBridge.disconnect()}
         onSyncEEPROM={handleSyncEEPROM}
+        onOpenUploadModal={() => setIsUploadModalOpen(true)}
         autoProfileSwitch={autoProfileSwitch}
         onToggleAutoProfileSwitch={() => setAutoProfileSwitch((prev) => !prev)}
         activeWindowApp={activeWindowApp}
@@ -977,6 +980,7 @@ export const App: React.FC = () => {
                   setIsEditingKnob(false);
                   setIsEditingDisplay(true);
                 }}
+                onOpenUploadModal={() => setIsUploadModalOpen(true)}
                 onTriggerAction={handleTriggerAction}
                 onCycleOLEDMode={handleCycleOLEDMode}
                 onCycleDialMode={handleCycleDialMode}
@@ -1280,6 +1284,18 @@ export const App: React.FC = () => {
       <FirmwareModal
         isOpen={isFirmwareModalOpen}
         onClose={() => setIsFirmwareModalOpen(false)}
+      />
+
+      {/* Upload All Configuration to Physical Macropad Modal */}
+      <UploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        activeProfile={activeProfile}
+        hardwareState={hardwareState}
+        deviceInfo={deviceInfo}
+        onConnectHID={() => hardwareBridge.connectHID()}
+        onConnectSerial={() => hardwareBridge.connectSerial()}
+        onSyncEEPROM={handleSyncEEPROM}
       />
 
       {/* Global Command Palette (Ctrl+K) */}

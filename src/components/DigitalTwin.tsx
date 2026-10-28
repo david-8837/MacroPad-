@@ -3,7 +3,7 @@ import { Layer, OLEDState } from '../types';
 import { OLEDDisplay } from './OLEDDisplay';
 import { RotaryEncoder } from './RotaryEncoder';
 import { KeyMatrix } from './KeyMatrix';
-import { Sliders, Keyboard, ChevronRight, Layers, Tv } from 'lucide-react';
+import { Sliders, Keyboard, ChevronRight, Layers, Tv, Zap, ArrowUpRight } from 'lucide-react';
 
 interface DigitalTwinProps {
   layer: Layer;
@@ -15,6 +15,7 @@ interface DigitalTwinProps {
   onOpenDrawer?: (keyIndex?: number) => void;
   onOpenKnobDrawer?: () => void;
   onOpenDisplayDrawer?: () => void;
+  onOpenUploadModal?: () => void;
   isDrawerKeyOpen?: boolean;
   isDrawerKnobOpen?: boolean;
   isDrawerDisplayOpen?: boolean;
@@ -35,6 +36,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
   onOpenDrawer,
   onOpenKnobDrawer,
   onOpenDisplayDrawer,
+  onOpenUploadModal,
   isDrawerKeyOpen = false,
   isDrawerKnobOpen = false,
   isDrawerDisplayOpen = false,
@@ -285,6 +287,28 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
                 isDrawerDisplayOpen ? 'translate-x-1 text-white' : 'text-white/30 group-hover:text-white group-hover:translate-x-0.5'
               }`}
             />
+          </button>
+
+          {/* UPLOAD / FLASH TO MACROPAD BUTTON */}
+          <button
+            type="button"
+            onClick={onOpenUploadModal}
+            className="group relative flex items-center justify-between p-3.5 rounded-2xl font-mono text-left transition-all border cursor-pointer active:scale-95 bg-gradient-to-r from-[#FF5E00] via-[#FF7A1A] to-[#FFA033] hover:from-[#FF701A] hover:to-[#FFB04D] text-black border-[#FF5E00] shadow-[0_0_25px_rgba(255,94,0,0.45)] hover:shadow-[0_0_35px_rgba(255,94,0,0.65)] mt-1"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-black text-[#FF5E00] flex items-center justify-center font-bold text-sm shadow-md group-hover:scale-110 transition-transform">
+                <Zap className="w-5 h-5 fill-current" />
+              </div>
+              <div>
+                <div className="text-xs font-black tracking-wider text-black flex items-center gap-1.5">
+                  UPLOAD TO MACROPAD
+                </div>
+                <div className="text-[10px] font-mono text-black/80 font-bold">
+                  Flash 9 Keys & Dial to Hardware
+                </div>
+              </div>
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-black group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
           </button>
         </div>
       </div>

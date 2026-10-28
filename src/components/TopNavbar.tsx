@@ -42,6 +42,7 @@ interface TopNavbarProps {
   onConnectSerial: () => void;
   onDisconnectHardware?: () => void;
   onSyncEEPROM: () => void;
+  onOpenUploadModal?: () => void;
   autoProfileSwitch?: boolean;
   onToggleAutoProfileSwitch?: () => void;
   activeWindowApp?: string;
@@ -69,6 +70,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onConnectSerial,
   onDisconnectHardware,
   onSyncEEPROM,
+  onOpenUploadModal,
   autoProfileSwitch = true,
   onToggleAutoProfileSwitch,
   activeWindowApp,
@@ -335,6 +337,16 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             </div>
           )}
         </div>
+
+        {/* PROMINENT UPLOAD ALL TO MACROPAD BUTTON */}
+        <button
+          onClick={onOpenUploadModal}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-[#FF5E00] to-[#FF8C00] hover:from-[#FF701A] hover:to-[#FFA024] text-black font-black text-xs font-mono shadow-[0_0_15px_rgba(255,94,0,0.4)] active:scale-95 transition-all cursor-pointer"
+          title="Upload all 3 Layers & Dial to Physical Macropad"
+        >
+          <Zap className="w-3.5 h-3.5 fill-current" />
+          <span>UPLOAD TO DECK</span>
+        </button>
 
         {/* Export / Import Profiles */}
         <button
