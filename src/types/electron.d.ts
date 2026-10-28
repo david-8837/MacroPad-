@@ -23,6 +23,13 @@ export interface SystemMetrics {
   };
 }
 
+export interface ActiveWindowInfo {
+  title: string;
+  app: string;
+  exePath?: string;
+  pid?: number;
+}
+
 export interface ElectronAPI {
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   execAction: (action: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
@@ -36,6 +43,8 @@ export interface ElectronAPI {
   reportProfiles: (profiles: { id: string; name: string }[], activeId: string) => void;
   getSystemMetrics?: () => Promise<{ ok: boolean; value?: SystemMetrics; error?: string }>;
   onSystemMetrics?: (callback: (metrics: SystemMetrics) => void) => () => void;
+  getActiveWindow?: () => Promise<{ ok: boolean; value?: ActiveWindowInfo; error?: string }>;
+  onActiveWindowChanged?: (callback: (win: ActiveWindowInfo) => void) => () => void;
 }
 
 declare global {

@@ -24,4 +24,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('system-metrics', listener);
     return () => ipcRenderer.removeListener('system-metrics', listener);
   },
+
+  getActiveWindow: () => ipcRenderer.invoke('get-active-window'),
+  onActiveWindowChanged: (callback) => {
+    const listener = (_event, winInfo) => callback(winInfo);
+    ipcRenderer.on('active-window-changed', listener);
+    return () => ipcRenderer.removeListener('active-window-changed', listener);
+  },
 });

@@ -37,8 +37,10 @@ interface TopNavbarProps {
   deviceInfo: ConnectedDeviceInfo | null;
   onConnectHID: () => void;
   onConnectSerial: () => void;
-  onDisconnectHardware: () => void;
   onSyncEEPROM: () => void;
+  autoProfileSwitch?: boolean;
+  onToggleAutoProfileSwitch?: () => void;
+  activeWindowApp?: string;
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
@@ -60,9 +62,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onConnectSerial,
   onDisconnectHardware,
   onSyncEEPROM,
+  autoProfileSwitch = true,
+  onToggleAutoProfileSwitch,
+  activeWindowApp,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showConnectMenu, setShowConnectMenu] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const getProfileIcon = (iconName: string) => {
     switch (iconName) {
@@ -90,7 +96,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   return (
     <header className="h-14 border-b border-white/10 bg-[#0C0E14] px-4 flex items-center justify-between select-none">
       {/* Left: Branding & User Profile Selector */}
-      {/* Left: Branding */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#FF6A00] to-[#D44400] flex items-center justify-center font-mono font-black text-xs text-black shadow-orange-glow">
@@ -100,6 +105,81 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             KADOWAZ <span className="text-[#FF5E00]">DECK</span>
           </span>
         </div>
+
+        <div className="h-4 w-px bg-white/10" />
+
+        {/* Profile Dropdown Selector */}
+        <div className="relative">
+          <button
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-white transition-colors cursor-pointer"
+          >
+            {getProfileIcon(activeProfile.icon)}
+            <span className="max-w-[130px] truncate">{activeProfile.name}</span>
+            <ChevronDown className="w-3.5 h-3.5 text-white/50" />
+          </button>
+
+          {showProfileMenu && (
+            <div className="absolute top-full left-0 mt-1.5 w-60 rounded-xl bg-[#161B26] border border-white/15 shadow-2xl p-1.5 z-50 space-y-1 animate-in fade-in duration-100">
+              <div className="text-[10px] font-mono text-white/40 px-2 py-1 uppercase">
+                Switch Profile
+              </div>
+              {profiles.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    onSelectProfile(p.id);
+                    setShowProfileMenu(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-lg text-xs font-mono transition-colors cursor-pointer ${
+                    p.id === activeProfile.id
+                      ? 'bg-[#FF5E00]/15 text-[#FF5E00] font-bold border border-[#FF5E00]/30'
+                      : 'text-white/80 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    {getProfileIcon(p.icon)}
+                    <span className="truncate">{p.name}</span>
+                  </div>
+                  {p.targetProcess && (
+                    <span className="text-[9px] text-white/30 font-mono ml-1 shrink-0">
+                      {p.targetProcess}
+                    </span>
+                  )}
+                </button>
+              ))}
+
+              <div className="border-t border-white/10 pt-1 mt-1">
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    onOpenProfileModal();
+                  }}
+                  className="w-full flex items-center gap-1.5 p-2 rounded-lg text-xs font-mono text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#FF5E00]" />
+                  <span>Manage Profiles...</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Auto-Profile Switch Toggle */}
+        {onToggleAutoProfileSwitch && (
+          <button
+            onClick={onToggleAutoProfileSwitch}
+            title={autoProfileSwitch ? `Auto Profile Switching: ON (tracking foreground window${activeWindowApp ? `: ${activeWindowApp}` : ''})` : 'Auto Profile Switching: OFF'}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono transition-colors border cursor-pointer ${
+              autoProfileSwitch
+                ? 'bg-[#10B981]/10 text-[#38EF7D] border-[#10B981]/30 hover:bg-[#10B981]/20'
+                : 'bg-white/5 text-white/40 border-white/10 hover:text-white/60'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${autoProfileSwitch ? 'bg-[#10B981] animate-pulse' : 'bg-white/30'}`} />
+            <span>AUTO</span>
+          </button>
+        )}
       </div>
 
       {/* Center: Module Navigation Tabs (VIA Suite) */}

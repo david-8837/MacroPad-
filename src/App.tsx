@@ -94,6 +94,12 @@ export const App: React.FC = () => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros'>('designer');
   
+  // Active Window & Auto-Profile Switch State
+  const [autoProfileSwitch, setAutoProfileSwitch] = useState<boolean>(() => {
+    return localStorage.getItem('kadowaz_auto_profile') !== 'false';
+  });
+  const [activeWindowApp, setActiveWindowApp] = useState<string>('');
+
   // Hardware Connection State
   const [hardwareState, setHardwareState] = useState<HardwareConnectionState>('disconnected');
   const [deviceInfo, setDeviceInfo] = useState<ConnectedDeviceInfo | null>(null);
@@ -564,6 +570,52 @@ export const App: React.FC = () => {
     return () => { unsubscribe?.(); };
   }, []);
 
+  // Save autoProfileSwitch preference
+  useEffect(() => {
+    localStorage.setItem('kadowaz_auto_profile', String(autoProfileSwitch));
+  }, [autoProfileSwitch]);
+
+  // Active Window Tracker: automatic profile switching based on foreground application
+  useEffect(() => {
+    if (!window.electronAPI?.onActiveWindowChanged) return;
+
+    const unsubscribe = window.electronAPI.onActiveWindowChanged((win) => {
+      if (win.app) {
+        setActiveWindowApp(win.app);
+      }
+
+      if (!autoProfileSwitch) return;
+      const appName = win.app.toLowerCase();
+      const winTitle = win.title;
+
+      const matched = profiles.find((p) => {
+        if (p.targetProcess) {
+          const targetClean = p.targetProcess.toLowerCase().replace(/\.exe$/, '');
+          if (targetClean === appName || appName.includes(targetClean)) return true;
+        }
+        if (p.windowTitleRegex) {
+          try {
+            const re = new RegExp(p.windowTitleRegex, 'i');
+            if (re.test(winTitle)) return true;
+          } catch { /* ignore bad regex */ }
+        }
+        return false;
+      });
+
+      if (matched && matched.id !== activeProfileId) {
+        setActiveProfileId(matched.id);
+        const firstLayer = matched.layers[0]?.id;
+        if (firstLayer) setActiveLayerId(firstLayer);
+        triggerOSDFlyout();
+        handleTriggerAction('auto-profile', `Auto-switched profile to “${matched.name}” (${win.app})`, 'info');
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [profiles, activeProfileId, autoProfileSwitch]);
+
   // Show transient OSD helper
   const triggerOSDFlyout = () => {
     setOsdVisible(true);
@@ -858,6 +910,9 @@ export const App: React.FC = () => {
         onConnectSerial={() => hardwareBridge.connectSerial()}
         onDisconnectHardware={() => hardwareBridge.disconnect()}
         onSyncEEPROM={handleSyncEEPROM}
+        autoProfileSwitch={autoProfileSwitch}
+        onToggleAutoProfileSwitch={() => setAutoProfileSwitch((prev) => !prev)}
+        activeWindowApp={activeWindowApp}
       />
 
       {/* Main Workspace Area */}

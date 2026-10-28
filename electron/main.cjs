@@ -10,6 +10,7 @@ const {
 } = require('./appDiscovery.cjs');
 const { executeAction } = require('./actionExecutor.cjs');
 const { getMetrics } = require('./native/system.cjs');
+const { getActiveWindow, subscribe: subscribeWindow } = require('./native/window.cjs');
 
 let mainWindow = null;
 let tray = null;
@@ -17,6 +18,7 @@ let isQuitting = false;
 let webhookServer = null;
 let webhookToken = '';
 let metricsTimer = null;
+let unsubscribeWindowTracker = null;
 const WEBHOOK_PORT = 38491;
 
 const profileMenuState = {
@@ -255,6 +257,7 @@ ipcMain.handle('browse-for-app', async () => browseForApp());
 ipcMain.handle('launch-app', async (_event, appInfo) => launchApplication(appInfo));
 
 ipcMain.handle('get-system-metrics', async () => getMetrics());
+ipcMain.handle('get-active-window', async () => getActiveWindow());
 
 function startMetricsBroadcasting() {
   if (metricsTimer) return;
@@ -276,6 +279,22 @@ function stopMetricsBroadcasting() {
   if (metricsTimer) {
     clearInterval(metricsTimer);
     metricsTimer = null;
+  }
+}
+
+function startWindowTracking() {
+  if (unsubscribeWindowTracker) return;
+  unsubscribeWindowTracker = subscribeWindow((winInfo) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('active-window-changed', winInfo);
+    }
+  });
+}
+
+function stopWindowTracking() {
+  if (unsubscribeWindowTracker) {
+    unsubscribeWindowTracker();
+    unsubscribeWindowTracker = null;
   }
 }
 
@@ -351,6 +370,7 @@ if (!gotSingleInstanceLock) {
     createWindow();
     createTray();
     startMetricsBroadcasting();
+    startWindowTracking();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -362,6 +382,7 @@ if (!gotSingleInstanceLock) {
 app.on('before-quit', () => {
   isQuitting = true;
   stopMetricsBroadcasting();
+  stopWindowTracking();
   if (webhookServer) {
     webhookServer.close();
     webhookServer = null;

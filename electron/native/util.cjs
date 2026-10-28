@@ -135,3 +135,4 @@ module.exports = {
   ok, fail, run, powershell, parseJsonLoose, psQuote, psDouble,
   debounce, clamp, optionalRequire, logLine, getLog,
 };
+
