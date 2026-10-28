@@ -12,14 +12,17 @@
     "pack": "npm run build && npm run build:electron && electron-builder --dir",
     "dist:win": "npm run build && npm run build:electron && electron-builder --win",
     "electron:build": "npm run dist:win",
-    "test": "node tests/actionExecutor.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/windowTracker.test.cjs && node tests/audioControl.test.cjs && node tests/obsWebSocket.test.cjs && node tests/actionHistory.test.cjs && node tests/firmwareFlasher.test.cjs && node tests/commandPalette.test.cjs && node tests/packagingConfig.test.cjs && node host/tests/run.mjs"
+    "test": "node scripts/host-artifacts.mjs && node tests/actionExecutor.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/media.test.cjs && node tests/windowTracker.test.cjs && node tests/audioControl.test.cjs && node tests/actionHistory.test.cjs && node tests/firmwareFlasher.test.cjs && node tests/commandPalette.test.cjs && node tests/deckLayers.test.cjs && node tests/deckToConfig.test.cjs && node tests/keyEvents.test.cjs && node tests/macroStorage.test.cjs && node tests/ledEngine.test.cjs && node tests/packagingConfig.test.cjs && node tests/oledModes.test.cjs && node host/tests/run.mjs",
+    "oled:frames": "node scripts/export-oled-frames.mjs",
+    "oled:frames:check": "node scripts/export-oled-frames.mjs --check",
+    "oled:budget": "python3 tools/check_flash_budget.py",
+    "host:artifacts": "node scripts/host-artifacts.mjs",
+ "check:contrast": "python3 checks/contrastcheck.py"
   },
   "dependencies": {
-    "clsx": "^2.1.1",
     "lucide-react": "^0.453.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "tailwind-merge": "^2.5.4"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.11",

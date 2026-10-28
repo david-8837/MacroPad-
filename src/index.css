@@ -2,100 +2,254 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   REALITY-FIRST · typefaces (self-hosted, no network)
+   ============================================================ */
+@font-face {
+  font-family: 'General Sans';
+  src: url('./assets/fonts/gs-400.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'General Sans';
+  src: url('./assets/fonts/gs-500.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'General Sans';
+  src: url('./assets/fonts/gs-600.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'General Sans';
+  src: url('./assets/fonts/gs-700.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./assets/fonts/jb-400.woff2') format('woff2');
+  font-weight: 400 800; font-style: normal; font-display: swap;
+}
+
+/* ============================================================
+   TOKENS
+   ============================================================ */
+:root {
+  --cream: #E3E2DE;
+  --ink: #141414;
+  --blue: #1351AA;
+  --gray: #444343;
+  --muted: #646464;
+  --line: #C7C7C7;
+  --surface: #FFFFFF;
+  --well: #EDECE8;
+  --nav-h: 64px;
+  --t: 0.3s;
+  --ease: linear;
+}
+
 @layer base {
-  * {
-    box-sizing: border-box;
+  * { box-sizing: border-box; }
+
+  html, body, #root {
+    height: 100%;
   }
-  
+
   body {
+    margin: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'General Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     user-select: none;
     -webkit-user-select: none;
   }
+
+  ::selection { background: var(--blue); color: var(--cream); }
+
+  /* Zero radius is a rule, not a preference. */
+  button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+    border-radius: 0;
+  }
+
+  button { cursor: pointer; }
+
+  :focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+
+  h1, h2, h3, h4, h5, h6 { margin: 0; font-weight: 700; letter-spacing: -0.03em; }
+  p { margin: 0; }
 }
 
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: rgba(18, 19, 22, 0.6);
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 94, 0, 0.3);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 94, 0, 0.6);
+/* ============================================================
+   COMPONENT PRIMITIVES
+   ============================================================ */
+@layer components {
+  /* Flat surface. Depth comes from a 1px rule, never a shadow. */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 0;
+  }
+  .well { background: var(--well); border: 1px solid var(--line); }
+
+  /* Metadata label — 12px / 700 / 0.2em / muted */
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .eyebrow--ink { color: var(--ink); }
+  .eyebrow--cream { color: rgba(227, 226, 222, 0.72); }
+
+  /* Mono index / readout */
+  .idx {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+
+  /* Poster buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 18px;
+    border: 1px solid var(--blue);
+    border-radius: 0;
+    background: var(--blue);
+    color: var(--cream);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    line-height: 1;
+    transition: background-color var(--t) var(--ease), border-color var(--t) var(--ease), color var(--t) var(--ease);
+  }
+  .btn:hover { background: var(--ink); border-color: var(--ink); color: var(--cream); }
+
+  /* Form field */
+  .field {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--ink);
+    transition: border-color var(--t) var(--ease);
+  }
+  .field::placeholder { color: var(--muted); }
+  .field:focus { outline: none; border-color: var(--blue); }
+
+  /* Square status marker (replaces every rounded dot) */
+  .mark {
+    width: 7px;
+    height: 7px;
+    background: var(--muted);
+    flex: none;
+  }
+  .mark--on { background: var(--blue); }
+  .mark--off { background: var(--line); }
+
+  /* Rows and dividers used across the app */
+  .rule { border-top: 1px solid var(--line); }
 }
 
-/* OLED Screen Filter & Glow */
-.oled-screen {
-  background: radial-gradient(circle at 50% 50%, #0d1217 0%, #05070a 100%);
-  position: relative;
-  overflow: hidden;
-  box-shadow: inset 0 2px 8px rgba(0,0,0,0.9), 0 0 12px rgba(0, 240, 255, 0.15);
+/* ============================================================
+   SCROLLBARS — square, flat
+   ============================================================ */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--cream); border-left: 1px solid var(--line); }
+::-webkit-scrollbar-thumb { background: var(--line); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ============================================================
+   HARDWARE SIMULATION — flat, no glow, no gradient
+   ============================================================ */
+
+/* Chassis: a flat ink slab with a 1px keyline. */
+.chassis {
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 0;
 }
 
-.oled-scanlines {
-  background: linear-gradient(
-    rgba(18, 16, 16, 0) 50%, 
-    rgba(0, 0, 0, 0.35) 50%
-  );
-  background-size: 100% 3px;
-  pointer-events: none;
-}
-
-/* Mechanical Key Styling */
+/* Keycap: cream block, 1px rule, inverts to ink on press. */
 .macropad-key {
-  transition: transform 0.08s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.08s cubic-bezier(0.2, 0, 0.2, 1);
-  will-change: transform, box-shadow;
+  border-radius: 0;
+  transition: transform 0.08s linear, background-color 0.08s linear,
+              color 0.08s linear, border-color 0.08s linear;
 }
-
 .macropad-key:active,
 .macropad-key.active-down {
-  transform: translateY(4px);
-  box-shadow: 0 1px 0 #090B10, 0 3px 6px rgba(0, 0, 0, 0.6) !important;
+  transform: translateY(1px);
+  background: var(--ink) !important;
+  color: var(--cream) !important;
+  border-color: var(--ink) !important;
 }
 
-/* Anodized Aluminum Brushed Effect */
-.anodized-orange {
-  background: linear-gradient(135deg, #FF6A00 0%, #EA5400 40%, #D44400 70%, #B83600 100%);
-  box-shadow: 
-    inset 0 1px 1px rgba(255, 255, 255, 0.4),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.4),
-    0 15px 35px rgba(0, 0, 0, 0.8),
-    0 0 40px rgba(234, 84, 0, 0.2);
+/* ── OLED ────────────────────────────────────────────────────────────────────
+   The one surface in the system that emits light: a true-black panel with
+   warm-white pixels. Emissive bloom is allowed here and only here, because it
+   is the physics of the display, not a UI shadow. See DESIGN.md. */
+.oled-screen {
+  background: #08090A;
+  border: 1px solid #232425;
+  position: relative;
+  overflow: hidden;
+  color: var(--oled-px);
+  --oled-px: #E8E9E4;
+  --oled-dim: rgba(232, 233, 228, 0.38);
 }
 
-/* Rotary Knob Texture */
+/* The panel itself: one canvas, 1-bit, hard pixel edges with a tight halo. */
+.oled-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 0 1px rgba(232, 233, 228, 0.35));
+}
+.oled-screen--active {
+  border-color: #4a4b48;
+  box-shadow: 0 0 0 1px rgba(232, 233, 228, 0.06) inset;
+}
+
+
+/* Knob: ink disc, cream tick. Kept circular because it is a physical control. */
 .knob-metal {
-  background: conic-gradient(
-    from 0deg,
-    #4a4f5b 0deg,
-    #7c8392 60deg,
-    #3b3f49 120deg,
-    #8b93a3 180deg,
-    #4a4f5b 240deg,
-    #7c8392 300deg,
-    #4a4f5b 360deg
-  );
+  background: var(--ink);
+  border-radius: 50%;
+  border: 1px solid var(--ink);
 }
 
-/* Glass Panels */
-.glass-panel {
-  background: rgba(22, 25, 32, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-/* Pulsing Tally Light */
+/* Live tally marker: cobalt square, no pulse-softening. */
 @keyframes tally-pulse {
-  0%, 100% { opacity: 1; filter: drop-shadow(0 0 10px #ff2a2a); }
-  50% { opacity: 0.5; filter: drop-shadow(0 0 2px #ff2a2a); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
+.tally-live { animation: tally-pulse 1.2s linear infinite; }
 
-.tally-live {
-  animation: tally-pulse 1.2s infinite ease-in-out;
+/* The system guarantees two things no matter what a component inline-styles. */
+[style*="box-shadow"] { box-shadow: none !important; }
+[style*="border-radius"] { border-radius: 0 !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

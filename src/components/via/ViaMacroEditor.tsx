@@ -11,15 +11,15 @@ import {
   Terminal, 
   Sparkles, 
   Layers, 
-  Zap, 
   RotateCcw, 
   Keyboard as KeyboardIcon,
-  Circle,
   Copy,
   ArrowRight,
   ChevronRight,
   AlertCircle
 } from 'lucide-react';
+import { sendNativeAction } from '../../utils/executeDeckAction';
+import { MACRO_STORAGE_KEY } from '../../utils/macroStorage';
 import { playKeyClick } from '../../utils/soundEffects';
 
 export interface MacroAction {
@@ -37,110 +37,129 @@ export interface MacroSlot {
   actions: MacroAction[];
 }
 
-const DEFAULT_MACRO_TEMPLATES: { name: string; desc: string; actions: MacroAction[] }[] = [
-  {
-    name: 'Git Quick Commit & Push',
-    desc: 'Stages, commits with timestamp, and pushes branch',
-    actions: [
-      { id: '1', type: 'text', value: 'git add . && git commit -m "deck auto-update" && git push' },
-      { id: '2', type: 'delay', value: '100', delayMs: 100 },
-      { id: '3', type: 'combo', value: 'Enter', keys: ['Enter'] }
-    ]
-  },
-  {
-    name: 'VS Code Format & Save',
-    desc: 'Auto-formats active code document and saves file',
-    actions: [
-      { id: '1', type: 'combo', value: 'Shift+Alt+F', keys: ['Shift', 'Alt', 'F'] },
-      { id: '2', type: 'delay', value: '150', delayMs: 150 },
-      { id: '3', type: 'combo', value: 'Ctrl+S', keys: ['Ctrl', 'S'] }
-    ]
-  },
-  {
-    name: 'Task Manager Direct',
-    desc: 'Instant direct launch of Windows Task Manager',
-    actions: [
-      { id: '1', type: 'combo', value: 'Ctrl+Shift+Esc', keys: ['Ctrl', 'Shift', 'Esc'] }
-    ]
-  },
-  {
-    name: 'DaVinci Quick Export',
-    desc: 'Trigger render export queue in DaVinci Resolve',
-    actions: [
-      { id: '1', type: 'combo', value: 'Ctrl+Shift+F12', keys: ['Ctrl', 'Shift', 'F12'] }
-    ]
-  },
-  {
-    name: 'Discord Streamer Mute',
-    desc: 'Global microphone mute/unmute toggle in Discord',
-    actions: [
-      { id: '1', type: 'combo', value: 'Ctrl+Shift+M', keys: ['Ctrl', 'Shift', 'M'] }
-    ]
-  },
-  {
-    name: 'Terminal Clear Screen',
-    desc: 'Clears terminal buffer and repositions prompt',
-    actions: [
-      { id: '1', type: 'text', value: 'clear' },
-      { id: '2', type: 'delay', value: '50', delayMs: 50 },
-      { id: '3', type: 'combo', value: 'Enter', keys: ['Enter'] }
-    ]
-  },
-  {
-    name: 'Lock PC Workstation',
-    desc: 'Securely locks Windows session',
-    actions: [
-      { id: '1', type: 'combo', value: 'Win+L', keys: ['Win', 'L'] }
-    ]
-  }
+/* Preset sequences. A preset is a starting point you apply to a slot, never
+ * something that arrives pre-loaded: the sixteen slots stay empty until you pick
+ * one. Keys are the names actionExecutor resolves (Win, Ctrl, Shift, Alt, Esc,
+ * Enter, Space, F1-F12, A-Z, 0-9, punctuation, and the Media/Volume key names),
+ * so a preset that says Ctrl+Shift+Esc actually fires Ctrl+Shift+Esc on Windows. */
+export type PresetCategory = 'Windows' | 'Editing' | 'Browser' | 'Coding' | 'Media' | 'Text';
+
+export interface MacroPreset {
+  id: string;
+  name: string;
+  category: PresetCategory;
+  desc: string;
+  actions: MacroAction[];
+}
+
+const combo = (keys: string[]) => ({ type: 'combo' as const, value: keys.join('+'), keys });
+const text = (value: string) => ({ type: 'text' as const, value });
+const wait = (ms: number) => ({ type: 'delay' as const, value: `${ms}`, delayMs: ms });
+
+type PresetStep = Omit<MacroAction, 'id'>;
+
+const PRESET_ROWS: [PresetCategory, string, string, PresetStep[]][] = [
+  // Windows
+  ['Windows', 'Lock PC', 'Locks the session', [combo(['Win', 'L'])]],
+  ['Windows', 'Task Manager', 'Opens Task Manager directly', [combo(['Ctrl', 'Shift', 'Esc'])]],
+  ['Windows', 'File Explorer', 'Opens a new Explorer window', [combo(['Win', 'E'])]],
+  ['Windows', 'Snip Screenshot', 'Screen snipping overlay', [combo(['Win', 'Shift', 'S'])]],
+  ['Windows', 'Clipboard History', 'Recent clipboard items', [combo(['Win', 'V'])]],
+  ['Windows', 'Emoji Picker', 'Windows emoji and symbols panel', [combo(['Win', '.'])]],
+  ['Windows', 'Show Desktop', 'Minimise everything', [combo(['Win', 'D'])]],
+  ['Windows', 'Switch Windows', 'Alt-Tab between open windows', [combo(['Alt', 'Tab'])]],
+  ['Windows', 'Run Dialog', 'Open the Run box', [combo(['Win', 'R'])]],
+  ['Windows', 'Settings', 'Windows Settings app', [combo(['Win', 'I'])]],
+
+  // Editing — universal keyboard conventions
+  ['Editing', 'Undo', 'Ctrl+Z', [combo(['Ctrl', 'Z'])]],
+  ['Editing', 'Redo', 'Ctrl+Y', [combo(['Ctrl', 'Y'])]],
+  ['Editing', 'Select All', 'Ctrl+A', [combo(['Ctrl', 'A'])]],
+  ['Editing', 'Copy', 'Ctrl+C', [combo(['Ctrl', 'C'])]],
+  ['Editing', 'Cut', 'Ctrl+X', [combo(['Ctrl', 'X'])]],
+  ['Editing', 'Paste', 'Ctrl+V', [combo(['Ctrl', 'V'])]],
+  ['Editing', 'Paste Plain Text', 'Drops formatting where supported', [combo(['Ctrl', 'Shift', 'V'])]],
+  ['Editing', 'Save', 'Ctrl+S', [combo(['Ctrl', 'S'])]],
+  ['Editing', 'Save All', 'Ctrl+Shift+S', [combo(['Ctrl', 'Shift', 'S'])]],
+  ['Editing', 'Find', 'Ctrl+F', [combo(['Ctrl', 'F'])]],
+  ['Editing', 'Find & Replace', 'Ctrl+H', [combo(['Ctrl', 'H'])]],
+  ['Editing', 'Print', 'Ctrl+P', [combo(['Ctrl', 'P'])]],
+
+  // Browser
+  ['Browser', 'New Tab', 'Ctrl+T', [combo(['Ctrl', 'T'])]],
+  ['Browser', 'Reopen Closed Tab', 'Ctrl+Shift+T', [combo(['Ctrl', 'Shift', 'T'])]],
+  ['Browser', 'Address Bar', 'Focus the URL field', [combo(['Ctrl', 'L'])]],
+  ['Browser', 'DevTools', 'Toggle developer tools', [combo(['F12'])]],
+  ['Browser', 'Hard Reload', 'Reload ignoring cache', [combo(['Ctrl', 'Shift', 'R'])]],
+  ['Browser', 'Back', 'Browser back', [combo(['Alt', 'Left'])]],
+  ['Browser', 'Full Screen', 'Toggle full screen', [combo(['F11'])]],
+
+  // Coding
+  ['Coding', 'VS Code Palette', 'Command palette', [combo(['Ctrl', 'Shift', 'P'])]],
+  ['Coding', 'VS Code Terminal', 'Toggle the integrated terminal', [combo(['Ctrl', '`'])]],
+  ['Coding', 'Format Document', 'VS Code format', [combo(['Shift', 'Alt', 'F'])]],
+  ['Coding', 'Toggle Comment', 'Comment or uncomment the line', [combo(['Ctrl', '/'])]],
+  ['Coding', 'Go To Line', 'Jump to a line number', [combo(['Ctrl', 'G'])]],
+  ['Coding', 'Build Project', 'Run the build task', [combo(['Ctrl', 'Shift', 'B'])]],
+  ['Coding', 'Git Commit & Push', 'Stage everything, commit, push', [text('git add . && git commit -m "update" && git push'), wait(80), combo(['Enter'])]],
+  ['Coding', 'Run Dev Server', 'Types npm run dev and hits Enter', [text('npm run dev'), wait(80), combo(['Enter'])]],
+
+  // Media & creative apps
+  ['Media', 'Play / Pause', 'System media key', [combo(['MediaPlayPause'])]],
+  ['Media', 'Next Track', 'System media key', [combo(['MediaNext'])]],
+  ['Media', 'Volume Up', 'System volume key', [combo(['VolumeUp'])]],
+  ['Media', 'Mute', 'System mute key', [combo(['VolumeMute'])]],
+  ['Media', 'Premiere: Mark In', 'Set an in point', [combo(['I'])]],
+  ['Media', 'Premiere: Mark Out', 'Set an out point', [combo(['O'])]],
+  ['Media', 'Premiere: Blade', 'Cut at the playhead', [combo(['Ctrl', 'B'])]],
+  ['Media', 'Premiere: Ripple Delete', 'Delete and close the gap', [combo(['Shift', 'Delete'])]],
+  ['Media', 'DaVinci: Deliver', 'Open the Deliver page', [combo(['Ctrl', 'Shift', 'F12'])]],
+
+  // Text
+  ['Text', 'Email Sign-off', 'Best regards, and a new line', [text('Best regards,'), wait(60), combo(['Enter'])]],
+  ['Text', 'Clear Terminal', 'Types clear and runs it', [text('clear'), wait(60), combo(['Enter'])]],
+  ['Text', 'List Directory', 'Types dir and runs it', [text('dir'), wait(60), combo(['Enter'])]],
 ];
 
-const INITIAL_MACROS: MacroSlot[] = Array.from({ length: 16 }, (_, i) => {
-  if (i === 0) {
-    return {
-      id: 0,
-      name: 'Copy & Paste Helper',
-      description: 'Quick clipboard duplicate sequence',
-      actions: [
-        { id: 'm0-1', type: 'combo', value: 'Ctrl+C', keys: ['Ctrl', 'C'] },
-        { id: 'm0-2', type: 'delay', value: '100', delayMs: 100 },
-        { id: 'm0-3', type: 'combo', value: 'Ctrl+V', keys: ['Ctrl', 'V'] }
-      ]
-    };
-  }
-  if (i === 1) {
-    return {
-      id: 1,
-      name: 'Git Status & Log',
-      description: 'Executes git status and recent commits',
-      actions: [
-        { id: 'm1-1', type: 'text', value: 'git status && git log -n 3' },
-        { id: 'm1-2', type: 'delay', value: '150', delayMs: 150 },
-        { id: 'm1-3', type: 'combo', value: 'Enter', keys: ['Enter'] }
-      ]
-    };
-  }
-  return {
-    id: i,
-    name: `Macro M${i}`,
-    description: 'Empty programmable slot',
-    actions: []
-  };
-});
+export const MACRO_PRESETS: MacroPreset[] = PRESET_ROWS.map(([category, name, desc, actions], i) => ({
+  id: `preset-${i}`,
+  name,
+  category,
+  desc,
+  actions: actions.map((a, j) => ({ ...a, id: `preset-${i}-${j}` })),
+}));
+
+export const PRESET_CATEGORIES: PresetCategory[] = ['Windows', 'Editing', 'Browser', 'Coding', 'Media', 'Text'];
+
+/** One-line summary of what a sequence will send, e.g. "Ctrl+Shift+Esc". */
+export function describeActions(actions: MacroAction[]): string {
+  return actions
+    .map((a) => (a.type === 'text' ? `"${a.value}"` : a.type === 'delay' ? `${a.delayMs}ms` : a.value))
+    .join(' · ');
+}
+
+/* Sixteen empty slots, on purpose. This page used to ship with sixteen invented
+ * macros ("Copy & Paste Helper" in M0, "Lock PC Workstation", "Git Status & Log")
+ * so a fresh install looked like someone had already been using it. A slot holds
+ * what you put in it, or it is blank. */
+const INITIAL_MACROS: MacroSlot[] = Array.from({ length: 16 }, (_, i) => ({
+  id: i,
+  name: '',
+  description: '',
+  actions: []
+}));
+
+const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta']);
 
 interface ViaMacroEditorProps {
-  selectedKeyIndex?: number | null;
-  onAssignToKey?: (keyIndex: number, macroId: number, macroName: string) => void;
   onTriggerAction?: (actionId: string, actionName: string, category: string) => void;
 }
 
 export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
-  selectedKeyIndex,
-  onAssignToKey,
   onTriggerAction,
 }) => {
   const [macros, setMacros] = useState<MacroSlot[]>(() => {
-    const saved = localStorage.getItem('kadowaz_macros');
+    const saved = localStorage.getItem(MACRO_STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -151,106 +170,43 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   });
 
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
-  const [activeBuilderTab, setActiveBuilderTab] = useState<'record' | 'combo' | 'text' | 'delay' | 'templates'>('combo');
+  const [activeBuilderTab, setActiveBuilderTab] = useState<'combo' | 'text' | 'delay' | 'templates'>('combo');
   
   // Builder form states
   const [newText, setNewText] = useState('');
   const [appendEnterWithText, setAppendEnterWithText] = useState(true);
   const [newDelay, setNewDelay] = useState('100');
   
-  // Combo Builder states
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
-  const [selectedKey, setSelectedKey] = useState<string>('C');
-
-  // Live recording state
-  const [isRecording, setIsRecording] = useState(false);
-  const lastKeyTimeRef = useRef<number>(0);
+  // What the last press looked like, echoed back to the user
+  const [lastCaptured, setLastCaptured] = useState<string | null>(null);
+  const [presetQuery, setPresetQuery] = useState('');
+  const [presetCategory, setPresetCategory] = useState<PresetCategory | 'all'>('all');
+  const [testNotice, setTestNotice] = useState<string | null>(null);
 
   // Status & Test playback feedback
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [assignedSuccess, setAssignedSuccess] = useState(false);
   const [isPlayingTest, setIsPlayingTest] = useState(false);
   const [activePlayStep, setActivePlayStep] = useState<number | null>(null);
 
+
   // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('kadowaz_macros', JSON.stringify(macros));
+    localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
   }, [macros]);
 
   const currentMacro = macros.find(m => m.id === selectedSlot) || macros[0];
 
-  // Live Keystroke Recording Hook
-  useEffect(() => {
-    if (!isRecording) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept ESC if user wants to exit recording
-      if (e.key === 'Escape') {
-        setIsRecording(false);
-        return;
-      }
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const now = performance.now();
-      const delta = lastKeyTimeRef.current ? Math.min(Math.round(now - lastKeyTimeRef.current), 1500) : 0;
-      lastKeyTimeRef.current = now;
-
-      const keyName = normalizeKeyName(e.key);
-
-      setMacros(prev => prev.map(m => {
-        if (m.id !== selectedSlot) return m;
-        const newActions = [...m.actions];
-        if (delta > 30) {
-          newActions.push({
-            id: `rec-del-${Date.now()}-${Math.random()}`,
-            type: 'delay',
-            value: `${delta}`,
-            delayMs: delta
-          });
-        }
-        newActions.push({
-          id: `rec-dn-${Date.now()}-${Math.random()}`,
-          type: 'down',
-          value: keyName
-        });
-        return { ...m, actions: newActions };
-      }));
-      playKeyClick('down');
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return;
-      e.preventDefault();
-      e.stopPropagation();
-
-      const keyName = normalizeKeyName(e.key);
-      setMacros(prev => prev.map(m => {
-        if (m.id !== selectedSlot) return m;
-        return {
-          ...m,
-          actions: [
-            ...m.actions,
-            {
-              id: `rec-up-${Date.now()}-${Math.random()}`,
-              type: 'up',
-              value: keyName
-            }
-          ]
-        };
-      }));
-      playKeyClick('up');
-    };
-
-    window.addEventListener('keydown', handleKeyDown, { capture: true });
-    window.addEventListener('keyup', handleKeyUp, { capture: true });
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown, { capture: true });
-      window.removeEventListener('keyup', handleKeyUp, { capture: true });
-    };
-  }, [isRecording, selectedSlot]);
+  const filteredPresets = MACRO_PRESETS.filter((preset) => {
+    if (presetCategory !== 'all' && preset.category !== presetCategory) return false;
+    const q = presetQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      preset.name.toLowerCase().includes(q) ||
+      preset.desc.toLowerCase().includes(q) ||
+      preset.category.toLowerCase().includes(q) ||
+      describeActions(preset.actions).toLowerCase().includes(q)
+    );
+  });
 
   const normalizeKeyName = (key: string): string => {
     if (key === 'Control') return 'Ctrl';
@@ -258,8 +214,45 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     if (key === 'Alt') return 'Alt';
     if (key === 'Shift') return 'Shift';
     if (key === ' ') return 'Space';
+    // A press arrives as 'c'; store 'C' so a key has one spelling.
+    if (key.length === 1) return key.toUpperCase();
     return key;
   };
+
+  /* Type the keys you want. The page listens while the Key Combo tab is open,
+   * turns what you press into a step, and shows it back to you. Text fields keep
+   * their own keystrokes so renaming a slot still word-processes normally. */
+  useEffect(() => {
+    if (activeBuilderTab !== 'combo') return;
+
+    const handleCaptureKeyDown = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      if (e.key === 'Tab') return;            // keep keyboard navigation
+      if (e.ctrlKey && e.key.toLowerCase() === 'r') return; // keep browser refresh
+      e.preventDefault();
+      if (e.repeat) return;
+
+      if (e.key === 'Escape') {
+        setLastCaptured(null);
+        return;
+      }
+      if (MODIFIER_KEYS.has(e.key)) return;    // wait for the key the modifier is for
+
+      // Read the modifiers off the event itself: no held-key bookkeeping to desync.
+      const mods: string[] = [];
+      if (e.ctrlKey) mods.push('Ctrl');
+      if (e.shiftKey) mods.push('Shift');
+      if (e.altKey) mods.push('Alt');
+      if (e.metaKey) mods.push('Win');
+
+      commitCombo(mods, normalizeKeyName(e.key));
+    };
+
+    window.addEventListener('keydown', handleCaptureKeyDown);
+    return () => window.removeEventListener('keydown', handleCaptureKeyDown);
+  }, [activeBuilderTab, selectedSlot]);
 
   const handleUpdateName = (name: string) => {
     setMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, name } : m));
@@ -269,10 +262,10 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     setMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, description } : m));
   };
 
-  const addComboAction = () => {
-    const keys = [...selectedModifiers];
-    if (selectedKey && !keys.includes(selectedKey)) {
-      keys.push(selectedKey);
+  const commitCombo = (mods: string[], key: string) => {
+    const keys = [...mods];
+    if (key && !keys.includes(key)) {
+      keys.push(key);
     }
     if (keys.length === 0) return;
 
@@ -284,8 +277,10 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     };
 
     setMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, actions: [...m.actions, action] } : m));
+    setLastCaptured(keys.join(' + '));
     playKeyClick('down');
   };
+
 
   const addTextAction = () => {
     if (!newText) return;
@@ -329,14 +324,14 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     playKeyClick('down');
   };
 
-  const applyTemplate = (tpl: typeof DEFAULT_MACRO_TEMPLATES[0]) => {
+  const applyPreset = (preset: MacroPreset) => {
     setMacros(prev => prev.map(m => {
       if (m.id !== selectedSlot) return m;
       return {
         ...m,
-        name: tpl.name,
-        description: tpl.desc,
-        actions: tpl.actions.map(a => ({ ...a, id: `tpl-${Date.now()}-${Math.random()}` }))
+        name: preset.name,
+        description: preset.desc,
+        actions: preset.actions.map((a, i) => ({ ...a, id: `${preset.id}-${Date.now()}-${i}` }))
       };
     }));
     playKeyClick('heavy');
@@ -372,31 +367,34 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     playKeyClick('up');
   };
 
-  const handleSaveToEEPROM = () => {
-    localStorage.setItem('kadowaz_macros', JSON.stringify(macros));
+  const handleSave = () => {
+    localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
     setSavedSuccess(true);
     playKeyClick('heavy');
-    onTriggerAction?.(`macro-save-${selectedSlot}`, `Saved Macro M${selectedSlot} to MCU Flash EEPROM`, 'info');
+    onTriggerAction?.(`macro-save-${selectedSlot}`, `Saved Macro M${selectedSlot} on this PC`, 'info');
     setTimeout(() => setSavedSuccess(false), 2200);
   };
 
-  const handleAssignToSelectedDeckSwitch = () => {
-    const targetKeyIdx = selectedKeyIndex ?? 0;
-    onAssignToKey?.(targetKeyIdx, selectedSlot, currentMacro.name);
-    setAssignedSuccess(true);
-    playKeyClick('heavy');
-    setTimeout(() => setAssignedSuccess(false), 2000);
-  };
-
-  // Live Test Playback simulation
+  /* Test Run sends the steps for real, through the same native path the deck uses
+   * (execAction -> actionExecutor). Without the desktop shell nothing can be sent,
+   * so it says so instead of animating a fake success. */
   const handleTestMacroRun = async () => {
     if (isPlayingTest || currentMacro.actions.length === 0) return;
-    setIsPlayingTest(true);
     playKeyClick('down');
+
+    if (!window.electronAPI?.execAction) {
+      // Say it on the page, not only in the log drawer.
+      setTestNotice('Test Run needs the Kadowaz desktop app. The browser preview cannot send keystrokes, so nothing was sent.');
+      onTriggerAction?.(`test-macro-blocked-${currentMacro.id}`, 'Test Run blocked: no desktop shell, nothing was sent.', 'info');
+      return;
+    }
+
+    setTestNotice(null);
+    setIsPlayingTest(true);
 
     onTriggerAction?.(
       `test-macro-start-${currentMacro.id}`,
-      `▶ Executing Macro M${currentMacro.id} [${currentMacro.name}] (${currentMacro.actions.length} steps)`,
+      `▶ Executing Macro M${currentMacro.id} [${currentMacro.name || 'untitled'}] (${currentMacro.actions.length} steps)`,
       'script'
     );
 
@@ -406,17 +404,33 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
       playKeyClick('down');
 
       if (act.type === 'delay') {
-        const ms = act.delayMs || 100;
-        await new Promise(r => setTimeout(r, Math.min(ms, 300))); // Cap visual simulation delay to 300ms
-      } else {
-        await new Promise(r => setTimeout(r, 120));
+        await new Promise(r => setTimeout(r, Math.min(Math.max(act.delayMs || 100, 0), 5000)));
+        continue;
       }
+
+      const keys = act.keys && act.keys.length > 0 ? act.keys : [act.value];
+      const res = act.type === 'text'
+        ? await sendNativeAction({ id: `test-${currentMacro.id}-${i}`, category: 'script', name: currentMacro.name, payload: { command: act.value } })
+        : await sendNativeAction({ id: `test-${currentMacro.id}-${i}`, category: 'hotkey', name: currentMacro.name, payload: { keys } });
+
+      if (!res.success) {
+        onTriggerAction?.(
+          `test-macro-failed-${currentMacro.id}`,
+          `[ACTION FAILED] Step ${i + 1}: ${res.error || 'unknown error'}`,
+          'safety'
+        );
+        setActivePlayStep(null);
+        setIsPlayingTest(false);
+        return;
+      }
+      await new Promise(r => setTimeout(r, 30));
     }
 
     setActivePlayStep(null);
     setIsPlayingTest(false);
     playKeyClick('heavy');
 
+    setTestNotice(`Sent all ${currentMacro.actions.length} steps to Windows.`);
     onTriggerAction?.(
       `test-macro-done-${currentMacro.id}`,
       `✓ Finished Macro M${currentMacro.id} Execution`,
@@ -424,56 +438,48 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     );
   };
 
-  const MODIFIERS = ['Ctrl', 'Shift', 'Alt', 'Win'];
-  const POPULAR_KEYS = [
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    'Enter', 'Space', 'Backspace', 'Tab', 'Escape', 'Delete',
-    'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-    'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'
-  ];
 
   return (
     <div className="w-full max-w-5xl space-y-5 animate-in fade-in duration-150 select-none">
       {/* Top Banner & Header */}
-      <div className="glass-panel p-5 rounded-2xl border border-white/10 flex items-center justify-between">
+      <div className="panel p-5 border border-[#E3E2DE] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#A855F7] to-[#7E22CE] flex items-center justify-center text-white shadow-lg shadow-[#A855F7]/20">
+          <div className="w-10 h-10 flex items-center justify-center text-[#141414] ">
             <Code className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-white tracking-tight">VIA Macro Studio</h2>
-              <span className="px-2 py-0.5 rounded-full bg-[#A855F7]/20 border border-[#A855F7]/40 text-[#A855F7] text-[10px] font-mono font-bold">
+              <h2 className="text-lg font-bold text-[#141414] tracking-tight">VIA Macro Studio</h2>
+              <span className="px-2 py-0.5 bg-[#1351AA] border border-[#1351AA] text-[#E3E2DE] text-[10px] font-mono font-bold">
                 M0 – M15 SLOTS
               </span>
             </div>
-            <p className="text-xs text-white/50">
-              Hardware Flash / EEPROM multi-step execution sequences, live keystroke recorder, and text injectors
+            <p className="text-xs text-[#646464]">
+              Author the sixteen macro slots here. To put one on a switch, assign M0–M15 from the VIA Quick Keycode Tray.
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Save to Flash / EEPROM button */}
+          {/* Saves to this PC. The macropad holds keycodes, not macro bodies. */}
           <button
-            onClick={handleSaveToEEPROM}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-95 shadow-md ${
-              savedSuccess
-                ? 'bg-[#38EF7D] text-black shadow-[#38EF7D]/30'
-                : 'bg-[#FF5E00] text-black hover:bg-[#FF6A00] shadow-[#FF5E00]/30'
-            }`}
+            onClick={handleSave}
+            title="Saves the macro library on this PC. Macros run from the desktop app, so they are not written to the macropad."
+            className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-all active:scale-95 ${
+ savedSuccess
+ ? 'bg-[#1351AA] text-[#E3E2DE] '
+ : 'bg-[#1351AA] text-[#E3E2DE] hover:bg-[#1351AA] '
+ }`}
           >
             {savedSuccess ? (
               <>
                 <Check className="w-4 h-4" />
-                <span>Saved to EEPROM!</span>
+                <span>Saved</span>
               </>
             ) : (
               <>
                 <Save className="w-4 h-4" />
-                <span>Save to EEPROM</span>
+                <span>Save</span>
               </>
             )}
           </button>
@@ -483,10 +489,10 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
       {/* Main Studio Grid: Left Slots List + Right Sequence Editor */}
       <div className="grid grid-cols-12 gap-5">
         {/* LEFT COLUMN: 16 Macro Slots Sidebar (cols 4) */}
-        <div className="col-span-4 glass-panel p-3.5 rounded-2xl border border-white/10 flex flex-col space-y-2 h-[640px]">
-          <div className="flex items-center justify-between px-2 pb-2 border-b border-white/10 text-xs font-mono text-white/50">
+        <div className="col-span-4 panel p-3.5 border border-[#E3E2DE] flex flex-col space-y-2 h-[640px]">
+          <div className="flex items-center justify-between px-2 pb-2 border-b border-[#E3E2DE] text-xs font-mono text-[#646464]">
             <span className="uppercase tracking-wider text-[10px]">Macro Memory Slots</span>
-            <span className="text-[10px] text-white/30">16 Slots Available</span>
+            <span className="text-[10px] text-[#646464]">16 Slots Available</span>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
@@ -501,27 +507,27 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                     setSelectedSlot(m.id);
                     playKeyClick('down');
                   }}
-                  className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between group ${
-                    isSelected
-                      ? 'bg-gradient-to-r from-[#A855F7]/25 to-[#A855F7]/10 border-[#A855F7]/50 shadow-md shadow-[#A855F7]/10'
-                      : 'bg-black/30 border-white/5 hover:border-white/20 hover:bg-white/5'
-                  }`}
+                  className={`w-full text-left p-2.5 border transition-all flex items-center justify-between group ${
+ isSelected
+ ? 'border-[#444343] '
+ : 'bg-[#EDECE8] border-[#E3E2DE] hover:border-[#C7C7C7] hover:bg-[#F4F3F0]'
+ }`}
                 >
                   <div className="flex items-center gap-2.5 truncate">
                     <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 transition-colors ${
-                        isSelected
-                          ? 'bg-[#A855F7] text-white shadow-xs'
-                          : 'bg-white/5 text-white/60 group-hover:text-white'
-                      }`}
+                      className={`w-7 h-7 flex items-center justify-center font-mono font-bold text-xs shrink-0 transition-colors ${
+ isSelected
+ ? 'bg-[#1351AA] text-[#E3E2DE] '
+ : 'bg-[#F4F3F0] text-[#444343] group-hover:text-[#141414]'
+ }`}
                     >
                       M{m.id}
                     </div>
                     <div className="truncate">
-                      <div className={`text-xs font-semibold truncate ${isSelected ? 'text-white' : 'text-white/80'}`}>
+                      <div className={`text-xs font-semibold truncate ${isSelected ? 'text-[#141414]' : 'text-[#444343]'}`}>
                         {m.name}
                       </div>
-                      <div className="text-[10px] text-white/40 truncate">
+                      <div className="text-[10px] text-[#646464] truncate">
                         {hasActions ? `${m.actions.length} sequence steps` : 'Empty slot'}
                       </div>
                     </div>
@@ -529,9 +535,9 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     {hasActions && (
-                      <span className="w-2 h-2 rounded-full bg-[#38EF7D]" title="Populated macro" />
+                      <span className="w-2 h-2 bg-[#1351AA]" title="Populated macro" />
                     )}
-                    <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isSelected ? 'text-[#A855F7] translate-x-0.5' : 'text-white/20'}`} />
+                    <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isSelected ? 'text-[#444343] translate-x-0.5' : 'text-[#646464]'}`} />
                   </div>
                 </button>
               );
@@ -542,10 +548,10 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
         {/* RIGHT COLUMN: Sequence Viewer, Controls & Action Builders (cols 8) */}
         <div className="col-span-8 flex flex-col space-y-4">
           {/* Macro Card Header */}
-          <div className="glass-panel p-4 rounded-2xl border border-white/10 space-y-3">
+          <div className="panel p-4 border border-[#E3E2DE] space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 flex-1">
-                <span className="w-9 h-9 rounded-xl bg-[#A855F7]/20 border border-[#A855F7]/40 flex items-center justify-center font-mono font-extrabold text-[#A855F7] text-sm shrink-0">
+                <span className="w-9 h-9 bg-[#1351AA] border border-[#1351AA] flex items-center justify-center font-mono font-extrabold text-[#E3E2DE] text-sm shrink-0">
                   M{currentMacro.id}
                 </span>
                 <div className="flex-1 space-y-1">
@@ -554,69 +560,53 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                     value={currentMacro.name}
                     onChange={(e) => handleUpdateName(e.target.value)}
                     placeholder="Enter macro label (e.g. Git Push)"
-                    className="w-full bg-transparent text-white font-bold text-base focus:outline-hidden hover:bg-white/5 px-1.5 py-0.5 rounded-lg border border-transparent focus:border-white/20 transition-colors"
+                    className="w-full bg-transparent text-[#141414] font-bold text-base focus:outline-hidden hover:bg-[#F4F3F0] px-1.5 py-0.5 border border-transparent focus:border-[#C7C7C7] transition-colors"
                   />
                   <input
                     type="text"
                     value={currentMacro.description || ''}
                     onChange={(e) => handleUpdateDesc(e.target.value)}
                     placeholder="Optional description / memo..."
-                    className="w-full bg-transparent text-white/40 text-xs focus:outline-hidden hover:bg-white/5 px-1.5 py-0.5 rounded-lg border border-transparent focus:border-white/10 transition-colors"
+                    className="w-full bg-transparent text-[#646464] text-xs focus:outline-hidden hover:bg-[#F4F3F0] px-1.5 py-0.5 border border-transparent focus:border-[#E3E2DE] transition-colors"
                   />
                 </div>
               </div>
 
-              {/* Action Buttons: Run Test & Assign to Switch */}
+              {/* Action Button: Run Test (assigning lives in the VIA Quick Keycode Tray) */}
               <div className="flex items-center gap-2">
                 {/* Test Macro Playback */}
                 <button
                   onClick={handleTestMacroRun}
                   disabled={isPlayingTest || currentMacro.actions.length === 0}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all active:scale-95 ${
-                    isPlayingTest
-                      ? 'bg-[#00F0FF]/20 border-[#00F0FF] text-[#00F0FF] animate-pulse'
-                      : currentMacro.actions.length === 0
-                      ? 'opacity-40 bg-white/5 border-white/10 text-white/40 cursor-not-allowed'
-                      : 'bg-[#00F0FF]/10 hover:bg-[#00F0FF]/20 border-[#00F0FF]/40 text-[#00F0FF] hover:border-[#00F0FF]'
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-mono font-bold transition-all active:scale-95 ${
+ isPlayingTest
+ ? 'bg-[#EDECE8] border-[#1351AA] text-[#1351AA] animate-pulse'
+ : currentMacro.actions.length === 0
+ ? 'opacity-40 bg-[#F4F3F0] border-[#E3E2DE] text-[#646464] cursor-not-allowed'
+ : 'bg-[#EDECE8] hover:bg-[#EDECE8] border-[#C7C7C7] text-[#1351AA] hover:border-[#1351AA]'
+ }`}
                 >
                   <Play className={`w-3.5 h-3.5 ${isPlayingTest ? 'fill-current' : ''}`} />
                   <span>{isPlayingTest ? 'Running...' : 'Test Run'}</span>
                 </button>
 
-                {/* 1-Click Assign to Current Switch on Deck */}
-                <button
-                  onClick={handleAssignToSelectedDeckSwitch}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
-                    assignedSuccess
-                      ? 'bg-[#38EF7D] border-[#38EF7D] text-black'
-                      : 'bg-white/10 hover:bg-white/20 border-white/15 text-white'
-                  }`}
-                  title={`Assign Macro M${currentMacro.id} to Switch #${(selectedKeyIndex ?? 0) + 1} on the deck`}
-                >
-                  {assignedSuccess ? (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Assigned to #{ (selectedKeyIndex ?? 0) + 1}!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-3.5 h-3.5 text-[#FF5E00]" />
-                      <span>Assign to Switch #{(selectedKeyIndex ?? 0) + 1}</span>
-                    </>
-                  )}
-                </button>
               </div>
             </div>
 
+            {testNotice && (
+              <div className="px-2.5 py-2 bg-[#F4F3F0] border border-[#C7C7C7] text-[11px] font-mono text-[#444343]">
+                {testNotice}
+              </div>
+            )}
+
             {/* Action Sequence Visualizer Area */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] font-mono text-white/40 px-1">
+              <div className="flex items-center justify-between text-[11px] font-mono text-[#646464] px-1">
                 <span>ACTION SEQUENCE TIMELINE ({currentMacro.actions.length} STEPS)</span>
                 {currentMacro.actions.length > 0 && (
                   <button
                     onClick={clearCurrentMacro}
-                    className="text-red-400/80 hover:text-red-300 flex items-center gap-1 hover:underline cursor-pointer"
+                    className="text-[#141414]/80 hover:text-[#141414] flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <Trash2 className="w-3 h-3" />
                     <span>Clear All Steps</span>
@@ -624,12 +614,12 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                 )}
               </div>
 
-              <div className="min-h-[140px] max-h-[170px] p-3 rounded-xl bg-[#090C12] border border-white/10 flex flex-wrap gap-2 items-center content-start overflow-y-auto scrollbar-thin">
+              <div className="min-h-[140px] max-h-[170px] p-3 bg-[#FFFFFF] border border-[#E3E2DE] flex flex-wrap gap-2 items-center content-start overflow-y-auto scrollbar-thin">
                 {currentMacro.actions.length === 0 ? (
-                  <div className="w-full h-28 flex flex-col items-center justify-center text-white/30 text-xs italic gap-1">
-                    <Code className="w-6 h-6 opacity-30 text-[#A855F7]" />
+                  <div className="w-full h-28 flex flex-col items-center justify-center text-[#646464] text-xs italic gap-1">
+                    <Code className="w-6 h-6 opacity-30 text-[#444343]" />
                     <span>No sequence steps configured yet for Macro M{currentMacro.id}.</span>
-                    <span className="text-[10px] text-white/20">Record live keystrokes, add key combos, text strings, or templates below.</span>
+                    <span className="text-[10px] text-[#646464]">Record live keystrokes, add key combos, text strings, or templates below.</span>
                   </div>
                 ) : (
                   currentMacro.actions.map((act, idx) => {
@@ -637,19 +627,19 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                     return (
                       <div
                         key={act.id || idx}
-                        className={`group relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-mono text-xs transition-all ${
-                          isStepActive
-                            ? 'bg-[#00F0FF] text-black border-[#00F0FF] scale-105 shadow-md shadow-[#00F0FF]/50'
-                            : act.type === 'combo'
-                            ? 'bg-[#FF5E00]/10 border-[#FF5E00]/40 text-[#FF5E00]'
-                            : act.type === 'text'
-                            ? 'bg-[#38EF7D]/10 border-[#38EF7D]/40 text-[#38EF7D]'
-                            : act.type === 'delay'
-                            ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
-                            : act.type === 'down'
-                            ? 'bg-blue-500/15 border-blue-500/40 text-blue-300'
-                            : 'bg-blue-500/5 border-blue-500/20 text-blue-400/60'
-                        }`}
+                        className={`group relative flex items-center gap-1.5 px-2.5 py-1.5 border font-mono text-xs transition-all ${
+ isStepActive
+ ? 'bg-[#1351AA] text-[#E3E2DE] border-[#1351AA] scale-105 '
+ : act.type === 'combo'
+ ? 'bg-[#EDECE8] border-[#C7C7C7] text-[#1351AA]'
+ : act.type === 'text'
+ ? 'bg-[#EDECE8] border-[#C7C7C7] text-[#1351AA]'
+ : act.type === 'delay'
+ ? 'bg-[#EDECE8]/10 border-[#C7C7C7]/40 text-[#1351AA]'
+ : act.type === 'down'
+ ? 'bg-[#EDECE8]/15 border-[#C7C7C7]/40 text-[#1351AA]'
+ : 'bg-[#EDECE8]/5 border-[#C7C7C7]/20 text-[#1351AA]/60'
+ }`}
                       >
                         <span className="text-[9px] opacity-60 font-mono font-bold">#{idx + 1}</span>
                         <span className="text-[9px] uppercase opacity-75 font-semibold">
@@ -665,7 +655,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                             <button
                               onClick={() => moveAction(idx, 'up')}
                               title="Move step left"
-                              className="hover:text-white px-0.5 text-[10px]"
+                              className="hover:text-[#141414] px-0.5 text-[10px]"
                             >
                               ◀
                             </button>
@@ -674,7 +664,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                             <button
                               onClick={() => moveAction(idx, 'down')}
                               title="Move step right"
-                              className="hover:text-white px-0.5 text-[10px]"
+                              className="hover:text-[#141414] px-0.5 text-[10px]"
                             >
                               ▶
                             </button>
@@ -682,7 +672,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                           <button
                             onClick={() => removeAction(idx)}
                             title="Delete step"
-                            className="text-red-400 hover:text-red-300 px-0.5 font-bold"
+                            className="text-[#141414] hover:text-[#141414] px-0.5 font-bold"
                           >
                             ×
                           </button>
@@ -696,40 +686,28 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
           </div>
 
           {/* Action Step Builders Tabs & Panels */}
-          <div className="glass-panel p-4 rounded-2xl border border-white/10 space-y-4 flex-1">
+          <div className="panel p-4 border border-[#E3E2DE] space-y-4 flex-1">
             {/* Step Type Tabs */}
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/40 border border-white/10">
+            <div className="flex items-center gap-1.5 p-1 bg-[#EDECE8] border border-[#E3E2DE]">
               <button
                 onClick={() => setActiveBuilderTab('combo')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                  activeBuilderTab === 'combo'
-                    ? 'bg-[#FF5E00] text-black shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
+                className={`flex-1 py-1.5 text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
+ activeBuilderTab === 'combo'
+ ? 'bg-[#1351AA] text-[#E3E2DE] font-bold'
+ : 'text-[#444343] hover:text-[#141414]'
+ }`}
               >
                 <KeyboardIcon className="w-3.5 h-3.5" />
-                <span>Key Combo</span>
-              </button>
-
-              <button
-                onClick={() => setActiveBuilderTab('record')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                  activeBuilderTab === 'record'
-                    ? 'bg-red-500 text-white shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
-              >
-                <Circle className={`w-3.5 h-3.5 ${isRecording ? 'fill-current animate-ping' : ''}`} />
-                <span>Live Record</span>
+                <span>Type Keys</span>
               </button>
 
               <button
                 onClick={() => setActiveBuilderTab('text')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                  activeBuilderTab === 'text'
-                    ? 'bg-[#38EF7D] text-black shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
+                className={`flex-1 py-1.5 text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
+ activeBuilderTab === 'text'
+ ? 'bg-[#1351AA] text-[#E3E2DE] font-bold'
+ : 'text-[#444343] hover:text-[#141414]'
+ }`}
               >
                 <Type className="w-3.5 h-3.5" />
                 <span>Text String</span>
@@ -737,11 +715,11 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
 
               <button
                 onClick={() => setActiveBuilderTab('delay')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                  activeBuilderTab === 'delay'
-                    ? 'bg-amber-400 text-black shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
+                className={`flex-1 py-1.5 text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
+ activeBuilderTab === 'delay'
+ ? 'bg-[#1351AA] text-[#E3E2DE] font-bold'
+ : 'text-[#444343] hover:text-[#141414]'
+ }`}
               >
                 <Clock className="w-3.5 h-3.5" />
                 <span>Delay (ms)</span>
@@ -749,126 +727,57 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
 
               <button
                 onClick={() => setActiveBuilderTab('templates')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                  activeBuilderTab === 'templates'
-                    ? 'bg-[#A855F7] text-white shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
+                className={`flex-1 py-1.5 text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
+ activeBuilderTab === 'templates'
+ ? 'bg-[#1351AA] text-[#E3E2DE] font-bold'
+ : 'text-[#444343] hover:text-[#141414]'
+ }`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Presets</span>
               </button>
             </div>
 
-            {/* TAB 1: KEY COMBO BUILDER */}
+            {/* TAB 1: TYPE THE KEYS */}
             {activeBuilderTab === 'combo' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-white/50 font-mono">
-                  <span>SELECT MODIFIERS & KEY:</span>
-                  <span className="text-white/80 font-bold font-mono">
-                    Combo: {[...selectedModifiers, selectedKey].filter(Boolean).join(' + ')}
+              <div className="space-y-2">
+                <div
+                  tabIndex={0}
+                  aria-label="Type the keys you want to log"
+                  className="w-full px-4 py-7 bg-[#FFFFFF] border border-[#C7C7C7] flex flex-col items-center justify-center gap-2 focus:outline-hidden focus:border-[#1351AA]"
+                >
+                  <KeyboardIcon className="w-5 h-5 text-[#646464]" />
+                  <span className="text-xs font-mono text-[#444343] text-center">
+                    Press the keys you want on your keyboard — each press is logged as a step.
+                  </span>
+                  <span className="text-[10px] font-mono text-[#646464] text-center">
+                    Modifiers count · held with a key it logs as one step · Escape clears the readout
                   </span>
                 </div>
 
-                {/* Modifiers row */}
-                <div className="flex gap-2">
-                  {MODIFIERS.map((mod) => {
-                    const isSelected = selectedModifiers.includes(mod);
-                    return (
-                      <button
-                        key={mod}
-                        type="button"
-                        onClick={() => {
-                          setSelectedModifiers(prev =>
-                            prev.includes(mod) ? prev.filter(m => m !== mod) : [...prev, mod]
-                          );
-                          playKeyClick('down');
-                        }}
-                        className={`flex-1 py-1.5 rounded-lg font-mono text-xs font-bold border transition-colors ${
-                          isSelected
-                            ? 'bg-[#FF5E00] border-[#FF5E00] text-black'
-                            : 'bg-black/40 border-white/10 text-white/70 hover:border-white/30 hover:text-white'
-                        }`}
-                      >
-                        {isSelected ? `✓ ${mod}` : `+ ${mod}`}
-                      </button>
-                    );
-                  })}
+                <div className="flex items-center justify-between px-1 font-mono text-[11px]">
+                  <span className="text-[#646464]">LAST LOGGED</span>
+                  <span className={lastCaptured ? 'font-bold text-[#1351AA]' : 'text-[#646464]'}>
+                    {lastCaptured ?? 'nothing yet'}
+                  </span>
                 </div>
 
-                {/* Key select grid */}
-                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 max-h-32 overflow-y-auto scrollbar-thin">
-                  <div className="grid grid-cols-10 gap-1.5">
-                    {POPULAR_KEYS.map((k) => (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => {
-                          setSelectedKey(k);
-                          playKeyClick('down');
-                        }}
-                        className={`py-1 rounded text-xs font-mono transition-colors ${
-                          selectedKey === k
-                            ? 'bg-[#00F0FF] text-black font-bold'
-                            : 'bg-white/5 hover:bg-white/15 text-white/80'
-                        }`}
-                      >
-                        {k}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  onClick={addComboAction}
-                  className="w-full py-2 rounded-xl bg-[#FF5E00] hover:bg-[#FF6A00] text-black font-bold text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Insert Combo ({[...selectedModifiers, selectedKey].filter(Boolean).join(' + ')})</span>
-                </button>
-              </div>
-            )}
-
-            {/* TAB 2: LIVE KEYSTROKE RECORDER */}
-            {activeBuilderTab === 'record' && (
-              <div className="space-y-3">
-                <div className="p-4 rounded-xl bg-black/40 border border-white/10 flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <div className="text-xs font-bold text-white flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${isRecording ? 'bg-red-500 animate-ping' : 'bg-white/20'}`} />
-                      {isRecording ? 'Recording active keystrokes...' : 'Keystroke Recorder Idle'}
-                    </div>
-                    <div className="text-[11px] text-white/40">
-                      {isRecording 
-                        ? 'Press keys on your keyboard now. Delays and down/up events are captured live. Press ESC to stop.' 
-                        : 'Click "Start Recording" to capture your exact keypress sequence in real-time.'}
-                    </div>
-                  </div>
-
+                {currentMacro.actions.length > 0 && (
                   <button
-                    onClick={() => {
-                      setIsRecording(!isRecording);
-                      lastKeyTimeRef.current = 0;
-                      playKeyClick('heavy');
-                    }}
-                    className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all active:scale-95 flex items-center gap-2 ${
-                      isRecording
-                        ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30'
-                        : 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300'
-                    }`}
+                    onClick={() => removeAction(currentMacro.actions.length - 1)}
+                    className="w-full py-1.5 bg-[#EDECE8] hover:bg-[#E3E2DE] border border-[#C7C7C7] text-[#444343] font-mono text-[11px] font-bold uppercase tracking-[0.1em] active:scale-95 transition-all"
                   >
-                    <Circle className={`w-3.5 h-3.5 ${isRecording ? 'fill-current' : ''}`} />
-                    <span>{isRecording ? 'Stop Recording (ESC)' : 'Start Recording'}</span>
+                    Remove last step
                   </button>
-                </div>
+                )}
               </div>
             )}
 
-            {/* TAB 3: TEXT STRING INJECTOR */}
+            {/* TAB 2: TEXT STRING INJECTOR */}
             {activeBuilderTab === 'text' && (
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-mono text-white/50 uppercase block">
+                  <label className="text-[11px] font-mono text-[#646464] uppercase block">
                     Text / Script Command to Type
                   </label>
                   <div className="flex gap-2">
@@ -883,16 +792,16 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                         }
                       }}
                       placeholder="e.g. git status || https://youtube.com || MySecretPass123"
-                      className="flex-1 px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-xs text-white focus:outline-hidden focus:border-[#38EF7D]"
+                      className="flex-1 px-3 py-2 bg-[#EDECE8] border border-[#E3E2DE] text-xs text-[#141414] focus:outline-hidden focus:border-[#1351AA]"
                     />
                     <button
                       onClick={addTextAction}
                       disabled={!newText.trim()}
-                      className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
-                        newText.trim()
-                          ? 'bg-[#38EF7D] hover:bg-[#2ED56B] text-black shadow-md'
-                          : 'bg-white/5 text-white/30 cursor-not-allowed'
-                      }`}
+                      className={`px-4 py-2 font-bold text-xs flex items-center gap-1.5 transition-all ${
+ newText.trim()
+ ? 'bg-[#1351AA] hover:bg-[#1351AA] text-[#E3E2DE] '
+ : 'bg-[#F4F3F0] text-[#646464] cursor-not-allowed'
+ }`}
                     >
                       <Plus className="w-4 h-4" />
                       <span>Insert Text</span>
@@ -906,19 +815,19 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                     id="appendEnterCheck"
                     checked={appendEnterWithText}
                     onChange={(e) => setAppendEnterWithText(e.target.checked)}
-                    className="rounded bg-black/40 border-white/20 text-[#38EF7D] focus:ring-0 cursor-pointer"
+                    className=" bg-[#EDECE8] border-[#C7C7C7] text-[#1351AA] focus:ring-0 cursor-pointer"
                   />
-                  <label htmlFor="appendEnterCheck" className="text-xs text-white/70 cursor-pointer select-none">
-                    Automatically append <span className="font-mono font-bold text-[#38EF7D]">Enter</span> key at end of string
+                  <label htmlFor="appendEnterCheck" className="text-xs text-[#444343] cursor-pointer select-none">
+                    Automatically append <span className="font-mono font-bold text-[#1351AA]">Enter</span> key at end of string
                   </label>
                 </div>
               </div>
             )}
 
-            {/* TAB 4: DELAYS */}
+            {/* TAB 3: DELAYS */}
             {activeBuilderTab === 'delay' && (
               <div className="space-y-3">
-                <label className="text-[11px] font-mono text-white/50 uppercase block">
+                <label className="text-[11px] font-mono text-[#646464] uppercase block">
                   Insert Timing Delay
                 </label>
                 <div className="flex gap-2">
@@ -927,11 +836,11 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                       key={ms}
                       type="button"
                       onClick={() => setNewDelay(ms)}
-                      className={`flex-1 py-1.5 rounded-lg font-mono text-xs border transition-colors ${
-                        newDelay === ms
-                          ? 'bg-amber-400 border-amber-400 text-black font-bold'
-                          : 'bg-black/40 border-white/10 text-white/70 hover:border-white/30 hover:text-white'
-                      }`}
+                      className={`flex-1 py-1.5 font-mono text-xs border transition-colors ${
+ newDelay === ms
+ ? 'bg-[#141414] border-[#141414] text-[#E3E2DE] font-bold'
+ : 'bg-[#EDECE8] border-[#E3E2DE] text-[#444343] hover:border-[#141414] hover:text-[#141414]'
+ }`}
                     >
                       {ms}ms
                     </button>
@@ -946,12 +855,12 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                     step="10"
                     value={newDelay}
                     onChange={(e) => setNewDelay(e.target.value)}
-                    className="w-32 px-3 py-1.5 bg-black/40 border border-white/10 rounded-xl text-xs font-mono text-white focus:outline-hidden"
+                    className="w-32 px-3 py-1.5 bg-[#EDECE8] border border-[#E3E2DE] text-xs font-mono text-[#141414] focus:outline-hidden"
                   />
-                  <span className="text-xs text-white/40 font-mono">milliseconds</span>
+                  <span className="text-xs text-[#646464] font-mono">milliseconds</span>
                   <button
                     onClick={addDelayAction}
-                    className="ml-auto px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95"
+                    className="ml-auto px-4 py-2 bg-[#1351AA] hover:bg-[#1351AA] text-[#E3E2DE] font-bold text-xs flex items-center gap-1.5 active:scale-95"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Insert Delay</span>
@@ -960,30 +869,59 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
               </div>
             )}
 
-            {/* TAB 5: PRE-BUILT TEMPLATES */}
+            {/* TAB 4: PRESETS */}
             {activeBuilderTab === 'templates' && (
               <div className="space-y-2">
-                <div className="text-[11px] font-mono text-white/50 uppercase">
-                  1-Click Production Macro Templates
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap gap-1">
+                    {(['all', ...PRESET_CATEGORIES] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setPresetCategory(cat)}
+                        className={`px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.08em] border transition-colors ${
+ presetCategory === cat
+ ? 'bg-[#1351AA] border-[#1351AA] text-[#E3E2DE]'
+ : 'bg-[#EDECE8] border-[#E3E2DE] text-[#444343] hover:border-[#141414]'
+ }`}
+                      >
+                        {cat === 'all' ? `All ${MACRO_PRESETS.length}` : cat}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={presetQuery}
+                    onChange={(e) => setPresetQuery(e.target.value)}
+                    placeholder="Search presets..."
+                    className="w-40 px-2 py-1 bg-[#FFFFFF] border border-[#C7C7C7] text-[11px] text-[#141414] focus:outline-hidden focus:border-[#1351AA]"
+                  />
                 </div>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto scrollbar-thin pr-1">
-                  {DEFAULT_MACRO_TEMPLATES.map((tpl) => (
+
+                <div className="text-[10px] font-mono text-[#646464]">
+                  Applying a preset replaces the steps in M{selectedSlot}. Nothing is written until you apply it.
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto scrollbar-thin pr-1">
+                  {filteredPresets.length === 0 && (
+                    <div className="col-span-2 py-6 text-center text-[11px] font-mono text-[#646464]">
+                      No preset matches that.
+                    </div>
+                  )}
+                  {filteredPresets.map((preset) => (
                     <button
-                      key={tpl.name}
-                      onClick={() => applyTemplate(tpl)}
-                      className="p-2.5 rounded-xl bg-black/40 hover:bg-[#A855F7]/15 border border-white/10 hover:border-[#A855F7]/50 text-left transition-all group cursor-pointer"
+                      key={preset.id}
+                      onClick={() => applyPreset(preset)}
+                      className="p-2.5 bg-[#EDECE8] hover:bg-[#E3E2DE] border border-[#E3E2DE] hover:border-[#141414] text-left transition-all group cursor-pointer"
                     >
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-xs font-bold text-white group-hover:text-[#A855F7]">
-                          {tpl.name}
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-xs font-bold text-[#141414] leading-tight">{preset.name}</span>
+                        <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.08em] text-[#646464]">
+                          {preset.category}
                         </span>
-                        <Sparkles className="w-3 h-3 text-[#A855F7] opacity-60 group-hover:opacity-100" />
                       </div>
-                      <p className="text-[10px] text-white/40 leading-snug">
-                        {tpl.desc}
-                      </p>
-                      <div className="mt-1.5 text-[9px] font-mono text-[#A855F7]/80">
-                        {tpl.actions.length} actions
+                      <p className="mt-0.5 text-[10px] text-[#646464] leading-snug">{preset.desc}</p>
+                      <div className="mt-1.5 truncate font-mono text-[9px] text-[#1351AA]">
+                        {describeActions(preset.actions)}
                       </div>
                     </button>
                   ))}

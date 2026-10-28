@@ -272,6 +272,13 @@ probably never use it.
 
 ## Config region and reflashing
 
+Baked OLED animation frames live in a reserved **120 KiB region immediately below
+the config sectors** (`0x1E0000`–`0x1FDFFF` = 240 frames of 512 B), so the
+application image stops at `0x1E0000`, a reflash cannot touch saved frames and a
+frame write cannot touch saved config. `tools/check_flash_budget.py` reads the
+built `.uf2` and fails if the image crosses that boundary; the numbers are derived
+in `src/oled/capacity.ts` and asserted in `firmware/include/board.h`.
+
 Config lives in the **last two 4 KiB sectors** of the 2 MB flash
 (`0x1FE000` and `0x1FF000`). The firmware image is ~43 KB at the start, so there is
 no overlap and reflashing firmware never erases your config.

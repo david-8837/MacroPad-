@@ -36,6 +36,11 @@
 #define ACTION_TYPE_WEBHOOK 10     /* emit an event to the host; host does the HTTP */
 #define ACTION_TYPE_BOOTLOADER 11
 #define ACTION_TYPE_RESET_CONFIG 12
+/* Advance the OLED rotation by one screen (what OLED:NEXT does over USB). Bind
+ * it to a key or to the knob tap if you want a manual switch; the timer in
+ * oled_playlist.c does it on its own otherwise. `code` selects a direction:
+ * 0 or 1 = forward, -1 (0xFF) = backward. */
+#define ACTION_TYPE_OLED_NEXT 13
 
 /* Gap between characters of a TEXT macro. Small enough to feel instant, large
  * enough that no OS keyboard stack drops a report. */

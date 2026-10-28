@@ -19,7 +19,7 @@ export const MAGIC_U32 = 0x4d504144;
 export const CONFIG_MAGIC_U32 = 0x43464733;
 export const SECTOR_MAGIC_U32 = 0x53454331;
 export const PROTOCOL_VERSION = 1;
-export const CONFIG_FORMAT_VERSION = 1;
+export const CONFIG_FORMAT_VERSION = 2;
 
 export const SOF0 = 0xa5;
 export const SOF1 = 0x5a;
@@ -84,6 +84,7 @@ export const ACTION_TYPE = {
   WEBHOOK: 10,
   BOOTLOADER: 11,
   RESET_CONFIG: 12,
+  OLED_NEXT: 13,
 };
 
 export const ACTION_FLAG = {
@@ -126,12 +127,15 @@ export const CAP = { ENCODER: 0x01, OLED: 0x02, FLASH: 0x04, EVENTS: 0x08 };
 
 /* Struct geometry. Offsets come from the compiled C via layout.json and are
  * asserted against these values by the test suite. */
+export const CHANNEL_COUNT = 4;
+
 export const SIZES = {
   action: 40,
   lighting: 40,
   channel: 560,
   global: 16,
-  config: 1708,
+  /* Derived, not typed twice: header (8) + global (16) + channels + crc (4). */
+  config: 8 + 16 + CHANNEL_COUNT * 560 + 4,
   sectorHeader: 16,
   keyEvent: 8,
   info: 16,
@@ -146,9 +150,10 @@ export const OFFSETS = {
   channel: { keys: 0, knobCw: 360, knobCcw: 400, knobTap: 440, knobHold: 480, lighting: 520 },
   global: {
     holdMs: 0, doubleTapMs: 2, knobHoldMs: 4, knobIdleMs: 6, knobBatch: 8,
-    holdRepeatMs: 9, bootChannel: 10, ledInvertOutput: 11, usbReportEvents: 12, pad: 13,
+    holdRepeatMs: 9, bootChannel: 10, ledInvertOutput: 11, usbReportEvents: 12,
+    oledAutoCycleS: 13, oledPlaylist: 14,
   },
-  config: { magic: 0, version: 4, length: 6, global: 8, channels: 24, crc32: 1704 },
+  config: { magic: 0, version: 4, length: 6, global: 8, channels: 24, crc32: 8 + 16 + CHANNEL_COUNT * 560 },
   /* The A/B flash sector header. The host never reads raw flash, but describing
    * it here is what makes the reverse coverage check meaningful: if firmware
    * adds a field to sector_header_t, this file has to acknowledge it. */
@@ -156,7 +161,6 @@ export const OFFSETS = {
   keyEvent: { source: 0, index: 1, event: 2, channel: 3, value: 4, action: 6 },
 };
 
-export const CHANNEL_COUNT = 3;
 export const KEY_COUNT = 9;
 export const LED_COUNT = 9;
 export const TEXT_MAX = 32;
@@ -435,6 +439,7 @@ export function defaultConfig() {
     [0x20, 0x60, 0xff],
     [0xc0, 0x20, 0xff],
     [0xff, 0x90, 0x10],
+    [0x20, 0xe0, 0x60],
   ];
   return {
     global: {
@@ -546,6 +551,9 @@ export function encodeConfig(cfg) {
   v.setUint8(gb + OFFSETS.global.bootChannel, g.bootChannel ?? 0);
   v.setUint8(gb + OFFSETS.global.ledInvertOutput, g.ledInvertOutput ?? 1);
   v.setUint8(gb + OFFSETS.global.usbReportEvents, g.usbReportEvents ?? 1);
+  // OLED rotation: seconds per screen (0 = off) and the playlist bitmask.
+  v.setUint8(gb + OFFSETS.global.oledAutoCycleS, g.oledAutoCycleS ?? 30);
+  v.setUint16(gb + OFFSETS.global.oledPlaylist, g.oledPlaylist ?? 0, true);
 
   for (let ch = 0; ch < CHANNEL_COUNT; ch++) {
     const base = OFFSETS.config.channels + ch * SIZES.channel;
@@ -593,6 +601,8 @@ export function decodeConfig(bytes) {
     bootChannel: v.getUint8(gb + OFFSETS.global.bootChannel),
     ledInvertOutput: v.getUint8(gb + OFFSETS.global.ledInvertOutput),
     usbReportEvents: v.getUint8(gb + OFFSETS.global.usbReportEvents),
+    oledAutoCycleS: v.getUint8(gb + OFFSETS.global.oledAutoCycleS),
+    oledPlaylist: v.getUint16(gb + OFFSETS.global.oledPlaylist, true),
   };
 
   const channels = [];
@@ -664,6 +674,13 @@ export function encodeLedTest(rgbArray) {
     out[i * 3 + 2] = c[2];
   }
   return out;
+}
+
+/** Decode a cfg_lighting_t. `offset` skips a leading byte when the payload is a
+ * CMD_LIGHTING reply (1 channel byte + 40) rather than a bare struct. */
+export function decodeLighting(p, offset = 0) {
+  const v = new DataView(p.buffer, p.byteOffset, p.byteLength);
+  return getLighting(v, offset);
 }
 
 /** Encode a cfg_lighting_t for SET_LIGHTING / PREVIEW_LIGHTING. */

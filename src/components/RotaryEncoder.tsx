@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { DialBinding } from '../types';
 import { playDetentClick, playKeyClick } from '../utils/soundEffects';
 import { RotateCw, RotateCcw } from 'lucide-react';
+import { DIAL_MODES } from '../utils/channelLayers';
 
 interface RotaryEncoderProps {
   dial: DialBinding;
@@ -34,12 +35,11 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
   const didTriggerHoldRef = useRef(false);
   const animFrameRef = useRef<number | null>(null);
 
-  // Derive active layer (0, 1, or 2)
-  const channels = [
-    dial.availableModes[0] || 'Layer 1: Master Volume',
-    dial.availableModes[1] || 'Layer 2: Timeline Scrub',
-    dial.availableModes[2] || 'Layer 3: Focused App Audio',
-  ];
+  /* One dial mode per layer — four of them, numbered from zero. The list comes
+   * from the deck so a renamed mode shows here too. */
+  const channels = dial.availableModes?.length ? [...dial.availableModes] : [...DIAL_MODES];
+  const [switchedTo, setSwitchedTo] = useState<number | null>(null);
+
   
   let currentChannelIdx = channelIndex !== undefined
     ? channelIndex
@@ -66,10 +66,10 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
 
     if (direction === 'cw') {
       setRotationAngle(prev => prev + 15);
-      onTriggerAction(dial.cwAction.id, `${dial.cwAction.name} [CH ${currentChannelIdx + 1}] (${mult}x)`, dial.cwAction.category);
+      onTriggerAction(dial.cwAction.id, `${dial.cwAction.name} [CH ${currentChannelIdx}] (${mult}x)`, dial.cwAction.category);
     } else {
       setRotationAngle(prev => prev - 15);
-      onTriggerAction(dial.ccwAction.id, `${dial.ccwAction.name} [CH ${currentChannelIdx + 1}] (${mult}x)`, dial.ccwAction.category);
+      onTriggerAction(dial.ccwAction.id, `${dial.ccwAction.name} [CH ${currentChannelIdx}] (${mult}x)`, dial.ccwAction.category);
     }
   };
 
@@ -150,8 +150,9 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
         setHoldSuccess(true);
         playDetentClick('cw');
 
-        // Hold is strictly reserved for cycling through the 3 layers (Layer 1 -> Layer 2 -> Layer 3)
-        const nextChannel = (currentChannelIdx + 1) % 3;
+        // Hold is strictly reserved for cycling through the layers (0 → 1 → 2 → 3)
+        const nextChannel = (currentChannelIdx + 1) % channels.length;
+        setSwitchedTo(nextChannel);
         onCycleMode(nextChannel);
 
         setTimeout(() => {
@@ -184,7 +185,7 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
       playKeyClick('up');
       onTriggerAction(
         dial.pressAction.id,
-        `${dial.pressAction.name} [CH ${currentChannelIdx + 1}]`,
+        `${dial.pressAction.name} [CH ${currentChannelIdx}]`,
         dial.pressAction.category
       );
     }
@@ -198,15 +199,15 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
       <div className="relative flex items-center justify-center">
         {/* Floating Hold Progress Banner */}
         {isHolding && (
-          <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-[#00F0FF] text-black text-[8px] font-mono font-black shadow-[0_0_12px_#00F0FF] whitespace-nowrap z-30 flex items-center gap-1 animate-pulse pointer-events-none">
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-[#1351AA] text-[#E3E2DE] text-[8px] font-mono font-bold tracking-[0.1em] uppercase whitespace-nowrap z-30 flex items-center gap-1 pointer-events-none">
             <span>HOLD TO SWITCH CH... {Math.round(holdProgress)}%</span>
           </div>
         )}
 
         {/* Floating Channel Switched Toast */}
         {holdSuccess && (
-          <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-[#38EF7D] text-black text-[8.5px] font-mono font-black shadow-[0_0_14px_#38EF7D] whitespace-nowrap z-30 pointer-events-none">
-            ★ SWITCHED TO CH {((currentChannelIdx + 1) % 3) + 1}!
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-[#1351AA] text-[#E3E2DE] text-[8.5px] font-mono font-black whitespace-nowrap z-30 pointer-events-none">
+            ★ SWITCHED TO LAYER {switchedTo ?? currentChannelIdx}!
           </div>
         )}
 
@@ -215,17 +216,15 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
           onWheel={handleWheel}
           onMouseDown={handleMouseDown}
           title={`Scroll or Drag to rotate.\n• Tap switch: ${dial.pressAction.name}\n• Hold (${holdThresholdMs}ms): Switch Channel`}
-          className={`w-[60px] h-[60px] rounded-full p-[3px] bg-gradient-to-b from-[#7e8594] via-[#414652] to-[#252830] shadow-knob cursor-grab active:cursor-grabbing transition-transform ${
-            isPressed ? 'scale-95' : 'hover:scale-[1.03]'
-          }`}
+          className="w-[58px] h-[58px] p-0 bg-[#E3E2DE] border border-[#E3E2DE] cursor-grab active:cursor-grabbing transition-transform duration-300"
         >
           {/* Rotating Cap */}
           <div
-            className="w-full h-full rounded-full knob-metal relative flex items-center justify-center shadow-inner border border-white/20"
+            className="w-full h-full knob-metal relative flex items-center justify-center"
             style={{ transform: `rotate(${rotationAngle}deg)` }}
           >
             {/* Visual Detent Notch */}
-            <div className="absolute top-1 w-1.5 h-3 bg-[#FF5E00] rounded-full shadow-[0_0_6px_#FF5E00]" />
+            <div className="absolute top-1 left-1/2 -translate-x-1/2 w-[2px] h-2.5 bg-[#E3E2DE]" />
             
             {/* Center Push Switch with Hold Progress Ring */}
             <div className="relative w-7 h-7 flex items-center justify-center">
@@ -241,7 +240,7 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
                     cy="18"
                     r="15"
                     fill="none"
-                    stroke="rgba(0, 240, 255, 0.2)"
+                    stroke="rgba(19, 81, 170, 0.2)"
                     strokeWidth="3"
                   />
                 )}
@@ -252,12 +251,12 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
                     cy="18"
                     r="15"
                     fill="none"
-                    stroke="#00F0FF"
+                    stroke="#1351AA"
                     strokeWidth="3"
                     strokeDasharray="94.25"
                     strokeDashoffset={94.25 - (94.25 * holdProgress) / 100}
-                    strokeLinecap="round"
-                    className="drop-shadow-[0_0_6px_#00F0FF]"
+                    strokeLinecap="butt"
+                    className=""
                   />
                 )}
               </svg>
@@ -270,13 +269,13 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
                 onTouchStart={handleHoldStart}
                 onTouchEnd={handleHoldEnd}
                 title={`Tap: ${dial.pressAction.name} | Hold ${holdThresholdMs}ms: Switch Layer`}
-                className={`w-7 h-7 rounded-full bg-gradient-to-b from-[#2b2f38] to-[#15171c] border flex items-center justify-center text-[7.5px] font-mono font-bold transition-all shadow-md z-20 ${
-                  isHolding
-                    ? 'border-[#00F0FF] text-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.6)] scale-90'
-                    : 'border-white/20 text-white/80 hover:text-white hover:border-[#FF5E00]/60 active:scale-90'
-                }`}
+                className={`w-7 h-7 flex items-center justify-center font-mono text-[8px] font-bold tracking-[0.06em] transition-colors z-20 ${
+ isHolding
+ ? 'bg-[#1351AA] text-[#E3E2DE]'
+ : 'bg-[#E3E2DE] text-[#141414] hover:bg-[#1351AA] hover:text-[#E3E2DE]'
+ }`}
               >
-                L{currentChannelIdx + 1}
+                L{currentChannelIdx}
               </button>
             </div>
           </div>
@@ -287,7 +286,7 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
           <button
             onClick={() => stepDetent('ccw')}
             title="Step Counter-Clockwise"
-            className="w-4 h-4 rounded bg-[#1A1D24] border border-white/10 hover:border-[#FF5E00] text-white/70 hover:text-[#FF5E00] flex items-center justify-center text-[8px] transition-colors"
+            className="w-4 h-4 bg-[#E3E2DE] border border-[#E3E2DE] hover:bg-[#1351AA] hover:text-[#E3E2DE] text-[#444343] flex items-center justify-center transition-colors"
           >
             <RotateCcw className="w-2.5 h-2.5" />
           </button>
@@ -297,7 +296,7 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
           <button
             onClick={() => stepDetent('cw')}
             title="Step Clockwise"
-            className="w-4 h-4 rounded bg-[#1A1D24] border border-white/10 hover:border-[#FF5E00] text-white/70 hover:text-[#FF5E00] flex items-center justify-center text-[8px] transition-colors"
+            className="w-4 h-4 bg-[#E3E2DE] border border-[#E3E2DE] hover:bg-[#1351AA] hover:text-[#E3E2DE] text-[#444343] flex items-center justify-center transition-colors"
           >
             <RotateCw className="w-2.5 h-2.5" />
           </button>

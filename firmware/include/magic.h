@@ -18,7 +18,10 @@
 #define MAGIC_CONFIG 0x43464733u /* 'CFG3' — start of a saved config blob */
 
 #define PROTOCOL_VERSION 1
-#define CONFIG_FORMAT_VERSION 1
+/* 2: CFG_CHANNEL_COUNT 3 -> 4. The blob grew by one 560-byte channel, so a
+ * config saved by version 1 is rejected by length and re-seeded from defaults
+ * rather than being read with the wrong channel stride. */
+#define CONFIG_FORMAT_VERSION 2
 
 #define FRAME_SOF0 0xA5
 #define FRAME_SOF1 0x5A

@@ -25,12 +25,12 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import {
-  ACTION_TYPE, CAP, CHUNK_COUNT, CHUNK_SIZE, CMD, CONFIG_FORMAT_VERSION,
+  ACTION_TYPE, CAP, CHANNEL_COUNT, CHUNK_COUNT, CHUNK_SIZE, CMD, CONFIG_FORMAT_VERSION,
   CONFIG_MAGIC_U32, ConfigAssembler, FRAME_OVERHEAD, HID, KEY_COUNT, LED_COUNT,
   LED_MODE, MAGIC_U32, MEDIA, MTU, FrameDecoder, OFFSETS, PROTOCOL_VERSION,
   SIZES, STATUS, crc16, crc32, decodeConfig, decodeInfo, decodeKeyEvent,
   defaultConfig, encodeChunk, encodeConfig, encodeConfigFrames, encodeFrame, encodeLedTest,
-  encodeLighting, emptyAction,
+  encodeLighting, decodeLighting, emptyAction,
 } from '../protocol/mpad3-protocol.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -146,7 +146,7 @@ check('protocol version', () => eq(PROTOCOL_VERSION, layout.constants.protocolVe
 check('config format version', () => eq(CONFIG_FORMAT_VERSION, layout.constants.configFormatVersion));
 check('magic', () => eq(MAGIC_U32, layout.constants.magicU32));
 check('config magic', () => eq(CONFIG_MAGIC_U32, layout.constants.configMagicU32));
-check('channels', () => eq(3, layout.constants.channels));
+check('channels', () => eq(CHANNEL_COUNT, layout.constants.channels));
 check('keys', () => eq(KEY_COUNT, layout.constants.keys));
 check('leds', () => eq(LED_COUNT, layout.constants.leds));
 check('mtu', () => eq(MTU, layout.constants.mtu));
@@ -329,7 +329,7 @@ check('a frame split across an arbitrary chunk boundary decodes', () => {
 
 suite('config codec');
 
-check('default config encodes to exactly 1708 bytes with a valid CRC', () => {
+check('default config encodes to exactly SIZES.config bytes with a valid CRC', () => {
   const blob = encodeConfig(defaultConfig());
   eq(blob.length, SIZES.config);
   const v = new DataView(blob.buffer);
@@ -345,7 +345,7 @@ check('default config round trips through encode/decode', () => {
   eq(back.global.holdMs, 300);
   eq(back.global.knobHoldMs, 500);
   eq(back.global.usbReportEvents, 1);
-  eq(back.channels.length, 3);
+  eq(back.channels.length, CHANNEL_COUNT);
   eq(back.channels[0].keys.length, 9);
   for (const ch of back.channels) {
     for (const k of ch.keys) eq(k.type, ACTION_TYPE.NONE, 'factory keys must be empty: ');
@@ -356,7 +356,7 @@ check('default config round trips through encode/decode', () => {
   }
 });
 
-check('the three default channels have distinct base colours', () => {
+check('the four default channels have distinct base colours', () => {
   const { channels } = decodeConfig(encodeConfig(defaultConfig()));
   const seen = new Set();
   for (const ch of channels) {
@@ -364,15 +364,15 @@ check('the three default channels have distinct base colours', () => {
     if (seen.has(key)) throw new Error(`two channels share colour ${key}`);
     seen.add(key);
   }
-  eq(seen.size, 3);
+  eq(seen.size, CHANNEL_COUNT);
 });
 
 check('text actions round trip and stay NUL terminated', () => {
   const cfg = defaultConfig();
-  cfg.channels[2].keys[4] = { type: ACTION_TYPE.TEXT, flags: 0, code: 0, text: 'obs-scene-3' };
+  cfg.channels[2].keys[4] = { type: ACTION_TYPE.TEXT, flags: 0, code: 0, text: 'scene-3' };
   const back = decodeConfig(encodeConfig(cfg));
   eq(back.channels[2].keys[4].type, ACTION_TYPE.TEXT);
-  eq(back.channels[2].keys[4].text, 'obs-scene-3');
+  eq(back.channels[2].keys[4].text, 'scene-3');
   /* The field is 32 bytes and the firmware requires a NUL inside it. */
   const blob = encodeConfig(cfg);
   const base = OFFSETS.config.channels + 2 * SIZES.channel + OFFSETS.channel.keys + 4 * SIZES.action;
@@ -543,20 +543,20 @@ check('progress reporting reaches 1.0', () => {
 
 suite('device payload decoding');
 
-check('info payload decodes to a 3-channel 9-key 9-LED device', () => {
+check('info payload decodes to a 4-channel 9-key 9-LED device', () => {
   const p = new Uint8Array(SIZES.info);
   const v = new DataView(p.buffer);
   v.setUint32(0, MAGIC_U32, true);
   v.setUint16(4, PROTOCOL_VERSION, true);
   v.setUint16(6, CONFIG_FORMAT_VERSION, true);
-  p[8] = 3; p[9] = 9; p[10] = 9;
+  p[8] = CHANNEL_COUNT; p[9] = 9; p[10] = 9;
   p[11] = CAP.ENCODER | CAP.FLASH | CAP.EVENTS;
   v.setUint16(12, SIZES.config, true);
   v.setUint16(14, 7, true);
 
   const info = decodeInfo(p);
   eq(info.magic, MAGIC_U32);
-  eq(info.channels, 3);
+  eq(info.channels, CHANNEL_COUNT);
   eq(info.keys, 9);
   eq(info.leds, 9);
   eq(info.configSize, SIZES.config);
@@ -614,6 +614,24 @@ check('encodeLighting is 1 + 40 bytes with the channel index first', () => {
   eq(b[1 + OFFSETS.lighting.brightness], 90);
 });
 
+check('decodeLighting round-trips encodeLighting', () => {
+  const cfg = defaultConfig();
+  const L = { ...cfg.channels[1].lighting, mode: LED_MODE.SPECTRUM, brightness: 41, speed: 200 };
+  L.perKey = [
+    [1, 2, 3], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+    [0, 0, 0], [0, 0, 0], [0, 0, 0], [9, 8, 7],
+  ];
+  const payload = encodeLighting(1, L);
+  const back = decodeLighting(payload, 1); /* skip the channel byte */
+  eq(back.mode, LED_MODE.SPECTRUM);
+  eq(back.brightness, 41);
+  eq(back.speed, 200);
+  eq(back.perKeyMask, (1 << 0) | (1 << 8));
+  eq(back.perKey[0][0], 1);
+  eq(back.perKey[8][2], 7);
+  eq(back.r, L.r);
+});
+
 check('emptyAction encodes to 40 zero bytes', () => {
   const cfg = defaultConfig();
   cfg.channels[0].keys[0] = emptyAction();
@@ -654,7 +672,7 @@ if (!existsSync(defaultsPath)) {
 
   check('the C blob validates through the JS decoder', () => {
     const cfg = decodeConfig(fromC);
-    eq(cfg.channels.length, 3);
+    eq(cfg.channels.length, CHANNEL_COUNT);
     eq(cfg.channels[0].keys.length, 9);
   });
 

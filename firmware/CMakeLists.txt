@@ -53,12 +53,16 @@ add_compile_options(-Wall -Wextra -Wno-unused-parameter -Wshadow -Wdouble-promot
 add_executable(mpad3
     src/main.c
     src/core/actions.c
+    src/core/ascii_cmd.c
     src/core/channel.c
     src/core/crc.c
     src/core/dispatch.c
     src/core/events.c
     src/core/gesture.c
+    src/core/oled_playlist.c
     src/core/protocol.c
+    src/drivers/oled.c
+    src/drivers/oled_frames.c
     src/drivers/scan.c
     src/lighting/leds.c
     src/storage/config_defaults.c

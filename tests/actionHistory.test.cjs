@@ -3,7 +3,6 @@ const assert = require('assert');
 const util = require('../electron/native/util.cjs');
 const system = require('../electron/native/system.cjs');
 const audio = require('../electron/native/audio.cjs');
-const obs = require('../electron/native/obs.cjs');
 
 async function runTests() {
   console.log('Testing Action History & Diagnostic Subsystem...');
@@ -25,10 +24,9 @@ async function runTests() {
 
   // 2. Subsystem self-tests
   console.log('  Running subsystem self-tests:');
-  const [sysTest, audTest, obsTest] = await Promise.all([
+  const [sysTest, audTest] = await Promise.all([
     system.selfTest(),
     audio.selfTest(),
-    obs.selfTest(),
   ]);
 
   assert.strictEqual(typeof sysTest.ok, 'boolean');
@@ -39,14 +37,9 @@ async function runTests() {
   assert.strictEqual(typeof audTest.detail, 'string');
   console.log('    ✓ audio.selfTest:', audTest.detail);
 
-  assert.strictEqual(typeof obsTest.ok, 'boolean');
-  assert.strictEqual(typeof obsTest.detail, 'string');
-  console.log('    ✓ obs.selfTest:', obsTest.detail);
-
   // 3. Action history filtering logic simulation
   const mockHistory = [
     { id: '1', name: 'Volume Up', category: 'audio_session', type: 'success' },
-    { id: '2', name: 'Switch Scene: Camera', category: 'obs', type: 'success' },
     { id: '3', name: 'Keypress Ctrl+C', category: 'hotkey', type: 'success' },
     { id: '4', name: 'Hold cancelled (Safety)', category: 'hotkey', type: 'safety' },
     { id: '5', name: 'Dial Turn +1', category: 'encoder', type: 'success' },
@@ -55,14 +48,14 @@ async function runTests() {
   const filterAudio = mockHistory.filter(i => i.category === 'audio_session');
   assert.strictEqual(filterAudio.length, 1);
 
-  const filterObs = mockHistory.filter(i => i.category === 'obs');
-  assert.strictEqual(filterObs.length, 1);
-
   const filterSafety = mockHistory.filter(i => i.type === 'safety');
   assert.strictEqual(filterSafety.length, 1);
 
-  const filterSearch = mockHistory.filter(i => i.name.toLowerCase().includes('scene'));
+  const filterSearch = mockHistory.filter(i => i.name.toLowerCase().includes('volume'));
   assert.strictEqual(filterSearch.length, 1);
+  // The 'obs' action category is gone with the OBS integration; a filter for it
+  // would now match nothing, so the mock history does not carry one.
+  assert.strictEqual(mockHistory.filter(i => i.category === 'obs').length, 0);
   console.log('  ✓ action history filtering logic passed');
 
   console.log('All actionHistory tests passed successfully!');

@@ -305,20 +305,20 @@ export const ViaKeyTester: React.FC = () => {
           width: `${uWidth}px`,
           height: customHeight || '32px'
         }}
-        className={`rounded-lg flex flex-col items-center justify-between p-1 font-mono text-[10px] font-bold border transition-all duration-75 relative select-none ${
-          isDown
-            ? 'bg-[#FF5E00] text-black border-[#FF5E00] shadow-[0_0_15px_#FF5E00] scale-95 z-10'
-            : wasTested
-            ? 'bg-[#10B981]/25 text-[#38EF7D] border-[#10B981]/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-            : 'bg-[#141822] text-white/50 border-white/10 hover:border-white/25'
-        }`}
+        className={` flex flex-col items-center justify-between p-1 font-mono text-[10px] font-bold border transition-all duration-75 relative select-none ${
+ isDown
+ ? 'bg-[#1351AA] text-[#E3E2DE] border-[#1351AA] scale-95 z-10'
+ : wasTested
+ ? 'bg-[#EDECE8] text-[#1351AA] border-[#1351AA]'
+ : 'bg-[#FFFFFF] text-[#646464] border-[#E3E2DE] hover:border-[#C7C7C7]'
+ }`}
       >
         <div className="flex items-center justify-between w-full leading-none px-0.5">
           <span className="truncate">{k.label}</span>
-          {k.subLabel && <span className="text-[8px] text-white/30">{k.subLabel}</span>}
+          {k.subLabel && <span className="text-[8px] text-[#646464]">{k.subLabel}</span>}
         </div>
         {wasTested && (
-          <span className="text-[7px] text-white/70 font-mono leading-none font-normal">
+          <span className="text-[7px] text-[#444343] font-mono leading-none font-normal">
             {info.pressCount}x
           </span>
         )}
@@ -327,21 +327,21 @@ export const ViaKeyTester: React.FC = () => {
   };
 
   return (
-    <div className="glass-panel p-5 rounded-2xl border border-white/10 space-y-4">
+    <div className="panel p-5 border border-[#E3E2DE] space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-white/10">
+      <div className="flex items-center justify-between pb-3 border-b border-[#E3E2DE]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-[#38EF7D]/10 border border-[#38EF7D]/30 flex items-center justify-center text-[#38EF7D]">
+          <div className="w-8 h-8 bg-[#EDECE8] border border-[#C7C7C7] flex items-center justify-center text-[#1351AA]">
             <KeyboardIcon className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-semibold text-white text-base flex items-center gap-2">
+            <h3 className="font-semibold text-[#141414] text-base flex items-center gap-2">
               VIA Key Matrix & Switch Tester
-              <span className="text-[10px] font-mono text-[#38EF7D] bg-[#38EF7D]/10 px-2 py-0.5 rounded-full border border-[#38EF7D]/30">
+              <span className="text-[10px] font-mono text-[#1351AA] bg-[#EDECE8] px-2 py-0.5 border border-[#C7C7C7]">
                 LIVE 1000Hz POLLING
               </span>
             </h3>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-[#646464]">
               Full-Size 104-Key ANSI Matrix — Press any switch to verify registration, latency, and switch chatter
             </p>
           </div>
@@ -350,57 +350,57 @@ export const ViaKeyTester: React.FC = () => {
         {/* Top Controls: Layout Selector, Sound, Reset */}
         <div className="flex items-center gap-2.5">
           {/* Layout Selector */}
-          <div className="flex items-center gap-1 p-1 bg-black/40 rounded-xl border border-white/10 text-xs font-mono">
+          <div className="flex items-center gap-1 p-1 bg-[#EDECE8] border border-[#E3E2DE] text-xs font-mono">
             <button
               onClick={() => setLayoutMode('full')}
-              className={`px-2.5 py-1 rounded-lg transition-colors ${
-                layoutMode === 'full' ? 'bg-[#FF5E00] text-black font-bold' : 'text-white/60 hover:text-white'
-              }`}
+              className={`px-2.5 py-1 transition-colors ${
+ layoutMode === 'full' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
+ }`}
             >
               Full Size (100%)
             </button>
             <button
               onClick={() => setLayoutMode('tkl')}
-              className={`px-2.5 py-1 rounded-lg transition-colors ${
-                layoutMode === 'tkl' ? 'bg-[#FF5E00] text-black font-bold' : 'text-white/60 hover:text-white'
-              }`}
+              className={`px-2.5 py-1 transition-colors ${
+ layoutMode === 'tkl' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
+ }`}
             >
               TKL (80%)
             </button>
             <button
               onClick={() => setLayoutMode('60')}
-              className={`px-2.5 py-1 rounded-lg transition-colors ${
-                layoutMode === '60' ? 'bg-[#FF5E00] text-black font-bold' : 'text-white/60 hover:text-white'
-              }`}
+              className={`px-2.5 py-1 transition-colors ${
+ layoutMode === '60' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
+ }`}
             >
               60%
             </button>
           </div>
 
           {/* Sound Controls */}
-          <div className="flex items-center gap-1 p-1 bg-black/40 rounded-xl border border-white/10 text-xs font-mono">
+          <div className="flex items-center gap-1 p-1 bg-[#EDECE8] border border-[#E3E2DE] text-xs font-mono">
             <button
               onClick={() => setSoundProfile('thock')}
-              className={`px-2 py-1 rounded-lg transition-colors ${
-                soundProfile === 'thock' ? 'bg-[#FF5E00] text-black font-bold' : 'text-white/60 hover:text-white'
-              }`}
+              className={`px-2 py-1 transition-colors ${
+ soundProfile === 'thock' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
+ }`}
             >
               Thock
             </button>
             <button
               onClick={() => setSoundProfile('click')}
-              className={`px-2 py-1 rounded-lg transition-colors ${
-                soundProfile === 'click' ? 'bg-[#FF5E00] text-black font-bold' : 'text-white/60 hover:text-white'
-              }`}
+              className={`px-2 py-1 transition-colors ${
+ soundProfile === 'click' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
+ }`}
             >
               Clicky
             </button>
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
               title="Toggle Audio Feedback"
-              className={`p-1 rounded-lg transition-colors ${
-                soundEnabled ? 'text-[#38EF7D]' : 'text-white/30'
-              }`}
+              className={`p-1 transition-colors ${
+ soundEnabled ? 'text-[#1351AA]' : 'text-[#646464]'
+ }`}
             >
               {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
@@ -409,7 +409,7 @@ export const ViaKeyTester: React.FC = () => {
           {/* Reset Button */}
           <button
             onClick={resetTester}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-white/80 hover:text-white font-mono transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F4F3F0] hover:bg-[#EDECE8] border border-[#E3E2DE] text-xs text-[#444343] hover:text-[#141414] font-mono transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset Matrix</span>
@@ -419,28 +419,28 @@ export const ViaKeyTester: React.FC = () => {
 
       {/* Diagnostics Bar */}
       <div className="grid grid-cols-4 gap-3 text-center font-mono">
-        <div className="p-2.5 rounded-xl bg-[#0F1218] border border-white/5">
-          <div className="text-[10px] text-white/40 uppercase">Keys Registered</div>
-          <div className="text-sm font-bold text-[#38EF7D]">{testedCount} Keys</div>
+        <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE]">
+          <div className="text-[10px] text-[#646464] uppercase">Keys Registered</div>
+          <div className="text-sm font-bold text-[#1351AA]">{testedCount} Keys</div>
         </div>
-        <div className="p-2.5 rounded-xl bg-[#0F1218] border border-white/5">
-          <div className="text-[10px] text-white/40 uppercase">Total Actuations</div>
-          <div className="text-sm font-bold text-white">{totalKeypresses}</div>
+        <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE]">
+          <div className="text-[10px] text-[#646464] uppercase">Total Actuations</div>
+          <div className="text-sm font-bold text-[#141414]">{totalKeypresses}</div>
         </div>
-        <div className="p-2.5 rounded-xl bg-[#0F1218] border border-white/5">
-          <div className="text-[10px] text-white/40 uppercase">Active Down</div>
-          <div className="text-sm font-bold text-[#FF5E00]">{activeKeys.size} Keys</div>
+        <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE]">
+          <div className="text-[10px] text-[#646464] uppercase">Active Down</div>
+          <div className="text-sm font-bold text-[#1351AA]">{activeKeys.size} Keys</div>
         </div>
-        <div className="p-2.5 rounded-xl bg-[#0F1218] border border-white/5">
-          <div className="text-[10px] text-white/40 uppercase">Switch Chatter</div>
-          <div className={`text-sm font-bold ${chatterWarnings > 0 ? 'text-red-400' : 'text-[#38EF7D]'}`}>
+        <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE]">
+          <div className="text-[10px] text-[#646464] uppercase">Switch Chatter</div>
+          <div className={`text-sm font-bold ${chatterWarnings > 0 ? 'text-[#141414]' : 'text-[#1351AA]'}`}>
             {chatterWarnings > 0 ? `${chatterWarnings} Warnings` : 'Clean (0 Bounces)'}
           </div>
         </div>
       </div>
 
       {/* VISUAL FULL SIZE KEYBOARD MATRIX */}
-      <div className="p-4 bg-[#0A0C10] rounded-2xl border border-white/10 shadow-inner overflow-x-auto select-none flex justify-center">
+      <div className="p-4 bg-[#FFFFFF] border border-[#E3E2DE] overflow-x-auto select-none flex justify-center">
         <div className="inline-flex gap-4">
           
           {/* SECTION 1: MAIN ALPHANUMERIC CLUSTER (15u) */}
@@ -534,17 +534,17 @@ export const ViaKeyTester: React.FC = () => {
                     <div
                       key={k.code}
                       style={{ gridArea: k.gridArea }}
-                      className={`rounded-lg flex flex-col items-center justify-between p-1 font-mono text-[10px] font-bold border transition-all duration-75 relative select-none ${
-                        isDown
-                          ? 'bg-[#FF5E00] text-black border-[#FF5E00] shadow-[0_0_15px_#FF5E00] scale-95 z-10'
-                          : wasTested
-                          ? 'bg-[#10B981]/25 text-[#38EF7D] border-[#10B981]/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-                          : 'bg-[#141822] text-white/50 border-white/10 hover:border-white/25'
-                      }`}
+                      className={` flex flex-col items-center justify-between p-1 font-mono text-[10px] font-bold border transition-all duration-75 relative select-none ${
+ isDown
+ ? 'bg-[#1351AA] text-[#E3E2DE] border-[#1351AA] scale-95 z-10'
+ : wasTested
+ ? 'bg-[#EDECE8] text-[#1351AA] border-[#1351AA]'
+ : 'bg-[#FFFFFF] text-[#646464] border-[#E3E2DE] hover:border-[#C7C7C7]'
+ }`}
                     >
                       <span className="truncate leading-none">{k.label}</span>
                       {wasTested && (
-                        <span className="text-[7px] text-white/70 font-mono leading-none font-normal">
+                        <span className="text-[7px] text-[#444343] font-mono leading-none font-normal">
                           {info.pressCount}x
                         </span>
                       )}
@@ -559,15 +559,15 @@ export const ViaKeyTester: React.FC = () => {
       </div>
 
       {/* Key Actuation Feed Ticker */}
-      <div className="p-3 bg-[#0F1218] rounded-xl border border-white/5 flex items-center justify-between text-xs font-mono">
-        <div className="flex items-center gap-2 text-white/60">
-          <Activity className="w-4 h-4 text-[#38EF7D]" />
+      <div className="p-3 bg-[#FFFFFF] border border-[#E3E2DE] flex items-center justify-between text-xs font-mono">
+        <div className="flex items-center gap-2 text-[#444343]">
+          <Activity className="w-4 h-4 text-[#1351AA]" />
           <span>Last Actuated Switch:</span>
-          <span className="font-bold text-white px-2 py-0.5 rounded bg-white/5 border border-white/10">
+          <span className="font-bold text-[#141414] px-2 py-0.5 bg-[#F4F3F0] border border-[#E3E2DE]">
             {lastActuatedKey}
           </span>
         </div>
-        <div className="text-[11px] text-white/40">
+        <div className="text-[11px] text-[#646464]">
           Actuation counter increments on every switch press • Bounce latency tracked in real-time
         </div>
       </div>

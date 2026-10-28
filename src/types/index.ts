@@ -2,7 +2,6 @@ export type ActionCategory =
   | 'hotkey' 
   | 'media' 
   | 'audio_session' 
-  | 'obs' 
   | 'midi' 
   | 'script' 
   | 'navigation'
@@ -33,15 +32,15 @@ export interface ActionDefinition {
   payload: {
     // For hotkey
     keys?: string[];
+    /** A raw QMK/VIA keycode the pad sends itself (MO(1), KC_NO, …). The host
+     *  cannot type these, and says so instead of pretending. */
+    keycode?: string;
     // For media
     mediaAction?: 'play_pause' | 'next' | 'prev' | 'volume_up' | 'volume_down' | 'mute';
     // For audio_session (WASAPI)
     processName?: string; // 'spotify.exe', 'discord.exe', 'master', 'focus'
     audioDelta?: number; // +5, -5
     toggleMute?: boolean;
-    // For OBS
-    obsAction?: 'switch_scene' | 'toggle_stream' | 'toggle_record' | 'mute_source';
-    obsTarget?: string;
     // For MIDI
     midiType?: 'note_on' | 'cc' | 'mcu_transport';
     midiChannel?: number;
@@ -53,7 +52,6 @@ export interface ActionDefinition {
     command?: string;
     // For navigation
     targetLayerId?: string;
-    targetProfileId?: string;
     // For app_launch
     appId?: string;
     appName?: string;
@@ -109,59 +107,68 @@ export interface Layer {
   accentColor: string;
   keys: KeyBinding[];
   dial: DialBinding;
+  /** True until you change something in this layer. The shipped deck fills
+   *  layer 0 with an editing set so a new install is not a blank slab; the tag
+   *  says so, and editing a key takes the tag away. */
+  isExample?: boolean;
 }
 
-export interface Profile {
+/**
+ * A deck is the single keymap this app edits: four layers, nine keys each.
+ * (The old multi-`Profile` model was removed — one deck per install.)
+ */
+export interface Deck {
   id: string;
   name: string;
-  icon: string;
-  targetProcess?: string; // e.g. 'code.exe', 'resolve.exe', 'obs64.exe'
-  windowTitleRegex?: string;
   isLocked?: boolean;
   layers: Layer[];
   activeLayerId: string;
 }
 
-export type OLEDMode = 'system' | 'visualizer' | 'media' | 'kadowaz' | 'channel';
+// The panel catalogue is the single source of truth for what the OLED can show.
+// See `src/oled/modes.ts`.
+import type { OLEDMode as OLEDModeId } from '../oled/modes';
 
+export type OLEDMode = OLEDModeId;
+
+/**
+ * What the panel draws, plus the facts behind it.
+ *
+ * Every measured value is `number | null`, and `null` means "not measured on this
+ * machine", not "zero". The panel prints `--` for null and the drawer names the
+ * subsystem that answered, so the screen cannot claim a reading it does not have.
+ */
 export interface OLEDState {
   mode: OLEDMode;
-  cpuLoad: number;
-  gpuLoad: number;
-  ramUsage: number;
-  cpuTemp: number;
-  nowPlayingTrack: string;
-  nowPlayingArtist: string;
+  cpuLoad: number | null;
+  gpuLoad: number | null;
+  ramUsage: number | null;
+  cpuTemp: number | null;
+  nowPlayingTrack: string | null;
+  nowPlayingArtist: string | null;
   isPlaying: boolean;
-  trackProgress: number; // 0 to 100
-  audioVULeft: number; // 0 to 100
-  audioVURight: number;
+  trackProgress: number | null; // 0 to 100, null when there is no timeline
+  /** WM_SESSION / SMTC extras the drawer shows but the 128px panel does not. */
+  nowPlayingApp?: string | null;
+  trackPositionS?: number | null;
+  trackDurationS?: number | null;
+  /** Which subsystem answered for each metric: { cpu: 'typeperf', gpu: 'NVIDIA' }. */
+  metricsSource?: { cpu: string | null; gpu: string | null; temp: string | null } | null;
   customTitle?: string;
   customSubtitle?: string;
   brightness?: number; // 0 to 100
   inverted?: boolean;
-  screensaverMinutes?: number;
-}
-
-export interface AudioSessionItem {
-  id: string;
-  name: string;
-  process: string;
-  icon: string;
-  volume: number; // 0 to 100
-  isMuted: boolean;
-  peakDb: number;
-}
-
-export interface OBSState {
-  isConnected: boolean;
-  isStreaming: boolean;
-  isRecording: boolean;
-  currentScene: string;
-  scenes: string[];
-  droppedFrames: number;
-  fps: number;
-  kbitrate: number;
+  /**
+   * Seconds each playlist entry stays on the panel before the next one. The
+   * panel has no touchscreen, so this timer — not a click — is what advances it.
+   * 0 disables automatic switching. Stored as one byte in cfg_global_t.
+   */
+  autoCycleS?: number;
+  /**
+   * Screens in the rotation, catalogue order. Stored on the device as the
+   * `oled_playlist` bitmask; empty/undefined means every mode.
+   */
+  playlist?: OLEDModeId[];
 }
 
 export interface OSDNotification {

@@ -343,43 +343,140 @@ $sm = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
 $m = [WinRtHelper]::AwaitTask($sm.RequestAsync()).Result
 $s = [WinRtHelper]::Call($m,'GetCurrentSession')
 if ($s -eq $null) { '' } else {
-  $info = [WinRtHelper]::AwaitTask([WinRtHelper]::Call($s,'TryGetMediaPropertiesAsync')).Result
+  $props = [WinRtHelper]::AwaitTask([WinRtHelper]::Call($s,'TryGetMediaPropertiesAsync')).Result
   $tl = [WinRtHelper]::Call($s,'GetTimelineProperties')
-  $end = [WinRtHelper]::GetProperty($tl,'EndTime')
-  $pos = [WinRtHelper]::GetProperty($tl,'Position')
-  $title = [WinRtHelper]::GetProperty($info,'Title')
-  $artist = [WinRtHelper]::GetProperty($info,'Artist')
-  @{ title=$title; artist=$artist; position=$pos; duration=$end } | ConvertTo-Json -Compress
+  $pb = [WinRtHelper]::Call($s,'GetPlaybackInfo')
+  @{
+    title       = [WinRtHelper]::GetProperty($props,'Title');
+    artist      = [WinRtHelper]::GetProperty($props,'Artist');
+    album       = [WinRtHelper]::GetProperty($props,'AlbumTitle');
+    app         = [WinRtHelper]::GetProperty($s,'SourceAppUserModelId');
+    status      = "" + [WinRtHelper]::Call($pb,'get_PlaybackStatus');
+    position    = [WinRtHelper]::GetProperty($tl,'Position');
+    duration    = [WinRtHelper]::GetProperty($tl,'EndTime');
+    lastUpdated = [WinRtHelper]::GetProperty($tl,'LastUpdatedTime');
+  } | ConvertTo-Json -Compress
 }
 `;
 
-async function getNowPlaying() {
-  const r = await powershell(NOWPLAYING_SCRIPT, { timeoutMs: 6000 });
-  if (r.timedOut) return fail('Windows took too long to report what is playing.');
-  const text = String(r.stdout || '').trim();
-  if (!text) return ok(null); // nothing playing is a normal state, not an error
-  const parsed = parseJsonLoose(text);
-  if (!parsed) return ok(null);
-  const title = parsed.title ? String(parsed.title) : '';
-  const artist = parsed.artist ? String(parsed.artist) : '';
-  if (!title && !artist) return ok(null);
-  return ok({
-    title,
-    artist,
-    position: Math.round(toSeconds(parsed.position)),
-    duration: Math.round(toSeconds(parsed.duration)),
-  });
-}
-
-/** WinRT TimeSpan arrives as ticks (100 ns) or as an ISO-ish string. */
+/**
+ * WinRT TimeSpan -> seconds.
+ *
+ * TimeSpan arrives either as ticks (100 ns), as `hh:mm:ss[.fffffff]`, or as a
+ * DateTime for `LastUpdatedTime`. All three shapes turn up depending on how
+ * PowerShell serialises the projection, so all three are handled.
+ */
 function toSeconds(v) {
-  if (v === null || v === undefined) return 0;
+  if (v === null || v === undefined || v === '') return 0;
   const n = Number(v);
   if (Number.isFinite(n)) return Math.max(0, n / 1e7);
-  const s = String(v);
-  const m = /^(\d+):(\d{2}):(\d{2})/.exec(s);
-  if (m) return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
-  return 0;
+  const s = String(v).trim();
+  // hh:mm:ss[.fffffff] and [d.]hh:mm:ss[.fffffff] are both TimeSpan shapes.
+  const m = /^(?:(\d+)\.)?(\d+):(\d{2}):(\d{2})(?:\.\d+)?$/.exec(s);
+  if (m) {
+    const days = m[1] ? Number(m[1]) : 0;
+    return days * 86400 + Number(m[2]) * 3600 + Number(m[3]) * 60 + Number(m[4]);
+  }
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t / 1000 : 0;
+}
+
+const PLAYBACK_STATUS = {
+  0: false, // Closed
+  1: false, // Opened
+  2: false, // Changing
+  3: false, // Stopped
+  4: true,  // Playing
+  5: false, // Paused
+};
+
+/** `SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify` -> `Spotify`. */
+function friendlyApp(id) {
+  if (!id) return null;
+  let s = String(id);
+  if (s.includes('!')) s = s.slice(s.lastIndexOf('!') + 1);
+  s = s.replace(/\.exe$/i, '');
+  // AUMID publishers prefix their name: "SpotifyAB.SpotifyMusic" -> "SpotifyMusic"
+  if (s.includes('.') && !s.includes('\\')) s = s.slice(s.lastIndexOf('.') + 1);
+  s = s.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+  return s || null;
+}
+
+/** Is the session playing? PlaybackStatus comes back as a number or a name. */
+function isPlayingFrom(status) {
+  if (typeof status === 'number') return Boolean(PLAYBACK_STATUS[status]);
+  if (typeof status === 'string') {
+    const key = status.trim();
+    if (key in PLAYBACK_STATUS) return Boolean(PLAYBACK_STATUS[key]);
+    return key === 'Playing';
+  }
+  return false;
+}
+
+/**
+ * Turn the one-line JSON from PowerShell into a panel-ready state.
+ *
+ * Pure on purpose: the interesting part of "now playing" is the arithmetic —
+ * WinRT reports the position at `LastUpdatedTime`, not now, so a playing track
+ * has to be extrapolated or the progress bar freezes between system events.
+ *
+ * `now` is injected so the extrapolation is testable without a clock.
+ */
+function parseNowPlaying(text, now = Date.now()) {
+  const parsed = parseJsonLoose(String(text || '').trim());
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  const title = parsed.title ? String(parsed.title).trim() : '';
+  const artist = parsed.artist ? String(parsed.artist).trim() : '';
+  const album = parsed.album ? String(parsed.album).trim() : '';
+  if (!title && !artist) return null;
+
+  const durationS = Math.round(toSeconds(parsed.duration));
+  let positionS = toSeconds(parsed.position);
+
+  const playing = isPlayingFrom(parsed.status);
+  const updatedAtMs = toSeconds(parsed.lastUpdated) * 1000;
+  if (playing && updatedAtMs > 0) {
+    const drift = Math.max(0, now - updatedAtMs) / 1000;
+    // Guard against a clock that disagrees with the media session (system clock
+    // changed, or a timeline update we did not see): never jump more than 5 s.
+    positionS += Math.min(drift, 5);
+  }
+  if (durationS > 0) positionS = Math.min(positionS, durationS);
+
+  return {
+    title,
+    artist,
+    album,
+    app: friendlyApp(parsed.app),
+    isPlaying: playing,
+    positionS: Math.round(positionS),
+    durationS,
+    progress: durationS > 0 ? Math.round(Math.min(100, (positionS / durationS) * 100)) : 0,
+  };
+}
+
+/* The panel polls this every couple of seconds; a 1 s cache keeps a drawer
+ * preview and the broadcast tick from each paying for an Add-Type. */
+let nowPlayingCache = null;
+
+async function getNowPlaying(opts = {}) {
+  const cacheMs = opts.cacheMs === undefined ? 900 : opts.cacheMs;
+  if (nowPlayingCache && Date.now() - nowPlayingCache.at < cacheMs) return nowPlayingCache.result;
+
+  const r = await powershell(NOWPLAYING_SCRIPT, { timeoutMs: 6000 });
+  let result;
+  if (r.timedOut) {
+    result = fail('Windows took too long to report what is playing.');
+  } else {
+    const text = String(r.stdout || '').trim();
+    // No output means no session: nothing is playing. That is a normal state.
+    result = ok(parseNowPlaying(text));
+    if (!result.ok) result = ok(null);
+  }
+
+  nowPlayingCache = { at: Date.now(), result };
+  return result;
 }
 
 /* ------------------------------------------------------- self-test */
@@ -413,5 +510,6 @@ module.exports = {
   getMasterMute, setMasterMute, toggleMasterMute,
   getMic, setMic, listDevices, setActiveDevice,
   getProcessVolume, setProcessVolume, adjustProcessVolume, setProcessMute,
-  sampleLevels, getNowPlaying, resolvePid, pidOfProcessName, selfTest,
+  sampleLevels, getNowPlaying, parseNowPlaying, friendlyApp, isPlayingFrom, toSeconds,
+  resolvePid, pidOfProcessName, selfTest,
 };

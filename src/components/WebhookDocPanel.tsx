@@ -19,8 +19,7 @@ const SNIPPETS: { title: string; endpoint: string; body: Record<string, unknown>
   { title: 'Trigger Key Switch #1 (Tap)', endpoint: '/api/v1/trigger', body: { target: 'key', index: 0, action: 'tap' } },
   { title: 'Rotate Knob Clockwise (1 Detent)', endpoint: '/api/v1/dial', body: { direction: 'cw', step: 1 } },
   { title: 'Push Text to the OLED Display', endpoint: '/api/v1/oled', body: { line1: 'STREAM STARTING', line2: 'COUNTDOWN 05:00' } },
-  { title: 'Switch Active Deck Layer', endpoint: '/api/v1/action', body: { layerId: 'layer-1', channel: 1 } },
-  { title: 'Switch to Channel 2', endpoint: '/api/v1/action', body: { channel: 2 } },
+  { title: 'Switch to Layer 2', endpoint: '/api/v1/action', body: { layer: 2 } },
 ];
 
 export const WebhookDocPanel: React.FC<WebhookDocPanelProps> = ({ onRunLocally }) => {
@@ -51,23 +50,23 @@ export const WebhookDocPanel: React.FC<WebhookDocPanelProps> = ({ onRunLocally }
   };
 
   return (
-    <div className="glass-panel p-4 rounded-2xl border border-white/10 space-y-4">
+    <div className="panel p-4 border border-[#E3E2DE] space-y-4">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h3 className="font-semibold text-white text-sm flex items-center gap-2">
-            <Globe className="w-4 h-4 text-[#00F0FF]" />
+          <h3 className="font-semibold text-[#141414] text-sm flex items-center gap-2">
+            <Globe className="w-4 h-4 text-[#1351AA]" />
             Localhost Webhook &amp; REST API
           </h3>
-          <p className="text-[11px] text-white/40">
+          <p className="text-[11px] text-[#646464]">
             Trigger the actions you configured from Home Assistant, scripts or cURL.
           </p>
         </div>
         <span
-          className={`text-[10px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1 whitespace-nowrap ${
-            hasServer
-              ? 'text-[#00F0FF] bg-[#00F0FF]/10 border-[#00F0FF]/20'
-              : 'text-white/40 bg-white/5 border-white/10'
-          }`}
+          className={`text-[10px] font-mono px-2 py-0.5 border flex items-center gap-1 whitespace-nowrap ${
+ hasServer
+ ? 'text-[#1351AA] bg-[#EDECE8] border-[#C7C7C7]'
+ : 'text-[#646464] bg-[#F4F3F0] border-[#E3E2DE]'
+ }`}
         >
           <Zap className="w-2.5 h-2.5" />
           {hasServer ? `LISTENING :${port}` : 'DESKTOP APP ONLY'}
@@ -75,21 +74,21 @@ export const WebhookDocPanel: React.FC<WebhookDocPanelProps> = ({ onRunLocally }
       </div>
 
       {hasServer && info ? (
-        <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/40 border border-white/5">
-          <span className="text-[11px] text-white/60 flex items-center gap-1.5">
+        <div className="flex items-center justify-between gap-2 p-2 bg-[#EDECE8] border border-[#E3E2DE]">
+          <span className="text-[11px] text-[#444343] flex items-center gap-1.5">
             <KeyRound className="w-3 h-3" />
             Requests need your access token
           </span>
           <button
             onClick={() => copy('token', info.token)}
-            className="flex items-center gap-1 text-[10px] font-mono text-white/70 hover:text-white px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors"
+            className="flex items-center gap-1 text-[10px] font-mono text-[#444343] hover:text-[#141414] px-2 py-0.5 bg-[#F4F3F0] hover:bg-[#EDECE8] transition-colors"
           >
-            {copiedKey === 'token' ? <Check className="w-3 h-3 text-[#38EF7D]" /> : <Copy className="w-3 h-3" />}
+            {copiedKey === 'token' ? <Check className="w-3 h-3 text-[#1351AA]" /> : <Copy className="w-3 h-3" />}
             {copiedKey === 'token' ? 'Copied' : 'Copy token'}
           </button>
         </div>
       ) : (
-        <p className="text-[11px] text-white/40 italic">
+        <p className="text-[11px] text-[#646464] italic">
           The webhook server runs inside the Electron desktop app. In the browser preview you can still
           try each endpoint&apos;s behaviour with &quot;Run in app&quot;.
         </p>
@@ -97,29 +96,29 @@ export const WebhookDocPanel: React.FC<WebhookDocPanelProps> = ({ onRunLocally }
 
       <div className="space-y-3">
         {SNIPPETS.map((item) => (
-          <div key={item.endpoint + item.title} className="p-3 rounded-xl bg-[#0F1218] border border-white/5 space-y-1.5">
+          <div key={item.endpoint + item.title} className="p-3 bg-[#FFFFFF] border border-[#E3E2DE] space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-white">{item.title}</span>
+              <span className="text-xs font-medium text-[#141414]">{item.title}</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onRunLocally(item.endpoint, item.body)}
                   title="Runs the same in-app handler the server uses (does not go through HTTP)"
-                  className="text-[10px] font-mono text-[#FF5E00] hover:underline"
+                  className="text-[10px] font-mono text-[#1351AA] hover:underline"
                 >
                   [Run in app]
                 </button>
                 {hasServer && info && (
                   <button
                     onClick={() => copy(item.title, buildCurl(item.endpoint, item.body, info.token))}
-                    className="flex items-center gap-1 text-[10px] font-mono text-white/60 hover:text-white px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors"
+                    className="flex items-center gap-1 text-[10px] font-mono text-[#444343] hover:text-[#141414] px-2 py-0.5 bg-[#F4F3F0] hover:bg-[#EDECE8] transition-colors"
                   >
-                    {copiedKey === item.title ? <Check className="w-3 h-3 text-[#38EF7D]" /> : <Copy className="w-3 h-3" />}
+                    {copiedKey === item.title ? <Check className="w-3 h-3 text-[#1351AA]" /> : <Copy className="w-3 h-3" />}
                     {copiedKey === item.title ? 'Copied' : 'Copy cURL'}
                   </button>
                 )}
               </div>
             </div>
-            <div className="p-2 rounded bg-black/60 border border-white/5 font-mono text-[10px] text-[#00F0FF] overflow-x-auto">
+            <div className="p-2 bg-[#EDECE8] border border-[#E3E2DE] font-mono text-[10px] text-[#1351AA] overflow-x-auto">
               <code>{buildCurl(item.endpoint, item.body, '<YOUR_TOKEN>')}</code>
             </div>
           </div>

@@ -1,5 +1,6 @@
 /**
- * Active foreground window tracking for automatic profile switching.
+ * Foreground window probe (PowerShell `GetForegroundWindow` shim).
+ * No longer wired to auto-switching — kept as a manual diagnostic helper.
  * Uses Win32 GetForegroundWindow via PowerShell/C# without external dependencies.
  */
 

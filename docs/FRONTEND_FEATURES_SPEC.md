@@ -24,7 +24,7 @@ The application consists of a single-screen dashboard with overlay drawers and m
 
 ```
 +-----------------------------------------------------------------------------------+
-|  [Logo] KADOWAZ DECK    [Profile Dropdown v]   [Layer Tabs 1 | 2 | 3]   [Actions] |
+|  [Logo] KADOWAZ / DECK  [Studio Deck]   [Layer Tabs 0 | 1 | 2 | 3]   [Actions] |
 +-----------------------------------------------------------------------------------+
 |                                                                                   |
 |                               +------------------------+                          |
@@ -57,23 +57,32 @@ An interactive 3D / pseudo-3D representation of the physical 9-key macropad:
    - Interactive: Click left (CCW turn), click right (CW turn), and center click (push button).
    - Smooth rotation animation matching turn actions.
 4. **OLED Screen Simulation (128x32 display):**
-   - Paper-white pixels on pitch-black background with subtle horizontal scanlines.
-   - Supports 5 switchable modes:
-     1. **Deck Status:** Displays custom banner title, active profile name, and current layer.
-     2. **System Telemetry:** Live 3-column performance metrics: `CPU: xx%`, `RAM: xx%`, `GPU: xx%`, `Temp: xx°C`.
-     3. **Audio VU Meter:** Reactive 12-band stereo dB equalizer bars with peak indicators.
-     4. **Now Playing:** Live track title, artist name, and a synchronized scrub progress bar.
-     5. **Layer Stepper:** Minimalist industrial dashed stepper badge (`[01] / [02] / [03]`).
+   - True-black panel with emissive warm-white pixels and a tight bloom; the app's only glowing surface.
+   - Rendered by one 128×32 1-bit framebuffer engine (`src/oled/`) shared by the
+     mode-card previews, the simulator and the firmware frame export.
+   - Supports 12 switchable modes. Live-data screens:
+     1. **Deck Status:** custom banner title, `ONLINE` badge, active layer hero line, deck name.
+     2. **System Telemetry:** CPU / RAM / GPU meters with live percentages and package temperature.
+     3. **Now Playing:** scrolling track title, artist, play/pause glyph, progress bar.
+     4. **Layer Track:** a four-stop track (one stop per layer) built from two 1-bit sprites — a side-view keycap silhouette in every unselected stop, and a rounded-corner square carrying `00`–`03` in the selected one. Animated on every layer change: 120 ms paint, keycaps drop out, 320 ms travel with the number rolling, keycaps return, 2.0 s hold.
+   - Looping screens (frames @ rate). Seven bake into firmware frames via
+     `scripts/export-oled-frames.mjs`; **Clock** reads the system time, so it stays runtime-rendered:
+     5. **Progress Loader** (12 @ 8 fps) · 6. **Pixel Buddy** (16 @ 6) · 7. **Signal Wave** (15 @ 15) ·
+     8. **Starfield** (24 @ 12) · 9. **Digital Rain** (24 @ 12) · 10. **Clock** (live) ·
+     11. **Radar Sweep** (24 @ 12) · 12. **Heartbeat** (12 @ 12).
+   - Mode cards: title top-left, technical tag top-right (`ACTIVE` / `NN FPS` / `STATIC` / `SKIPPED`), live animated preview underneath, a footprint line (`24 FR · 12.0 KiB` or `RUNTIME · 0 B`) and an **IN ROTATION / SKIPPED** toggle in the card footer. No icons and no body copy.
+   - **The panel is not a touchscreen.** Nothing advances by clicking the screen. The drawer drives the rotation: **AUTO SWITCH** (0 = stay put, 3–255 s, default 30) and the per-card rotation toggle, plus **CYCLE NEXT MODE** for a manual step. The firmware mirrors this with `cfg_global_t.oled_auto_cycle_s` / `oled_playlist`, `ACTION_TYPE_OLED_NEXT` and the `OLED:NEXT` / `OLED:AUTO:<s>` / `OLED:PL:<mask>` commands.
+   - **Frame store readout:** `63.5 KiB / 120.0 KiB · 113 / 240 frames free · 6 loops headroom`, with a bar. The 120 KiB limit is derived from the flash map (`src/oled/capacity.ts`), not chosen: 2 MiB part − 8 KiB config sectors − a 1.87 MiB application ceiling, aligned to the 4 KiB erase sector and exact in 512 B frames.
 
 ---
 
-### B. Profile & Multi-Layer System
-1. **Profiles:** Profiles represent specific user applications or workflows (e.g., *DaVinci Resolve*, *OBS Broadcast*, *Spotify DJ*, *Coding/IDE*).
-2. **Layers (Channels 1–3):** Each profile contains 3 distinct layers:
-   - **Layer 1 (Audio / Media):** Volume dial, play/pause, mute, track skip.
-   - **Layer 2 (Editing / Scrubbing):** Timeline scrub dial, cut, split, undo, render.
-   - **Layer 3 (Custom Macros):** Application-specific shortcuts, launch commands, webhooks.
-3. **Auto-Profile Switching:** Detects active foreground application window and automatically switches profiles.
+### B. Deck & Multi-Layer System
+1. **Single Deck:** One deck per install (no profile switching). It holds all 4 layers and can be locked to prevent edits.
+2. **Layers (0–3):** The deck contains 4 distinct layers:
+   - **Layer 0 (Edit):** Timeline scrub dial, cut, split, mark, render-out.
+   - **Layer 1 (Tools):** Copy / paste / cut / undo / find / save.
+   - **Layer 2 (Custom):** your own bank.
+   - **Layer 3 (Macros):** empty macro bank, ready for your own keys.
 
 ---
 
@@ -83,10 +92,9 @@ Clicking any key on the macropad opens the **Key Inspector Drawer**:
   1. **Hotkeys & Shortcuts:** Single keys, combinations (`Ctrl+Shift+T`, `Win+V`), or sequential keypresses.
   2. **Media & Volume:** Master Volume Up/Down/Mute, Play/Pause, Next Track, Previous Track.
   3. **Per-App Audio Mixer:** Adjust specific application volumes (e.g. Spotify, Discord, Chrome).
-  4. **OBS Studio Controls:** Start/Stop Stream, Start/Stop Recording, Toggle Mic Mute, Switch Scene.
-  5. **Application Launcher:** Browse or select executable/app to open on press.
-  6. **Webhook Trigger:** Send HTTP POST payload to local port `38491` or external automation (Home Assistant, Stream Deck webhooks).
-  7. **Layer Navigation:** Switch directly to Layer 1, 2, or 3, or cycle layers.
+  4. **Application Launcher:** Browse or select executable/app to open on press.
+  5. **Webhook Trigger:** Send HTTP POST payload to local port `38491` or external automation (Home Assistant, Stream Deck webhooks).
+  6. **Layer Navigation:** Switch directly to Layer 0, 1, 2 or 3, or cycle layers.
 
 ---
 
@@ -102,7 +110,7 @@ Configure the 3 distinct interactions of the rotary dial per layer:
 - Triggered by `Ctrl+K` or search button in header.
 - Fuzzy ranked search across:
   - 400+ Windows/Mac software shortcuts (Photoshop, Premiere, DaVinci, VS Code, Blender, Windows OS).
-  - Hardware profiles and layers.
+  - Deck layers.
   - Subsystem tools (Diagnostics, Firmware Flasher, Audio Mixer, Settings).
 - Full keyboard navigation (`ArrowUp`, `ArrowDown`, `Enter`, `Escape`).
 
@@ -112,7 +120,7 @@ Configure the 3 distinct interactions of the rotary dial per layer:
 
 1. **Diagnostics & Activity Timeline Drawer:**
    - Real-time event log recording every keypress, knob turn, and webhook invocation with millisecond timestamps.
-   - Subsystem self-tests showing green status indicators for Audio Engine, Window Tracker, Telemetry, and OBS.
+   - Subsystem self-tests showing green status indicators for Audio Engine and Telemetry.
    - Raw serial/HID wire packet viewer.
 
 2. **RP2040 UF2 Firmware Flasher Modal:**
@@ -138,7 +146,7 @@ To ensure compatibility when reconnecting to the backend, the state should follo
 
 ```typescript
 export interface KeyAction {
-  type: 'hotkey' | 'media' | 'app' | 'obs' | 'webhook' | 'layer';
+  type: 'hotkey' | 'media' | 'app' | 'webhook' | 'layer';
   payload?: any;
   label?: string;
   icon?: string;
@@ -164,15 +172,21 @@ export interface Layer {
   dial: DialConfig;
 }
 
-export interface Profile {
+export interface Deck {
   id: string;
   name: string;
-  processMatch?: string; // e.g. 'resolve.exe', 'obs64.exe'
+  isLocked?: boolean;
+  activeLayerId: string;
   layers: Layer[];
 }
 
 export interface OLEDState {
-  mode: 'kadowaz' | 'system' | 'visualizer' | 'media' | 'channel';
+  mode: 'kadowaz' | 'system' | 'media' | 'channel' | 'loader' | 'creature' | 'wave'
+      | 'starfield' | 'rain' | 'clock' | 'radar' | 'pulse';
+  /** Seconds per screen; 0 disables automatic switching. */
+  autoCycleS?: number;
+  /** Screens in the rotation, catalogue order. Empty means every mode. */
+  playlist?: OledMode[];
   customTitle?: string;
   customSubtitle?: string;
   cpuLoad: number;
@@ -190,6 +204,6 @@ export interface OLEDState {
 ## 5. Expected User Interactions to Handle
 - **Key Tap / Hold / Double-click:** Triggers action, shows visual bounce animation, logs event to diagnostics.
 - **Dial Wheel Drag / Click:** Adjusts value (volume / scrub), rotates indicator.
-- **OLED Click:** Cycles between the 5 OLED display modes.
+- **OLED:** Not clickable. The screen changes on the rotation timer, on a key bound to OLED NEXT, or on `OLED:NEXT` from the host.
 - **Drawer Open / Close:** Sliding glass panels from right side with backdrop blur.
 

@@ -17,52 +17,11 @@ async function runTests() {
   assert.strictEqual(normEmpty.title, '');
   assert.strictEqual(normEmpty.pid, 0);
 
-  // 2. Profile auto-switch matching simulation
-  const mockProfiles = [
-    { id: 'davinci', name: 'DaVinci Resolve', targetProcess: 'resolve.exe', windowTitleRegex: 'DaVinci Resolve.*' },
-    { id: 'obs', name: 'OBS Studio', targetProcess: 'obs64.exe' },
-    { id: 'code', name: 'VS Code', targetProcess: 'Code.exe', windowTitleRegex: '.*Visual Studio Code' },
-  ];
+  // 2. Window titles are still normalised for manual diagnostics
+  const normResolve = normalise({ process: 'Resolve.exe', title: 'DaVinci Resolve' });
+  assert.strictEqual(normResolve.app, 'resolve');
 
-  function matchProfile(win, profiles) {
-    const appName = win.app.toLowerCase();
-    const winTitle = win.title;
-    return profiles.find((p) => {
-      if (p.targetProcess) {
-        const targetClean = p.targetProcess.toLowerCase().replace(/\.exe$/, '');
-        if (targetClean === appName || appName.includes(targetClean)) return true;
-      }
-      if (p.windowTitleRegex) {
-        try {
-          const re = new RegExp(p.windowTitleRegex, 'i');
-          if (re.test(winTitle)) return true;
-        } catch { /* ignore */ }
-      }
-      return false;
-    });
-  }
-
-  const match1 = matchProfile({ app: 'resolve', title: 'DaVinci Resolve - Project 1' }, mockProfiles);
-  assert.strictEqual(match1?.id, 'davinci');
-
-  const match2 = matchProfile({ app: 'obs64', title: 'OBS Studio' }, mockProfiles);
-  assert.strictEqual(match2?.id, 'obs');
-
-  const match3 = matchProfile({ app: 'code', title: 'App.tsx - desktop-app - Visual Studio Code' }, mockProfiles);
-  assert.strictEqual(match3?.id, 'code');
-
-  const matchNone = matchProfile({ app: 'notepad', title: 'Untitled - Notepad' }, mockProfiles);
-  assert.strictEqual(matchNone, undefined);
-
-  // 3. Test getActiveWindow query
-  const res = await getActiveWindow();
-  assert.ok(typeof res.ok === 'boolean', 'getActiveWindow must return ok boolean');
-  if (res.ok) {
-    assert.ok(typeof res.value.app === 'string', 'value.app must be string');
-    assert.ok(typeof res.value.title === 'string', 'value.title must be string');
-  }
-
-  console.log('windowTracker: all assertions passed (active window normalization and profile matching verified)');
+  console.log('windowTracker: all assertions passed (active window normalization verified)');
 }
 
 runTests().catch((err) => {

@@ -101,6 +101,11 @@ typedef struct {
     uint32_t frames_resync;
 } protocol_parser_t;
 
+/* True while the parser is waiting for a start-of-frame byte, i.e. it holds no
+ * partial frame. The RX path uses this to route printable bytes to the ASCII
+ * command parser: a frame cannot begin with a printable byte (SOF0 is 0xA5). */
+bool protocol_parser_hunting(const protocol_parser_t *p);
+
 void protocol_parser_init(protocol_parser_t *p);
 /* Feed one byte. On PARSE_OK, `out` is populated and valid until the next call. */
 parse_result_t protocol_parser_push(protocol_parser_t *p, uint8_t byte, frame_in_t *out);

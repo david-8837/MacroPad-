@@ -1,4 +1,5 @@
 import { ActionDefinition } from '../types';
+import { MACRO_STORAGE_KEY } from './macroStorage';
 
 export interface MacroActionStep {
   type: 'down' | 'up' | 'combo' | 'text' | 'delay';
@@ -9,7 +10,7 @@ export interface MacroActionStep {
 
 export function loadStoredMacros(): { id: number; name: string; actions: MacroActionStep[] }[] {
   try {
-    const parsed = JSON.parse(localStorage.getItem('kadowaz_macros') || '[]');
+    const parsed = JSON.parse(localStorage.getItem(MACRO_STORAGE_KEY) || '[]');
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
@@ -77,6 +78,15 @@ export async function executeDeckAction(action: ActionDefinition | null | undefi
     const macroId = parseInt(raw, 10);
     if (Number.isNaN(macroId)) return { success: false, error: 'Invalid macro id' };
     return executeMacroSlot(macroId);
+  }
+
+  /* A raw keycode is something the pad itself emits; the PC cannot type MO(1).
+   * Say that instead of sending an empty chord and reporting success. */
+  if (action.payload?.keycode) {
+    return {
+      success: false,
+      error: `${action.payload.keycode} is a keycode the macropad sends itself — the PC cannot type it.`,
+    };
   }
 
   if (action.category === 'app_launch') {

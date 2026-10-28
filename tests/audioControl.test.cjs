@@ -5,6 +5,15 @@ const audio = require('../electron/native/audio.cjs');
 const { executeAction } = require('../electron/actionExecutor.cjs');
 
 async function runTests() {
+  // Everything below goes through powershell.exe and the WASAPI COM interop in
+  // audio.cs. On any other platform those calls cannot work, so this suite skips
+  // instead of failing: a red test that can never pass off Windows teaches people
+  // to ignore the suite, which is worse than not running it.
+  if (process.platform !== 'win32') {
+    console.log('audioControl: SKIP — needs Windows (PowerShell + WASAPI COM interop).');
+    return;
+  }
+
   console.log('Testing Windows Audio Control & WASAPI Mixer...');
 
   // 1. Audio self-test

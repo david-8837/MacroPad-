@@ -4,15 +4,12 @@ const fs = require('fs');
 const { createWebhookServer, generateToken } = require('./webhookServer.cjs');
 const {
   discoverApplications,
-  getAppIcon,
   browseForApp,
   launchApplication,
 } = require('./appDiscovery.cjs');
 const { executeAction } = require('./actionExecutor.cjs');
 const { getMetrics, selfTest: systemSelfTest } = require('./native/system.cjs');
-const { getActiveWindow, subscribe: subscribeWindow } = require('./native/window.cjs');
 const audio = require('./native/audio.cjs');
-const obs = require('./native/obs.cjs');
 const util = require('./native/util.cjs');
 const firmware = require('./native/firmware.cjs');
 
@@ -22,18 +19,12 @@ let isQuitting = false;
 let webhookServer = null;
 let webhookToken = '';
 let metricsTimer = null;
-let unsubscribeWindowTracker = null;
-let unsubscribeObs = null;
+let mediaTimer = null;
+let lastMediaJson = '';
 const WEBHOOK_PORT = 38491;
 
-const profileMenuState = {
-  items: [
-    { id: 'profile-davinci', name: 'DaVinci Resolve' },
-    { id: 'profile-obs', name: 'OBS Broadcast' },
-    { id: 'profile-spotify-dj', name: 'Spotify DJ' },
-  ],
-  activeId: 'profile-davinci',
-};
+// One deck per install now — the tray just reports which deck is open.
+const deckState = { id: 'deck-main', name: 'Studio Deck' };
 
 function sendToRenderer(payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -69,7 +60,7 @@ function startLocalhostWebhookServer() {
   const server = createWebhookServer({
     port: WEBHOOK_PORT,
     token: webhookToken,
-    getStatus: () => ({ profileId: profileMenuState.activeId }),
+    getStatus: () => ({ deckId: deckState.id, deckName: deckState.name }),
     onEvent: (event) => sendToRenderer(event),
   });
 
@@ -127,17 +118,6 @@ function createWindow() {
 }
 
 function buildTrayMenu() {
-  const profileItems = profileMenuState.items.map((p) => ({
-    label: `Profile: ${p.name}`,
-    type: 'radio',
-    checked: p.id === profileMenuState.activeId,
-    click: () => {
-      profileMenuState.activeId = p.id;
-      sendToRenderer({ source: 'tray', action: 'switch-profile', id: p.id });
-      rebuildTray();
-    },
-  }));
-
   return Menu.buildFromTemplate([
     {
       label: 'Open KADOWAZ Studio',
@@ -149,7 +129,7 @@ function buildTrayMenu() {
       },
     },
     { type: 'separator' },
-    ...profileItems,
+    { label: `Deck: ${deckState.name}`, enabled: false },
     { type: 'separator' },
     {
       label: 'Quit Deck Studio',
@@ -257,51 +237,35 @@ ipcMain.handle('get-webhook-info', async () => ({
 }));
 
 ipcMain.handle('discover-apps', async () => discoverApplications());
-ipcMain.handle('get-app-icon', async (_event, exePath) => getAppIcon(exePath));
+
+// What is actually playing right now, from Windows' own media session (SMTC).
+// Answers {ok:true, value:null} when nothing is playing — that is a state, not a
+// failure, and the panel draws NO MEDIA for it.
+ipcMain.handle('media:now-playing', async () => audio.getNowPlaying({ cacheMs: 0 }));
 ipcMain.handle('browse-for-app', async () => browseForApp());
 ipcMain.handle('launch-app', async (_event, appInfo) => launchApplication(appInfo));
-
-ipcMain.handle('get-system-metrics', async () => getMetrics());
-ipcMain.handle('get-active-window', async () => getActiveWindow());
 
 // Real Windows Audio & Per-App Mixer IPC handlers
 ipcMain.handle('audio:volume:get', async () => audio.getMasterVolume());
 ipcMain.handle('audio:volume:set', async (_event, percent) => audio.setMasterVolume(percent));
 ipcMain.handle('audio:volume:adjust', async (_event, delta) => audio.adjustMasterVolume(delta));
 ipcMain.handle('audio:mute:get', async () => audio.getMasterMute());
-ipcMain.handle('audio:mute:set', async (_event, muted) => audio.setMasterMute(muted));
 ipcMain.handle('audio:mute:toggle', async () => audio.toggleMasterMute());
 ipcMain.handle('audio:mic:get', async () => audio.getMic());
 ipcMain.handle('audio:mic:set', async (_event, opts) => audio.setMic(opts));
-ipcMain.handle('audio:devices:list', async () => audio.listDevices());
-ipcMain.handle('audio:devices:set', async (_event, id) => audio.setActiveDevice(id));
-ipcMain.handle('audio:process:volume:get', async (_event, target) => audio.getProcessVolume(target));
-ipcMain.handle('audio:process:volume:set', async (_event, target, percent) => audio.setProcessVolume(target, percent));
-ipcMain.handle('audio:process:volume:adjust', async (_event, target, delta) => audio.adjustProcessVolume(target, delta));
-ipcMain.handle('audio:process:mute:set', async (_event, target, muted) => audio.setProcessMute(target, muted));
-ipcMain.handle('audio:levels:sample', async () => audio.sampleLevels());
-ipcMain.handle('audio:now-playing:get', async () => audio.getNowPlaying());
-
-// OBS Studio WebSocket 5.x IPC Handlers
-ipcMain.handle('obs:connect', async (_event, url, password) => obs.connect(url, password));
-ipcMain.handle('obs:disconnect', async () => obs.disconnect());
-ipcMain.handle('obs:get-state', async () => obs.getState());
-ipcMain.handle('obs:command', async (_event, action, arg) => obs.command(action, arg));
 
 // Diagnostics & Subsystem Health Self-Tests
 ipcMain.handle('diag:log', async () => ({ ok: true, value: util.getLog() }));
 ipcMain.handle('diag:selftest', async () => {
-  const [sys, aud, ob] = await Promise.all([
+  const [sys, aud] = await Promise.all([
     systemSelfTest(),
     audio.selfTest(),
-    obs.selfTest(),
   ]);
   return {
     ok: true,
     value: {
       system: sys,
       audio: aud,
-      obs: ob,
       webhook: {
         ok: Boolean(webhookServer && webhookServer.listening),
         detail: webhookServer && webhookServer.listening ? `Port ${WEBHOOK_PORT} listening (token-protected)` : 'Server stopped',
@@ -311,6 +275,7 @@ ipcMain.handle('diag:selftest', async () => {
   };
 });
 
+// In-App RP2040 UF2 Firmware Flashing Handlers
 ipcMain.handle('firmware:status', async () => firmware.status());
 ipcMain.handle('firmware:inspect', async (_event, filePath) => firmware.inspectUf2(filePath));
 ipcMain.handle('firmware:builtin', async () => firmware.getBuiltinFirmware());
@@ -325,6 +290,18 @@ ipcMain.handle('firmware:flashBuiltin', async () => {
     }
   });
 });
+ipcMain.handle('firmware:browse', async () => {
+  if (!mainWindow) return null;
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select RP2040 Firmware Image (.uf2)',
+    filters: [{ name: 'UF2 Firmware Image', extensions: ['uf2'] }],
+    properties: ['openFile'],
+  });
+  if (canceled || !filePaths.length) return null;
+  const filePath = filePaths[0];
+  const inspected = firmware.inspectUf2(filePath);
+  return { filePath, ...inspected };
+});
 ipcMain.handle('firmware:flash', async (_event, filePath) => {
   return firmware.flash(filePath, (progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -332,22 +309,6 @@ ipcMain.handle('firmware:flash', async (_event, filePath) => {
     }
   });
 });
-
-function startObsTracking() {
-  if (unsubscribeObs) return;
-  unsubscribeObs = obs.onState((state) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('obs-state-changed', state);
-    }
-  });
-}
-
-function stopObsTracking() {
-  if (unsubscribeObs) {
-    unsubscribeObs();
-    unsubscribeObs = null;
-  }
-}
 
 function startMetricsBroadcasting() {
   if (metricsTimer) return;
@@ -365,6 +326,41 @@ function startMetricsBroadcasting() {
   }, 1200);
 }
 
+/**
+ * Push the media session to the renderer whenever it changes.
+ *
+ * SMTC is the only source of truth Windows offers for "what is playing", and it
+ * has no event stream we can subscribe to from PowerShell, so this polls. The
+ * payload is compared before sending: a paused track would otherwise repaint the
+ * panel twice a second for no reason.
+ */
+function startMediaBroadcasting() {
+  if (mediaTimer) return;
+  mediaTimer = setInterval(async () => {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+    try {
+      const res = await audio.getNowPlaying({ cacheMs: 1500 });
+      if (!res.ok) return;
+      const payload = res.value || null;
+      const json = JSON.stringify(payload);
+      if (json === lastMediaJson) return;
+      lastMediaJson = json;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('media-state-changed', payload);
+      }
+    } catch {
+      // A media session disappearing mid-read is normal; try again next tick.
+    }
+  }, 2000);
+}
+
+function stopMediaBroadcasting() {
+  if (mediaTimer) {
+    clearInterval(mediaTimer);
+    mediaTimer = null;
+  }
+}
+
 function stopMetricsBroadcasting() {
   if (metricsTimer) {
     clearInterval(metricsTimer);
@@ -372,30 +368,10 @@ function stopMetricsBroadcasting() {
   }
 }
 
-function startWindowTracking() {
-  if (unsubscribeWindowTracker) return;
-  unsubscribeWindowTracker = subscribeWindow((winInfo) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('active-window-changed', winInfo);
-    }
-  });
-}
-
-function stopWindowTracking() {
-  if (unsubscribeWindowTracker) {
-    unsubscribeWindowTracker();
-    unsubscribeWindowTracker = null;
-  }
-}
-
-ipcMain.on('oled-update', (_event, data) => {
-  sendToRenderer({ source: 'oled', data });
-});
-
-ipcMain.on('profiles-sync', (_event, payload) => {
-  if (payload && Array.isArray(payload.items)) {
-    profileMenuState.items = payload.items;
-    profileMenuState.activeId = payload.activeId || profileMenuState.activeId;
+ipcMain.on('deck-sync', (_event, payload) => {
+  if (payload && typeof payload.name === 'string' && payload.name) {
+    deckState.id = typeof payload.id === 'string' ? payload.id : deckState.id;
+    deckState.name = payload.name;
     rebuildTray();
   }
 });
@@ -460,8 +436,7 @@ if (!gotSingleInstanceLock) {
     createWindow();
     createTray();
     startMetricsBroadcasting();
-    startWindowTracking();
-    startObsTracking();
+    startMediaBroadcasting();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -473,9 +448,7 @@ if (!gotSingleInstanceLock) {
 app.on('before-quit', () => {
   isQuitting = true;
   stopMetricsBroadcasting();
-  stopWindowTracking();
-  stopObsTracking();
-  obs.disconnect();
+  stopMediaBroadcasting();
   if (webhookServer) {
     webhookServer.close();
     webhookServer = null;

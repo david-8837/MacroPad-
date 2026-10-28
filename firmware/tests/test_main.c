@@ -38,7 +38,10 @@ int main(void) {
     run_suite("config/storage", config_tests);
     run_suite("actions", actions_tests);
     run_suite("leds", leds_tests);
+    run_suite("oled", oled_tests);
+    run_suite("oled playlist", oled_playlist_tests);
     run_suite("protocol", protocol_tests);
+    run_suite("ascii cmd", ascii_cmd_tests);
 
     printf("=== %d assertions, %d failures ===\n", g_tests, g_fails);
     if (g_fails == 0) {

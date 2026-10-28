@@ -45,14 +45,15 @@ static void set_text(cfg_action_t *a, const char *s) {
     }
 }
 
-/* Three distinct base colours, chosen to stay distinguishable at low
+/* Four distinct base colours, chosen to stay distinguishable at low
  * brightness and through a translucent keycap: cool blue, magenta, warm amber.
- * Hue spacing of roughly 120 degrees is the minimum for three-way
+ * Hue spacing of roughly 90 degrees is the minimum for four-way
  * tell-apart-at-a-glance. */
 static const uint8_t k_channel_rgb[CFG_CHANNEL_COUNT][3] = {
     {0x20, 0x60, 0xFF}, /* ch0: blue    */
     {0xC0, 0x20, 0xFF}, /* ch1: magenta */
     {0xFF, 0x90, 0x10}, /* ch2: amber   */
+    {0x20, 0xE0, 0x60}, /* ch3: green   */
 };
 
 void config_defaults(cfg_blob_t *out) {
@@ -75,6 +76,11 @@ void config_defaults(cfg_blob_t *out) {
     out->global.boot_channel = 0;
     out->global.led_invert_output = BOARD_LED_INVERT_OUTPUT;
     out->global.usb_report_events = 1;
+    /* Rotate screens out of the box: a panel that sits on one screen forever
+     * looks frozen, and this is the only way the panel changes without the app
+     * open. 30 s is long enough to read a screen and read the loop twice. */
+    out->global.oled_auto_cycle_s = 30;
+    out->global.oled_playlist = 0; /* 0 = every screen, i.e. "nothing disabled yet" */
 
     /* ---- channels ---- */
     for (int ch = 0; ch < CFG_CHANNEL_COUNT; ch++) {

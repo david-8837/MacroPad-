@@ -2,7 +2,7 @@
 
 Welcome to **KADOWAZ Deck Studio**, the official companion software and configuration suite for the **KADOWAZ 9-Key Mechanical Macropad with Rotary Encoder & OLED Display**.
 
-This manual covers everything from initial hardware connection and firmware flashing to advanced multi-layer key binding, per-app audio mixing, OBS Studio WebSocket automation, and automated profile switching.
+This manual covers everything from initial hardware connection and firmware flashing to and advanced multi-layer key binding and per-app audio mixing.
 
 ---
 
@@ -17,14 +17,12 @@ This manual covers everything from initial hardware connection and firmware flas
    - [Key Configuration (Tap, Hold, Double-Tap)](#key-temporal-mechanics)
    - [Safety Isolation (Long-Press Protection)](#safety-isolation)
    - [Rotary Encoder Dial Modes](#rotary-encoder-configuration)
-5. [Triple-Layer Architecture (Channels)](#5-triple-layer-architecture-channels)
-6. [Active Window Tracking & Auto-Profile Switching](#6-active-window-tracking--auto-profile-switching)
-7. [Windows Audio & Per-App Volume Mixer](#7-windows-audio--per-app-volume-mixer)
-8. [OBS Studio WebSocket 5.x Integration](#8-obs-studio-websocket-5x-integration)
-9. [Live OLED Telemetry & Display Modes](#9-live-oled-telemetry--display-modes)
-10. [Global Command Palette (`Ctrl+K`)](#10-global-command-palette-ctrlk)
-11. [Action History & Diagnostic Health Drawer](#11-action-history--diagnostic-health-drawer)
-12. [Troubleshooting & FAQ](#12-troubleshooting--faq)
+5. [Four-Layer Architecture](#5-four-layer-architecture)
+6. [Windows Audio & Per-App Volume Mixer](#6-windows-audio--per-app-volume-mixer)
+7. [Live OLED Telemetry & Display Modes](#7-live-oled-telemetry--display-modes)
+8. [Global Command Palette (`Ctrl+K`)](#8-global-command-palette-ctrlk)
+9. [Action History & Diagnostic Health Drawer](#9-action-history--diagnostic-health-drawer)
+10. [Troubleshooting & FAQ](#10-troubleshooting--faq)
 
 ---
 
@@ -89,7 +87,7 @@ The **Deck Studio** tab provides a real-time digital twin of your physical hardw
 
 ### Key Temporal Mechanics
 Each key supports three distinct temporal actions:
-- **Tap Action:** Fires immediately on a standard momentary click (e.g., `Ctrl+C`, Launch App, or OBS scene switch).
+- **Tap Action:** Fires immediately on a standard momentary click (e.g., `Ctrl+C`, Launch App, or Layer Next).
 - **Hold Action (Mod-Tap):** Fires when the key is held down past 250ms (e.g., holds `Shift`, switches temporary layer, or triggers a macro).
 - **Double-Tap Action (Tap Dance):** Fires when double-clicked within 300ms (e.g., `Select All`, or emergency mute).
 
@@ -104,45 +102,28 @@ Click on the rotary knob in the Digital Twin to configure dial actions:
 - **Clockwise (CW):** Incremental action (e.g. Volume Up, Scrub Timeline Right, Zoom In).
 - **Counter-Clockwise (CCW):** Decremental action (e.g. Volume Down, Scrub Timeline Left, Zoom Out).
 - **Single Press:** Momentary center click (e.g. Mute Audio, Play/Pause, Reset Zoom).
-- **Hold Threshold (Channel Switch):** Holding down the knob for 800ms automatically cycles through **Layer 1 → Layer 2 → Layer 3**.
+- **Hold Threshold (Layer Switch):** Holding down the knob for 800ms cycles through **Layer 0 → Layer 1 → Layer 2 → Layer 3**, back to Layer 0.
 
 ---
 
-## 5. Triple-Layer Architecture (Channels)
+## 5. Four-Layer Architecture
 
-Each profile contains 3 completely isolated, independent hardware layers:
-- **Layer 1 (Edit / Blue):** Primary shortcuts and navigation.
-- **Layer 2 (Color / Green):** Grading, secondary tools, or mixer.
-- **Layer 3 (Audio / Amber):** Sound levels, mic control, or system shortcuts.
+The single Studio Deck contains 4 completely isolated, independent hardware layers, numbered 0–3:
+- **Layer 0 (Edit):** Primary shortcuts and navigation.
+- **Layer 1 (Tools):** Copy / paste / find and other secondary tools.
+- **Layer 2 (Custom):** your own bank.
+- **Layer 3 (Macros):** empty macro bank, ready for your own keys.
 
 ### How to Switch Layers:
 - **Hardware:** Press and hold the rotary encoder knob for 800ms to cycle to the next layer.
-- **Software:** Click the layer pills (**Layer 1**, **Layer 2**, **Layer 3**) in the left sidebar or select from the `Ctrl+K` command palette.
+- **Software:** Click a layer in the left sidebar or the layer pills under the deck (**00**–**03**), or select from the `Ctrl+K` command palette.
 - **OLED Feedback:** The OLED screen immediately reflects the active layer name and accent color.
 
 To commit your current keymap directly into the RP2040 onboard EEPROM/Flash memory, click the **Sync Keymap to Flash** icon (or press `Ctrl+K` → `Sync Keymap`).
 
 ---
 
-## 6. Active Window Tracking & Auto-Profile Switching
-
-KADOWAZ Deck Studio tracks which application currently has foreground focus on Windows and can automatically switch your active macropad profile.
-
-### Setting Up Auto-Switching:
-1. Click **Manage Profiles...** from the profile dropdown in the top navbar.
-2. Edit or create a profile (e.g., *DaVinci Resolve*, *Visual Studio Code*, *OBS Studio*, or *Blender*).
-3. Set the **Target Process Name**:
-   - `resolve.exe` for DaVinci Resolve
-   - `Code.exe` for VS Code
-   - `obs64.exe` for OBS Studio
-   - `Photoshop.exe` for Adobe Photoshop
-   - `spotify.exe` for Spotify
-4. In the top navbar, ensure the **AUTO** pill is illuminated green (`AUTO: ON`).
-5. Now, whenever you switch between software on your computer, your macropad instantly switches layouts and OLED modes to match!
-
----
-
-## 7. Windows Audio & Per-App Volume Mixer
+## 6. Windows Audio & Per-App Volume Mixer
 
 Deck Studio features native Windows CoreAudio & WASAPI COM integration.
 
@@ -155,67 +136,61 @@ Deck Studio features native Windows CoreAudio & WASAPI COM integration.
 
 ---
 
-## 8. OBS Studio WebSocket 5.x Integration
-
-Directly control OBS Studio without simulating keyboard hotkeys:
-
-### Setup:
-1. In OBS Studio, open **Tools → WebSocket Server Settings**.
-2. Check **Enable WebSocket server** (Server Port: `4455`).
-3. Set a password (or leave authentication unchecked).
-4. In Deck Studio, keys configured with OBS actions will communicate directly with OBS.
-5. In the Health tab of the Diagnostics Drawer, observe the connection status indicator (**CONNECTED**).
-
-### Supported OBS Actions:
-- **Toggle Stream:** Start or stop broadcasting to Twitch / YouTube.
-- **Toggle Recording:** Start or stop local video recording.
-- **Set Scene:** Instant switch to specific scenes (e.g. *Gameplay*, *Camera Only*, *BRB*).
-- **Mute Audio Source:** Toggle mute on desktop audio, mic, or game audio capture.
-
----
-
-## 9. Live OLED Telemetry & Display Modes
+## 7. Live OLED Telemetry & Display Modes
 
 The 0.96" OLED display communicates in real-time with the desktop hardware daemon. In the Digital Twin, toggle display modes or customize text:
 
-1. **System Telemetry:** Live hardware monitors:
-   - CPU Utilization percentage
-   - GPU Load percentage (supports NVIDIA CUDA and AMD SMI query engines)
-   - RAM Memory consumption (used vs total GB)
-   - CPU Package Temperature (via ACPI thermal sensors)
-2. **Audio Visualizer:** Stereo VU bars (Left & Right channels) with peak bounce.
-3. **Now Playing:** Displays current track title, artist name, and playback progress bar.
-4. **Channel / Layer:** Displays active layer badge, profile title, and key function map.
-5. **KADOWAZ Branding:** Default custom branded logo animation.
+1. **Deck Status:** Banner title, status badge, active layer and deck name.
+2. **System Telemetry:** Live CPU utilisation, GPU load, RAM usage and CPU package temperature.
+3. **Now Playing:** Track title (scrolling), artist and a synchronised progress bar.
+4. **Layer Indicator:** The four-stop layer track with a rounded badge on the active layer.
+   It is also what flashes up for a couple of seconds on every layer change.
+5. **Collection:** Eight looping screens — progress loader, pixel buddy, signal wave,
+   starfield, digital rain, clock, radar sweep and heartbeat.
+6. **Audio Equalizer:** retired. It was the only screen that needed a running
+   audio analyser to look like anything, so it was replaced by the loop collection.
+
+**How the panel changes screen.** It cannot be tapped — there is no touch layer on
+an SSD1306 module — so:
+
+- **Auto switch** sets how long each screen stays up: `OFF`, or 3–255 seconds
+  (default 30). A full lap of the 12 shipping screens at 30 s takes 6 minutes.
+- **IN ROTATION / SKIPPED** on each card decides which screens take part. Skipped
+  screens are jumped over, not deleted.
+- **Cycle Next Mode**, a key bound to `OLED NEXT`, or `OLED:NEXT` from the host
+  step one screen by hand. Any input restarts the dwell timer.
+- **Frame store** under the cards shows what the loops cost: the panel has
+  120 KiB of flash reserved for animation frames (240 frames of 512 B), and the
+  shipping seven loops use 53 % of it. Live screens cost nothing because the
+  firmware draws them from live values.
 
 ---
 
-## 10. Global Command Palette (`Ctrl+K`)
+## 8. Global Command Palette (`Ctrl+K`)
 
 Press **`Ctrl+K`** (or click the search button in the top navbar) from anywhere in the application to summon the Command Palette:
-- **Fuzzy Search:** Type to instantly locate pages, layers, profiles, keys, audio commands, and hardware tools.
+- **Fuzzy Search:** Type to instantly locate pages, layers, keys, audio commands, and hardware tools.
 - **400+ PC Shortcuts:** Search application shortcuts across Windows, DaVinci, Blender, Premiere, Photoshop, Figma, and Chrome.
 - **Instant Execution:** Press `Enter` on any shortcut in the palette to execute it immediately through the keyboard synthesizer.
 - **Keyboard Navigation:** Use `↑` / `↓` arrows to navigate and `Esc` to dismiss.
 
 ---
 
-## 11. Action History & Diagnostic Health Drawer
+## 9. Action History & Diagnostic Health Drawer
 
 Click the **Activity icon** in the top navbar (or press `Ctrl+K` → `Diagnostics`):
 - **Action History Stream:** Real-time chronological audit trail of all physical switch actuations, knob detents, app launches, and webhook triggers.
-- **Filter Pills:** Filter events by `Key`, `Dial`, `OBS`, `Audio`, or `Safety`.
+- **Filter Pills:** Filter events by `Key`, `Dial`, `Audio`, or `Safety`.
 - **Subsystem Self-Tests:** Run automated health diagnostics across:
   - System Telemetry Engine
   - Windows CoreAudio WASAPI COM Interop
-  - OBS Studio WebSocket v5
   - Localhost REST Webhook API (`:38491`)
   - RP2040 Bootloader & Firmware Drive
 - **Export Report:** Copies a comprehensive markdown diagnostic log to your clipboard for technical support or GitHub issues.
 
 ---
 
-## 12. Troubleshooting & FAQ
+## 10. Troubleshooting & FAQ
 
 #### Q: The top bar says "NOT CONNECTED" and WebHID doesn't find the board.
 - **Solution:** Verify you are using a **USB data cable**. Some cables only carry 5V power wires. Try plugging directly into a motherboard USB port rather than an unpowered hub.
@@ -223,8 +198,6 @@ Click the **Activity icon** in the top navbar (or press `Ctrl+K` → `Diagnostic
 #### Q: The rotary knob changes master volume, but I want it to control Spotify only.
 - **Solution:** Open the **Deck Studio** tab, click on the Rotary Knob, set the CW action to **Audio Session Volume (+5%)** and set the target process to `spotify.exe`.
 
-#### Q: Auto-profile switching is not activating when I open DaVinci Resolve.
-- **Solution:** Check the top navbar to ensure the **AUTO** toggle pill is green (`AUTO: ON`). Then verify your profile's target process is set to `resolve.exe`.
 
 #### Q: How do I build a standalone Windows `.exe` installer?
 - **Solution:** Open a terminal in the project directory and run:

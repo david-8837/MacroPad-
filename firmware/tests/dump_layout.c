@@ -78,7 +78,8 @@ int main(void) {
     FIELD(cfg_global, "bootChannel", boot_channel);
     FIELD(cfg_global, "ledInvertOutput", led_invert_output);
     FIELD(cfg_global, "usbReportEvents", usb_report_events);
-    FIELD(cfg_global, "pad", _pad);
+    FIELD(cfg_global, "oledAutoCycleS", oled_auto_cycle_s);
+    FIELD(cfg_global, "oledPlaylist", oled_playlist);
     /* config */
     FIELD(cfg_blob, "magic", magic);
     FIELD(cfg_blob, "version", version);

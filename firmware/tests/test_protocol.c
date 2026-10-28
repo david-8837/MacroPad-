@@ -331,7 +331,7 @@ static void test_handler_ping_replies_pong(void) {
     ASSERT_EQ(buf[2], CMD_PONG);
 }
 
-static void test_handler_get_info_reports_three_channels(void) {
+static void test_handler_get_info_reports_four_channels(void) {
     g_current = __func__;
     storage_host_reset();
     storage_init();
@@ -341,7 +341,7 @@ static void test_handler_get_info_reports_three_channels(void) {
     size_t n = drain(buf, sizeof(buf));
     ASSERT_EQ((int)n, FRAME_OVERHEAD + INFO_SIZE);
     ASSERT_EQ(buf[2], CMD_INFO);
-    ASSERT_EQ(buf[FRAME_HEADER_SIZE + 8], 3);
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE + 8], 4);
     ASSERT_EQ(buf[FRAME_HEADER_SIZE + 9], 9);
     ASSERT_EQ(buf[FRAME_HEADER_SIZE + 10], 9);
 }
@@ -480,7 +480,7 @@ static void test_handler_set_lighting_rejects_bad_channel(void) {
     cfg_lighting_t L;
     memset(&L, 0, sizeof(L));
     uint8_t pl[1 + sizeof(cfg_lighting_t)];
-    pl[0] = 3; /* only 0..2 exist */
+    pl[0] = 4; /* only 0..3 exist */
     memcpy(pl + 1, &L, sizeof(L));
     send_frame(CMD_SET_LIGHTING, pl, (uint16_t)sizeof(pl));
     uint8_t buf[64];
@@ -651,6 +651,35 @@ static void test_key_events_stream_when_enabled(void) {
     ASSERT_EQ(p[6] | (p[7] << 8), ACTION_TYPE_KEYCODE);
 }
 
+
+/* The RX path uses this to decide whether a printable byte is the start of a
+ * text command line or part of a frame. Getting it backwards would make every
+ * OLED:NEXT line look like a corrupt frame, or every frame look like text. */
+static void test_hunting_reports_only_between_frames(void) {
+    protocol_parser_t p;
+    protocol_parser_init(&p);
+    frame_in_t f;
+    ASSERT(protocol_parser_hunting(&p));
+    ASSERT(!protocol_parser_hunting(NULL));
+
+    const uint8_t *frame = 0;
+    uint8_t payload[1] = {0x00};
+    frame_out_t out;
+    ASSERT(frame_build(&out, CMD_PING, payload, 1));
+    frame = out.buf;
+
+    /* Mid-frame — including right after the first start byte — it is not
+     * hunting, so those bytes go to the parser and never to the text scanner. */
+    ASSERT_EQ(protocol_parser_push(&p, frame[0], &f), PARSE_NEED_MORE);
+    ASSERT(!protocol_parser_hunting(&p));
+    for (size_t i = 1; i + 1 < out.len; i++) {
+        ASSERT_EQ(protocol_parser_push(&p, frame[i], &f), PARSE_NEED_MORE);
+        ASSERT(!protocol_parser_hunting(&p));
+    }
+    ASSERT_EQ(protocol_parser_push(&p, frame[out.len - 1], &f), PARSE_OK);
+    ASSERT(protocol_parser_hunting(&p));
+}
+
 const test_case_t protocol_tests[] = {
     {"crc16_matches_known_vectors", test_crc16_matches_known_vectors},
     {"crc32_matches_known_vectors", test_crc32_matches_known_vectors},
@@ -659,6 +688,7 @@ const test_case_t protocol_tests[] = {
     {"oversized_payload_is_refused_not_truncated", test_oversized_payload_is_refused_not_truncated},
     {"corrupted_payload_byte_is_rejected", test_corrupted_payload_byte_is_rejected},
     {"parser_resyncs_after_garbage", test_parser_resyncs_after_garbage},
+    {"hunting_reports_only_between_frames", test_hunting_reports_only_between_frames},
     {"false_start_of_frame_bytes_are_handled", test_false_start_of_frame_bytes_are_handled},
     {"oversized_declared_length_is_rejected", test_oversized_declared_length_is_rejected},
     {"wrong_version_is_reported", test_wrong_version_is_reported},
@@ -669,7 +699,7 @@ const test_case_t protocol_tests[] = {
     {"truncated_stream_never_reports_done", test_truncated_stream_never_reports_done},
     {"final_chunk_with_bad_crc_is_rejected", test_final_chunk_with_bad_crc_is_rejected},
     {"handler_ping_replies_pong", test_handler_ping_replies_pong},
-    {"handler_get_info_reports_three_channels", test_handler_get_info_reports_three_channels},
+    {"handler_get_info_reports_four_channels", test_handler_get_info_reports_four_channels},
     {"handler_unknown_command_reports_error", test_handler_unknown_command_reports_error},
     {"handler_get_config_streams_the_whole_blob", test_handler_get_config_streams_the_whole_blob},
     {"handler_get_config_rejects_bad_chunk_index", test_handler_get_config_rejects_bad_chunk_index},

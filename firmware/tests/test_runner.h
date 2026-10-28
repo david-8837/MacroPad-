@@ -19,5 +19,8 @@ extern const test_case_t config_tests[];
 extern const test_case_t actions_tests[];
 extern const test_case_t leds_tests[];
 extern const test_case_t protocol_tests[];
+extern const test_case_t oled_tests[];
+extern const test_case_t ascii_cmd_tests[];
+extern const test_case_t oled_playlist_tests[];
 
 #endif /* TEST_RUNNER_H */

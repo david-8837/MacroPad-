@@ -32,6 +32,7 @@
 #include "gesture.h"
 #include "hid_dev.h"
 #include "leds.h"
+#include "oled_playlist.h"
 #include "protocol.h"
 #include "scan.h"
 #include "storage.h"
@@ -163,6 +164,10 @@ int main(void) {
     dispatch_init();
     usb_proto_init();
     usb_proto_set_build(FW_BUILD);
+    /* The panel is not a touchscreen: it starts on the saved screen and moves
+     * on when cfg_global_t.oled_auto_cycle_s elapses, or when a gesture bound to
+     * ACTION_TYPE_OLED_NEXT / the host's OLED:NEXT asks it to. */
+    oled_playlist_init(OLED_SCREEN_KADOWAZ, 0);
 
     uint32_t now = time_us_64() / 1000u;
     s_next_scan_ms = now;
@@ -221,6 +226,15 @@ int main(void) {
                 led_hw_show(&s_frame);
                 dispatch_clear_hit_mask();
             }
+        }
+
+        /* ---- OLED rotation ---- */
+        /* Cheap enough to poll every pass: one comparison, and only a switch
+         * costs anything (a frame blit, and that only with a panel fitted). */
+        if (oled_playlist_tick(now)) {
+            /* A switch is input-like: a keypress on the new screen should not
+             * be swapped out from under the user. */
+            oled_playlist_touch(now);
         }
 
         /* ---- USB ---- */

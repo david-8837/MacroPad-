@@ -71,40 +71,40 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
   };
 
   return (
-    <div className="glass-panel p-3.5 rounded-2xl border border-white/10 space-y-2.5 shadow-xl w-full select-none">
+    <div className="panel p-3.5 border border-[#E3E2DE] space-y-2.5 w-full select-none">
       
       {/* Row 1: Header Title & Target Switch Indicator */}
-      <div className="flex items-center justify-between pb-2 border-b border-white/10">
+      <div className="flex items-center justify-between pb-2 border-b border-[#E3E2DE]">
         <div className="flex items-center gap-1.5">
-          <Zap className="w-3.5 h-3.5 text-[#FF5E00]" />
-          <span className="text-[11px] font-mono font-bold text-white uppercase tracking-wider">
+          <Zap className="w-3.5 h-3.5 text-[#1351AA]" />
+          <span className="text-[11px] font-mono font-bold text-[#141414] uppercase tracking-wider">
             VIA Quick Keycode Tray
           </span>
         </div>
 
         {selectedKeyIndex !== null ? (
-          <span className="text-[10px] font-mono text-[#38EF7D] bg-[#38EF7D]/10 px-2 py-0.5 rounded-full border border-[#38EF7D]/30 font-bold">
+          <span className="text-[10px] font-mono text-[#1351AA] bg-[#EDECE8] px-2 py-0.5 border border-[#C7C7C7] font-bold">
             TARGET: SWITCH #{selectedKeyIndex + 1}
           </span>
         ) : (
-          <span className="text-[9.5px] font-mono text-white/40 italic">
+          <span className="text-[9.5px] font-mono text-[#646464] italic">
             (Select switch above to remap)
           </span>
         )}
       </div>
 
       {/* Row 2: Category Tabs Pill Bar (100% width, 0 overflow) */}
-      <div className="grid grid-cols-6 gap-1 bg-[#090C12] p-1 rounded-xl border border-white/10 text-[10px] font-mono text-center">
+      <div className="grid grid-cols-6 gap-1 bg-[#FFFFFF] p-1 border border-[#E3E2DE] text-[10px] font-mono text-center">
         {(['basic', 'media', 'macro', 'layers', 'special', 'custom'] as const).map(cat => (
           <button
             key={cat}
             type="button"
             onClick={() => setActiveCategory(cat)}
-            className={`py-1 rounded-lg uppercase font-bold text-center transition-all cursor-pointer ${
-              activeCategory === cat
-                ? 'bg-[#FF5E00] text-black shadow-xs font-black'
-                : 'text-white/50 hover:text-white hover:bg-white/5'
-            }`}
+            className={`py-1 uppercase font-bold text-center transition-all cursor-pointer ${
+ activeCategory === cat
+ ? 'bg-[#1351AA] text-[#E3E2DE] font-black'
+ : 'text-[#646464] hover:text-[#141414] hover:bg-[#F4F3F0]'
+ }`}
           >
             {cat}
           </button>
@@ -113,18 +113,18 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
 
       {/* Custom Keycode Direct Input */}
       {activeCategory === 'custom' ? (
-        <form onSubmit={handleCustomSubmit} className="flex gap-2 p-2 bg-[#0E1118] rounded-xl border border-white/5">
+        <form onSubmit={handleCustomSubmit} className="flex gap-2 p-2 bg-[#FFFFFF] border border-[#E3E2DE]">
           <input
             type="text"
             value={customInput}
             onChange={(e) => setCustomInput(e.target.value)}
             placeholder="Enter raw QMK / VIA keycode (e.g. KC_LALT, LCTL(KC_C), 0x5D)"
-            className="flex-1 px-3 py-1.5 bg-[#151923] border border-white/10 rounded-lg text-xs font-mono text-white focus:border-[#FF5E00] focus:outline-hidden"
+            className="flex-1 px-3 py-1.5 bg-[#FFFFFF] border border-[#E3E2DE] text-xs font-mono text-[#141414] focus:border-[#1351AA] focus:outline-hidden"
           />
           <button
             type="submit"
             disabled={selectedKeyIndex === null || !customInput.trim()}
-            className="px-4 py-1.5 rounded-lg bg-[#FF5E00] text-black font-bold text-xs disabled:opacity-40 cursor-pointer"
+            className="px-4 py-1.5 bg-[#1351AA] text-[#E3E2DE] font-bold text-xs disabled:opacity-40 cursor-pointer"
           >
             Assign
           </button>
@@ -139,20 +139,20 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
                 key={item.code}
                 type="button"
                 onClick={() => {
-                  if (selectedKeyIndex !== null) {
-                    onAssignKeycode(selectedKeyIndex, item);
-                  } else {
-                    alert('Please click any switch on the macropad first to choose where to assign this keycode.');
-                  }
+                  /* No target switch means no assignment, and the header already
+                   * says so. This used to be an alert(), which is a dialog the
+                   * rest of the app never shows. */
+                  if (selectedKeyIndex !== null) onAssignKeycode(selectedKeyIndex, item);
                 }}
-                title={`${item.code} - ${item.tooltip}`}
-                className="h-9 px-1 rounded-lg bg-gradient-to-b from-[#181D2A] to-[#121622] border border-white/10 hover:border-[#FF5E00] hover:bg-[#FF5E00]/15 text-white/80 hover:text-[#FF5E00] flex flex-col items-center justify-center text-center transition-all group cursor-pointer shadow-xs active:scale-95"
+                disabled={selectedKeyIndex === null}
+                title={`${item.code} - ${item.tooltip}${selectedKeyIndex === null ? ' (select a switch first)' : ''}`}
+                className="h-9 px-1  border border-[#E3E2DE] enabled:hover:border-[#1351AA] enabled:hover:bg-[#EDECE8] text-[#444343] enabled:hover:text-[#1351AA] disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center text-center transition-all group enabled:cursor-pointer enabled:active:scale-95"
               >
                 <span className="font-mono text-[10.5px] font-bold leading-tight">
                   {displayLabel}
                 </span>
                 {item.sublabel && (
-                  <span className="text-[7px] font-mono text-white/40 leading-none">
+                  <span className="text-[7px] font-mono text-[#646464] leading-none">
                     {item.sublabel}
                   </span>
                 )}

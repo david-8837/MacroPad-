@@ -4,6 +4,7 @@ import { playKeyClick } from '../utils/soundEffects';
 import { 
   X, 
   Play, 
+  ShieldAlert, 
   Check, 
   CircleDot, 
   Keyboard as KeyboardIcon, 
@@ -240,7 +241,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   onTestAction,
 }) => {
   const [editedKey, setEditedKey] = useState<KeyBinding>({ ...keyBinding });
-  const [activeTab, setActiveTab] = useState<'keyboard' | 'text' | 'app'>(
+  const [activeTab, setActiveTab] = useState<'keyboard' | 'recorder' | 'text' | 'safety' | 'app'>(
     keyBinding.tapAction?.category === 'app_launch' ? 'app' : 'keyboard'
   );
   const [keyboardLayout, setKeyboardLayout] = useState<'full' | 'tkl' | '60'>('full');
@@ -564,15 +565,15 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           width: `${uWidth}px`,
           height: customHeight
         }}
-        className={`rounded flex flex-col items-center justify-between p-0.5 font-mono text-[8.5px] font-bold border transition-all select-none shrink-0 cursor-pointer ${
-          isSelected
-            ? 'bg-gradient-to-b from-[#FF7A1A] to-[#E65100] text-black border-[#FF9100] font-black shadow-[0_0_12px_rgba(255,94,0,0.7)] scale-95 z-10'
-            : 'bg-gradient-to-b from-[#181C26] to-[#11141C] text-white/80 border-white/10 hover:border-white/40 hover:bg-[#202636] hover:text-white active:scale-95'
-        }`}
+        className={` flex flex-col items-center justify-between p-0.5 font-mono text-[8.5px] font-bold border transition-all select-none shrink-0 cursor-pointer ${
+ isSelected
+ ? 'text-[#E3E2DE] border-[#1351AA] font-black scale-95 z-10'
+ : 'text-[#444343] border-[#E3E2DE] hover:border-[#141414] hover:bg-[#FFFFFF] hover:text-[#141414] active:scale-95'
+ }`}
       >
         <span className="truncate leading-tight px-0.2">{k.label}</span>
         {k.subLabel && (
-          <span className={`text-[6px] leading-none ${isSelected ? 'text-black/70' : 'text-white/40'}`}>
+          <span className={`text-[6px] leading-none ${isSelected ? 'text-[#444343]' : 'text-[#646464]'}`}>
             {k.subLabel}
           </span>
         )}
@@ -581,29 +582,29 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-gradient-to-b from-[#0F131D] to-[#0A0D14] border-l border-white/10 select-none overflow-hidden animate-in slide-in-from-right duration-200">
+    <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden animate-in slide-in-from-right duration-200">
       
       {/* DRAWER TOP BAR: Switch Navigator & Direct Switch Selector */}
-      <div className="px-4 py-2.5 border-b border-white/10 bg-[#131722]/90 backdrop-blur-md flex items-center justify-between gap-3">
+      <div className="px-4 py-2.5 border-b border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           {/* Key Index Badge */}
           <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center font-mono font-black text-xs text-black shadow-md shrink-0"
-            style={{ backgroundColor: editedKey.accentColor || '#FF5E00' }}
+            className="w-7 h-7 flex items-center justify-center font-mono font-black text-xs text-[#E3E2DE] shrink-0"
+            style={{ backgroundColor: editedKey.accentColor || '#1351AA' }}
           >
             #{editedKey.keyIndex + 1}
           </div>
 
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-bold text-white text-xs tracking-wide">
+              <span className="font-bold text-[#141414] text-xs tracking-wide">
                 SWITCH #{editedKey.keyIndex + 1}
               </span>
-              <span className="text-[10px] text-white/50 font-mono truncate max-w-[120px]">
+              <span className="text-[10px] text-[#646464] font-mono truncate max-w-[120px]">
                 ({editedKey.label || 'Empty'})
               </span>
             </div>
-            <p className="text-[9.5px] text-white/40">
+            <p className="text-[9.5px] text-[#646464]">
               Live Keymap • Click keys or type to build combo
             </p>
           </div>
@@ -612,17 +613,17 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         {/* Quick Switch Switcher Pills (1 to 9) */}
         <div className="flex items-center gap-1">
           {onSelectKeyIndex && (
-            <div className="hidden sm:flex items-center gap-0.5 bg-black/40 p-0.5 rounded-lg border border-white/10">
+            <div className="hidden sm:flex items-center gap-0.5 bg-[#EDECE8] p-0.5 border border-[#E3E2DE]">
               {Array.from({ length: totalKeys }).map((_, idx) => (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => onSelectKeyIndex(idx)}
-                  className={`w-5 h-5 rounded text-[10px] font-mono font-bold transition-all ${
-                    idx === editedKey.keyIndex
-                      ? 'bg-[#FF5E00] text-black shadow-xs'
-                      : 'text-white/40 hover:text-white hover:bg-white/10'
-                  }`}
+                  className={`w-5 h-5 text-[10px] font-mono font-bold transition-all ${
+ idx === editedKey.keyIndex
+ ? 'bg-[#1351AA] text-[#E3E2DE] '
+ : 'text-[#646464] hover:text-[#141414] hover:bg-[#EDECE8]'
+ }`}
                   title={`Switch #${idx + 1}`}
                 >
                   {idx + 1}
@@ -634,7 +635,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           {/* Switch Navigators + Close Drawer */}
           <div className="flex items-center gap-1">
             {onSelectKeyIndex && (
-              <div className="flex items-center gap-0.5 bg-black/40 rounded-lg border border-white/10 p-0.5">
+              <div className="flex items-center gap-0.5 bg-[#EDECE8] border border-[#E3E2DE] p-0.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -642,7 +643,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                     onSelectKeyIndex(prevIdx);
                   }}
                   title="Previous Switch"
-                  className="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                  className="p-1 text-[#444343] hover:text-[#141414] hover:bg-[#EDECE8] transition-colors"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
@@ -653,7 +654,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                     onSelectKeyIndex(nextIdx);
                   }}
                   title="Next Switch"
-                  className="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                  className="p-1 text-[#444343] hover:text-[#141414] hover:bg-[#EDECE8] transition-colors"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
@@ -664,7 +665,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               type="button"
               onClick={onClose}
               title="Close Drawer"
-              className="w-7 h-7 rounded-lg text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
+              className="w-7 h-7 text-[#646464] hover:text-[#141414] hover:bg-[#EDECE8] flex items-center justify-center transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -673,41 +674,65 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
       </div>
 
       {/* FEATURE NAVIGATION TABS */}
-      <div className="flex px-3 border-b border-white/10 bg-[#0E1119] text-xs font-mono shrink-0">
+      <div className="flex px-3 border-b border-[#E3E2DE] bg-[#FFFFFF] text-xs font-mono shrink-0">
         <button
           onClick={() => { setActiveTab('keyboard'); setIsRecording(false); }}
           className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
-            activeTab === 'keyboard'
-              ? 'border-[#FF5E00] text-[#FF5E00] font-bold'
-              : 'border-transparent text-white/50 hover:text-white'
-          }`}
+ activeTab === 'keyboard'
+ ? 'border-[#1351AA] text-[#1351AA] font-bold'
+ : 'border-transparent text-[#646464] hover:text-[#141414]'
+ }`}
         >
           <KeyboardIcon className="w-3.5 h-3.5" />
           1. Keyboard & Combos
         </button>
 
         <button
+          onClick={() => { setActiveTab('recorder'); setIsRecording(false); }}
+          className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
+ activeTab === 'recorder'
+ ? 'border-[#1351AA] text-[#1351AA] font-bold'
+ : 'border-transparent text-[#646464] hover:text-[#141414]'
+ }`}
+        >
+          <CircleDot className="w-3.5 h-3.5" />
+          2. Recorder
+        </button>
+
+        <button
           onClick={() => { setActiveTab('text'); setIsRecording(false); }}
           className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
-            activeTab === 'text'
-              ? 'border-[#FF5E00] text-[#FF5E00] font-bold'
-              : 'border-transparent text-white/50 hover:text-white'
-          }`}
+ activeTab === 'text'
+ ? 'border-[#1351AA] text-[#1351AA] font-bold'
+ : 'border-transparent text-[#646464] hover:text-[#141414]'
+ }`}
         >
           <Type className="w-3.5 h-3.5" />
-          2. Text Macro
+          3. Text Macro
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('safety'); setIsRecording(false); }}
+          className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
+ activeTab === 'safety'
+ ? 'border-[#C7C7C7] text-[#141414] font-bold'
+ : 'border-transparent text-[#646464] hover:text-[#141414]'
+ }`}
+        >
+          <ShieldAlert className="w-3.5 h-3.5" />
+          4. Safety Hold
         </button>
 
         <button
           onClick={() => { setActiveTab('app'); setIsRecording(false); }}
           className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
-            activeTab === 'app'
-              ? 'border-[#FF5E00] text-[#FF5E00] font-bold'
-              : 'border-transparent text-white/50 hover:text-white'
-          }`}
+ activeTab === 'app'
+ ? 'border-[#1351AA] text-[#1351AA] font-bold'
+ : 'border-transparent text-[#646464] hover:text-[#141414]'
+ }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          3. Open App
+          5. Open App
         </button>
       </div>
 
@@ -719,28 +744,28 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           <div className="space-y-3">
             
             {/* MULTI-KEY COMBO PILL BAR (Interactive Chips) */}
-            <div className="p-3 bg-gradient-to-r from-[#0B0E16] via-[#101420] to-[#0B0E16] rounded-xl border border-white/10 shadow-lg space-y-2.5">
+            <div className="p-3  border border-[#E3E2DE] space-y-2.5">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping shrink-0" />
-                  <span className="text-[11px] font-mono text-[#38EF7D] font-bold tracking-wider">
+                  <span className="w-2 h-2 bg-[#1351AA] animate-ping shrink-0" />
+                  <span className="text-[11px] font-mono text-[#1351AA] font-bold tracking-wider">
                     COMBO BUILDER:
                   </span>
-                  <span className="text-[10px] text-white/40 hidden sm:inline">
+                  <span className="text-[10px] text-[#646464] hidden sm:inline">
                     Click keys or type on your keyboard to add
                   </span>
                 </div>
 
                 {/* Input Mode Switch: Append vs Chord */}
-                <div className="flex items-center gap-1 p-0.5 bg-black/50 rounded-lg border border-white/10 text-[10px] font-mono">
+                <div className="flex items-center gap-1 p-0.5 bg-[#EDECE8] border border-[#E3E2DE] text-[10px] font-mono">
                   <button
                     type="button"
                     onClick={() => setComboMode('append')}
-                    className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
-                      comboMode === 'append'
-                        ? 'bg-[#FF5E00] text-black font-extrabold shadow-xs'
-                        : 'text-white/60 hover:text-white'
-                    }`}
+                    className={`px-2 py-0.5 transition-all cursor-pointer ${
+ comboMode === 'append'
+ ? 'bg-[#1351AA] text-[#E3E2DE] font-extrabold '
+ : 'text-[#444343] hover:text-[#141414]'
+ }`}
                     title="Append Mode: Click or type multiple keys to build sequence"
                   >
                     + Append Keys
@@ -748,11 +773,11 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                   <button
                     type="button"
                     onClick={() => setComboMode('chord')}
-                    className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
-                      comboMode === 'chord'
-                        ? 'bg-[#FF5E00] text-black font-extrabold shadow-xs'
-                        : 'text-white/60 hover:text-white'
-                    }`}
+                    className={`px-2 py-0.5 transition-all cursor-pointer ${
+ comboMode === 'chord'
+ ? 'bg-[#1351AA] text-[#E3E2DE] font-extrabold '
+ : 'text-[#444343] hover:text-[#141414]'
+ }`}
                     title="Chord Mode: Capture single simultaneous combination"
                   >
                     ⚡ Chord
@@ -761,22 +786,22 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               </div>
 
               {/* Active Recorded Keys Interactive Pills */}
-              <div className="min-h-[46px] p-2 bg-[#141824] rounded-lg border border-white/10 flex items-center justify-between gap-2">
+              <div className="min-h-[46px] p-2 bg-[#FFFFFF] border border-[#E3E2DE] flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 flex-wrap flex-1">
                   {recordedKeys.length === 0 ? (
-                    <span className="text-white/30 text-xs italic font-mono pl-1">
+                    <span className="text-[#646464] text-xs italic font-mono pl-1">
                       No keys assigned — click any key below or type to add
                     </span>
                   ) : (
                     recordedKeys.map((keyName, idx) => (
                       <React.Fragment key={idx}>
-                        {idx > 0 && <span className="text-white/40 text-xs font-bold font-mono">+</span>}
-                        <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gradient-to-b from-[#242C3E] to-[#191F2D] border border-[#FF5E00]/50 font-mono text-xs font-bold text-white shadow-xs group">
-                          <span className="text-[#FF7A1A]">{keyName}</span>
+                        {idx > 0 && <span className="text-[#646464] text-xs font-bold font-mono">+</span>}
+                        <div className="inline-flex items-center gap-1 px-2.5 py-1  border border-[#1351AA] font-mono text-xs font-bold text-[#141414] group">
+                          <span className="text-[#1351AA]">{keyName}</span>
                           <button
                             type="button"
                             onClick={() => removeKeyFromCombo(idx)}
-                            className="text-white/40 hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
+                            className="text-[#646464] hover:text-[#141414] p-0.5 transition-colors cursor-pointer"
                             title={`Remove ${keyName}`}
                           >
                             <X className="w-3 h-3" />
@@ -792,7 +817,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                     type="button"
                     onClick={clearShortcut}
                     title="Clear All Keys"
-                    className="px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-[10px] font-mono font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
+                    className="px-2 py-1 bg-[#EDECE8]/10 hover:bg-[#EDECE8]/20 text-[#141414] border border-[#C7C7C7]/20 text-[10px] font-mono font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                   >
                     <Trash2 className="w-3 h-3" />
                     Clear
@@ -801,8 +826,8 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               </div>
 
               {/* Quick Modifier Toggle Badges */}
-              <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5 text-[10px] font-mono">
-                <span className="text-white/40 uppercase tracking-wider text-[9px]">Add Modifiers:</span>
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#E3E2DE] text-[10px] font-mono">
+                <span className="text-[#646464] uppercase tracking-wider text-[9px]">Add Modifiers:</span>
                 <div className="flex items-center gap-1.5">
                   {(['Ctrl', 'Shift', 'Alt', 'Win'] as const).map(mod => {
                     const isActive = recordedKeys.includes(mod);
@@ -811,11 +836,11 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                         key={mod}
                         type="button"
                         onClick={() => toggleModifier(mod)}
-                        className={`px-2 py-0.5 rounded-md border font-bold text-[10px] transition-all cursor-pointer ${
-                          isActive
-                            ? 'bg-[#FF5E00] text-black border-[#FF9100] shadow-[0_0_8px_rgba(255,94,0,0.5)]'
-                            : 'bg-[#181D2A] text-white/70 border-white/10 hover:border-white/30 hover:text-white'
-                        }`}
+                        className={`px-2 py-0.5 border font-bold text-[10px] transition-all cursor-pointer ${
+ isActive
+ ? 'bg-[#1351AA] text-[#E3E2DE] border-[#1351AA]'
+ : 'bg-[#FFFFFF] text-[#444343] border-[#E3E2DE] hover:border-[#141414] hover:text-[#141414]'
+ }`}
                       >
                         {isActive ? `✓ ${mod}` : `+ ${mod}`}
                       </button>
@@ -827,12 +852,12 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
             {/* Quick Presets Toolbar */}
             <div className="space-y-1">
-              <div className="flex items-center justify-between text-[10px] font-mono text-white/40">
+              <div className="flex items-center justify-between text-[10px] font-mono text-[#646464]">
                 <span className="uppercase tracking-wider text-[9px] flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-[#FF5E00]" />
+                  <Sparkles className="w-3 h-3 text-[#1351AA]" />
                   Popular Shortcuts:
                 </span>
-                <span className="text-[9px] text-white/30">1-click assign</span>
+                <span className="text-[9px] text-[#646464]">1-click assign</span>
               </div>
               <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                 {SHORTCUT_PRESETS.map((p) => (
@@ -840,18 +865,149 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                     key={p.name}
                     type="button"
                     onClick={() => applyPreset(p.keys, p.label, p.name)}
-                    className="px-2 py-1 rounded-lg bg-[#141824] hover:bg-[#1E2436] border border-white/10 hover:border-[#FF5E00]/50 text-white/80 hover:text-white text-[10px] font-mono whitespace-nowrap transition-all shrink-0 cursor-pointer shadow-xs active:scale-95"
+                    className="px-2 py-1 bg-[#FFFFFF] hover:bg-[#FFFFFF] border border-[#E3E2DE] hover:border-[#141414] text-[#444343] hover:text-[#141414] text-[10px] font-mono whitespace-nowrap transition-all shrink-0 cursor-pointer active:scale-95"
                   >
-                    <span className="font-bold text-[#FF5E00]">{p.name}</span>
-                    <span className="text-white/40 ml-1 text-[9px]">({p.label})</span>
+                    <span className="font-bold text-[#1351AA]">{p.name}</span>
+                    <span className="text-[#646464] ml-1 text-[9px]">({p.label})</span>
                   </button>
                 ))}
               </div>
             </div>
 
+            {/* Layout Switcher (Full Size / TKL / 60%) */}
+            <div className="flex items-center justify-between text-[11px] font-mono pt-1">
+              <span className="text-[#646464] uppercase tracking-wider text-[9.5px]">Virtual Keyboard:</span>
+              <div className="flex items-center gap-1 p-0.5 bg-[#EDECE8] border border-[#E3E2DE]">
+                <button
+                  type="button"
+                  onClick={() => setKeyboardLayout('full')}
+                  className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${
+ keyboardLayout === 'full' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
+ }`}
+                >
+                  Full 104
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKeyboardLayout('tkl')}
+                  className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${
+ keyboardLayout === 'tkl' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
+ }`}
+                >
+                  TKL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKeyboardLayout('60')}
+                  className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${
+ keyboardLayout === '60' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
+ }`}
+                >
+                  60%
+                </button>
+              </div>
+            </div>
+
+            {/* VISUAL KEYBOARD CONTAINER (Zero horizontal scrolling, perfect fit) */}
+            <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE] overflow-x-hidden select-none">
+              <div className="flex gap-2 justify-center">
+                
+                {/* ALPHANUMERIC 15u */}
+                <div className="space-y-[1.5px] shrink-0">
+                  {/* Function row */}
+                  <div className="flex gap-[1.5px] mb-1">
+                    {DRAWER_MAIN_ROW_0.map(k => renderDrawerKey(k))}
+                  </div>
+
+                  {/* Number row */}
+                  <div className="flex gap-[1.5px]">
+                    {DRAWER_MAIN_ROW_1.map(k => renderDrawerKey(k))}
+                  </div>
+
+                  {/* QWERTY row */}
+                  <div className="flex gap-[1.5px]">
+                    {DRAWER_MAIN_ROW_2.map(k => renderDrawerKey(k))}
+                  </div>
+
+                  {/* Home row */}
+                  <div className="flex gap-[1.5px]">
+                    {DRAWER_MAIN_ROW_3.map(k => renderDrawerKey(k))}
+                  </div>
+
+                  {/* Shift row */}
+                  <div className="flex gap-[1.5px]">
+                    {DRAWER_MAIN_ROW_4.map(k => renderDrawerKey(k))}
+                  </div>
+
+                  {/* Bottom Space row */}
+                  <div className="flex gap-[1.5px]">
+                    {DRAWER_MAIN_ROW_5.map(k => renderDrawerKey(k))}
+                  </div>
+                </div>
+
+                {/* NAVIGATION & ARROWS */}
+                {keyboardLayout !== '60' && (
+                  <div className="space-y-[1.5px] flex flex-col justify-between shrink-0">
+                    <div className="flex gap-[1.5px] mb-1">
+                      {DRAWER_NAV_ROW_0.map(k => renderDrawerKey(k))}
+                    </div>
+                    <div className="flex gap-[1.5px]">
+                      {DRAWER_NAV_ROW_1.map(k => renderDrawerKey(k))}
+                    </div>
+                    <div className="flex gap-[1.5px]">
+                      {DRAWER_NAV_ROW_2.map(k => renderDrawerKey(k))}
+                    </div>
+                    <div className="h-[22px]" />
+                    <div className="flex gap-[1.5px]">
+                      {DRAWER_ARROW_ROW_4.map(k => renderDrawerKey(k))}
+                    </div>
+                    <div className="flex gap-[1.5px]">
+                      {DRAWER_ARROW_ROW_5.map(k => renderDrawerKey(k))}
+                    </div>
+                  </div>
+                )}
+
+                {/* NUMPAD */}
+                {keyboardLayout === 'full' && (
+                  <div className="space-y-[1.5px] shrink-0">
+                    <div className="flex gap-[1.5px] mb-1">
+                      {DRAWER_NUMPAD_ROW_0.map(k => renderDrawerKey(k))}
+                    </div>
+                    <div
+                      className="grid gap-[1.5px]"
+                      style={{
+                        gridTemplateColumns: `repeat(4, ${UNIT_WIDTH}px)`,
+                        gridTemplateRows: `repeat(5, ${UNIT_HEIGHT}px)`
+                      }}
+                    >
+                      {DRAWER_NUMPAD_GRID.map(k => {
+                        const isSelected = isKeyActive(k, recordedKeys);
+                        return (
+                          <button
+                            key={k.code}
+                            type="button"
+                            onClick={() => handleVirtualKeyClick(k.label || k.code)}
+                            style={{ gridArea: k.gridArea }}
+                            className={` flex flex-col items-center justify-between p-0.5 font-mono text-[8.5px] font-bold border transition-all select-none cursor-pointer ${
+ isSelected
+ ? 'text-[#E3E2DE] border-[#1351AA] font-black scale-95 z-10'
+ : 'text-[#444343] border-[#E3E2DE] hover:border-[#141414] hover:bg-[#FFFFFF] hover:text-[#141414] active:scale-95'
+ }`}
+                          >
+                            <span className="truncate leading-none">{k.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+
             {/* Quick Media Keys */}
             <div>
-              <label className="text-[10px] font-mono text-white/40 uppercase block mb-1">
+              <label className="text-[10px] font-mono text-[#646464] uppercase block mb-1">
                 Media Hotkeys
               </label>
               <div className="grid grid-cols-6 gap-1.5">
@@ -862,11 +1018,11 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                       key={m.key}
                       type="button"
                       onClick={() => handleVirtualKeyClick(m.name)}
-                      className={`py-1.5 px-1 rounded-lg border text-center font-mono text-[10px] transition-all truncate cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#FF5E00] text-black border-[#FF9100] font-bold shadow-xs'
-                          : 'bg-[#141824] text-white/80 border-white/10 hover:border-white/30 hover:bg-[#1C2232]'
-                      }`}
+                      className={`py-1.5 px-1 border text-center font-mono text-[10px] transition-all truncate cursor-pointer ${
+ isSelected
+ ? 'bg-[#1351AA] text-[#E3E2DE] border-[#1351AA] font-bold '
+ : 'bg-[#FFFFFF] text-[#444343] border-[#E3E2DE] hover:border-[#141414] hover:bg-[#FFFFFF]'
+ }`}
                     >
                       {m.name}
                     </button>
@@ -877,10 +1033,79 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           </div>
         )}
 
-        {/* TAB 2: TEXT SNIPPET MACRO */}
+        {/* TAB 2: LIVE MACRO RECORDER */}
+        {activeTab === 'recorder' && (
+          <div className="space-y-3">
+            <div className="p-4 bg-[#FFFFFF] border border-[#E3E2DE] text-center space-y-3">
+              <div className="text-xs text-[#444343]">
+                {isRecording ? (
+                  <span className="text-[#141414] font-bold flex items-center justify-center gap-2 animate-pulse text-xs">
+                    <span className="w-2.5 h-2.5 bg-[#EDECE8]" />
+                    RECORDING LIVE KEYSTROKES: PRESS KEYS ON KEYBOARD...
+                  </span>
+                ) : (
+                  "Click 'Record Keys' and press your desired shortcut combo on your physical keyboard"
+                )}
+              </div>
+
+              {/* Recorded Badges */}
+              <div className="min-h-[52px] p-2.5 bg-[#FFFFFF] border border-[#E3E2DE] flex items-center justify-center gap-1.5 flex-wrap">
+                {recordedKeys.length === 0 ? (
+                  <span className="text-[#646464] text-xs italic">No keys recorded</span>
+                ) : (
+                  recordedKeys.map((k, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 && <span className="text-[#646464] text-xs font-bold font-mono">+</span>}
+                      <span className="px-2.5 py-1 bg-[#FFFFFF] border border-[#C7C7C7] font-mono text-xs font-bold text-[#141414] ">
+                        {k}
+                      </span>
+                    </React.Fragment>
+                  ))
+                )}
+              </div>
+
+              <div className="flex items-center justify-center gap-2 pt-1">
+                {!isRecording ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecordedKeys([]);
+                      setIsRecording(true);
+                    }}
+                    className="px-3.5 py-1.5 bg-[#EDECE8] hover:bg-[#EDECE8] text-[#141414] text-xs font-bold font-mono flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <CircleDot className="w-3.5 h-3.5 animate-pulse" />
+                    Record Keys
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsRecording(false)}
+                    className="px-3.5 py-1.5 bg-[#EDECE8] hover:bg-[#EDECE8] text-[#141414] text-xs font-bold font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Done Recording
+                  </button>
+                )}
+
+                {recordedKeys.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearShortcut}
+                    className="px-3 py-1.5 border border-[#E3E2DE] text-[#646464] hover:text-[#141414] text-xs font-mono transition-colors cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: TEXT SNIPPET MACRO */}
         {activeTab === 'text' && (
           <div className="space-y-3">
-            <div className="text-xs text-white/60">
+            <div className="text-xs text-[#444343]">
               Enter any text string or script command to be automatically typed out when pressing this switch:
             </div>
 
@@ -889,59 +1114,147 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               value={textSnippet}
               onChange={(e) => setTextSnippet(e.target.value)}
               placeholder="e.g. Hello world! Or git status && git log -n 5"
-              className="w-full p-3 rounded-xl bg-[#0B0D13] border border-white/10 text-white font-mono text-xs focus:border-[#FF5E00] focus:outline-hidden"
+              className="w-full p-3 bg-[#FFFFFF] border border-[#E3E2DE] text-[#141414] font-mono text-xs focus:border-[#1351AA] focus:outline-hidden"
             />
 
-            <div className="flex items-center gap-2 text-[11px] text-white/50 bg-[#121622] p-2.5 rounded-lg border border-white/5">
-              <Check className="w-3.5 h-3.5 text-[#38EF7D] shrink-0" />
+            <div className="flex items-center gap-2 text-[11px] text-[#646464] bg-[#FFFFFF] p-2.5 border border-[#E3E2DE]">
+              <Check className="w-3.5 h-3.5 text-[#1351AA] shrink-0" />
               <span>Simulates high-speed mechanical keystrokes directly into active application window.</span>
             </div>
           </div>
         )}
 
-        {/* TAB 3: APPLICATION LAUNCHER & APP PICKER */}
+        {/* TAB 4: LONG-PRESS SAFETY ISOLATION */}
+        {activeTab === 'safety' && (
+          <div className="p-3.5 bg-[#141414]/20 border border-[#C7C7C7]/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-[#141414] shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold text-[#141414]">Long-Press Safety Isolation</h4>
+                  <p className="text-[10px] text-[#141414]/60">
+                    Suppresses quick accidental taps. Requires holding down to execute.
+                  </p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={editedKey.isDestructiveSafety || false}
+                onChange={(e) => {
+                  const updated = {
+                    ...editedKey,
+                    isDestructiveSafety: e.target.checked,
+                    safetyConfirmAction: e.target.checked
+                      ? editedKey.safetyConfirmAction || {
+                          id: `safety-${Date.now()}`,
+                          category: 'hotkey' as const,
+                          name: 'Confirmed Operation',
+                          payload: {}
+                        }
+                      : null
+                  };
+                  setEditedKey(updated);
+                  onSave(updated);
+                }}
+                className="w-4 h-4 accent-red-500 cursor-pointer"
+              />
+            </div>
+
+            {editedKey.isDestructiveSafety && (
+              <div className="space-y-3 pt-1">
+                <div>
+                  <div className="flex justify-between text-xs text-[#444343] mb-1">
+                    <span>Hold Threshold Duration</span>
+                    <span className="font-mono text-[#1351AA] font-bold">
+                      {((editedKey.longPressThresholdMs || 1500) / 1000).toFixed(1)}s
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="500"
+                    max="4000"
+                    step="100"
+                    value={editedKey.longPressThresholdMs || 1500}
+                    onChange={(e) => {
+                      const updated = {
+                        ...editedKey,
+                        longPressThresholdMs: parseInt(e.target.value)
+                      };
+                      setEditedKey(updated);
+                      onSave(updated);
+                    }}
+                    className="w-full accent-[#1351AA] cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-[#646464] block mb-1">Safety Action Name</label>
+                  <input
+                    type="text"
+                    value={editedKey.safetyConfirmAction?.name || ''}
+                    onChange={(e) => {
+                      const updated = {
+                        ...editedKey,
+                        safetyConfirmAction: {
+                          ...editedKey.safetyConfirmAction!,
+                          name: e.target.value
+                        }
+                      };
+                      setEditedKey(updated);
+                      onSave(updated);
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#C7C7C7]/30 text-xs text-[#141414] font-mono"
+                    placeholder="e.g. TERMINATE STREAM"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 5: APPLICATION LAUNCHER & APP PICKER */}
         {activeTab === 'app' && (
           <div className="space-y-3.5">
             {/* Current Assignment Status Box */}
             {editedKey.tapAction?.category === 'app_launch' ? (
-              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#171D2B] via-[#121622] to-[#171D2B] border border-[#FF5E00]/40 shadow-lg space-y-3">
+              <div className="p-3.5  border border-[#C7C7C7] space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono uppercase text-[#FF5E00] font-black tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#FF5E00]" />
+                  <span className="text-[10px] font-mono uppercase text-[#1351AA] font-black tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-[#1351AA]" />
                     Currently Assigned Application
                   </span>
-                  <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#10B981]/20 text-[#38EF7D] border border-[#10B981]/30 font-bold">
+                  <span className="text-[9px] font-mono px-2 py-0.5 bg-[#EDECE8] text-[#1351AA] border border-[#C7C7C7] font-bold">
                     ACTIVE ASSIGNMENT
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3 bg-black/40 p-3 rounded-xl border border-white/5">
+                <div className="flex items-center gap-3 bg-[#EDECE8] p-3 border border-[#E3E2DE]">
                   {editedKey.tapAction.payload?.iconDataUrl ? (
                     <img
                       src={editedKey.tapAction.payload.iconDataUrl}
                       alt={editedKey.label}
-                      className="w-10 h-10 object-contain rounded-lg shrink-0 drop-shadow-md"
+                      className="w-10 h-10 object-contain shrink-0 "
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
-                      <Sparkles className="w-5 h-5 text-[#FF5E00]" />
+                    <div className="w-10 h-10 bg-[#F4F3F0] flex items-center justify-center shrink-0">
+                      <Sparkles className="w-5 h-5 text-[#1351AA]" />
                     </div>
                   )}
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-white text-xs truncate">
+                      <h4 className="font-bold text-[#141414] text-xs truncate">
                         {editedKey.tapAction.payload?.appName || editedKey.label}
                       </h4>
-                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/10 text-white/60 uppercase">
+                      <span className="text-[9px] font-mono px-1.5 py-0.2 bg-[#EDECE8] text-[#444343] uppercase">
                         Key Label: {editedKey.label}
                       </span>
                     </div>
-                    <p className="text-[10px] font-mono text-white/50 truncate mt-0.5" title={editedKey.tapAction.payload?.exePath}>
+                    <p className="text-[10px] font-mono text-[#646464] truncate mt-0.5" title={editedKey.tapAction.payload?.exePath}>
                       {editedKey.tapAction.payload?.exePath || editedKey.tapAction.payload?.appId || 'Executable Target'}
                     </p>
                     {editedKey.tapAction.payload?.launchArgs && (
-                      <p className="text-[9px] font-mono text-[#FF5E00]/80 truncate mt-0.5">
+                      <p className="text-[9px] font-mono text-[#646464] truncate mt-0.5">
                         Args: {editedKey.tapAction.payload.launchArgs}
                       </p>
                     )}
@@ -956,7 +1269,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                         onTestAction(editedKey.tapAction);
                       }
                     }}
-                    className="flex-1 py-1.5 px-3 rounded-lg bg-[#FF5E00]/20 hover:bg-[#FF5E00] text-[#FF5E00] hover:text-black border border-[#FF5E00]/40 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    className="flex-1 py-1.5 px-3 bg-[#EDECE8] hover:bg-[#1351AA] text-[#1351AA] hover:text-[#E3E2DE] border border-[#C7C7C7] text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                     Test Launch
@@ -975,7 +1288,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                       setEditedKey(updated);
                       onSave(updated);
                     }}
-                    className="py-1.5 px-3 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
+                    className="py-1.5 px-3 bg-[#EDECE8]/15 hover:bg-[#EDECE8]/25 text-[#141414] border border-[#C7C7C7]/30 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     Remove
@@ -983,11 +1296,11 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="p-3.5 rounded-2xl bg-black/30 border border-white/5 text-center space-y-1">
-                <p className="text-xs font-mono text-white/70 font-semibold">
+              <div className="p-3.5 bg-[#EDECE8] border border-[#E3E2DE] text-center space-y-1">
+                <p className="text-xs font-mono text-[#444343] font-semibold">
                   No Application Assigned
                 </p>
-                <p className="text-[10px] text-white/40 font-mono">
+                <p className="text-[10px] text-[#646464] font-mono">
                   Select an application from the library below or browse for an executable to launch when Switch #{editedKey.keyIndex + 1} is pressed.
                 </p>
               </div>
@@ -996,7 +1309,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
             {/* Application Library Search & Browse Controls */}
             <div className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono text-white/80 font-bold uppercase tracking-wider">
+                <span className="text-[11px] font-mono text-[#444343] font-bold uppercase tracking-wider">
                   Discovered Applications ({drawerApps.length})
                 </span>
 
@@ -1022,9 +1335,9 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                         } catch { /* noop */ }
                       }
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 text-[10px] font-mono font-bold transition-all cursor-pointer"
+                    className="flex items-center gap-1 px-2.5 py-1 bg-[#F4F3F0] hover:bg-[#EDECE8] text-[#444343] hover:text-[#141414] border border-[#E3E2DE] text-[10px] font-mono font-bold transition-all cursor-pointer"
                   >
-                    <Plus className="w-3 h-3 text-[#FF5E00]" />
+                    <Plus className="w-3 h-3 text-[#1351AA]" />
                     <span>Browse .exe</span>
                   </button>
 
@@ -1044,29 +1357,29 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                       }
                     }}
                     disabled={isScanningDrawerApps}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/10 text-[10px] font-mono transition-all cursor-pointer disabled:opacity-40"
+                    className="flex items-center gap-1 px-2 py-1 bg-[#F4F3F0] hover:bg-[#EDECE8] text-[#444343] hover:text-[#141414] border border-[#E3E2DE] text-[10px] font-mono transition-all cursor-pointer disabled:opacity-40"
                     title="Rescan PC Applications"
                   >
-                    <RefreshCw className={`w-3 h-3 ${isScanningDrawerApps ? 'animate-spin text-[#FF5E00]' : ''}`} />
+                    <RefreshCw className={`w-3 h-3 ${isScanningDrawerApps ? 'animate-spin text-[#1351AA]' : ''}`} />
                   </button>
                 </div>
               </div>
 
               {/* Search Bar */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#646464]" />
                 <input
                   type="text"
                   value={drawerAppSearch}
                   onChange={(e) => setDrawerAppSearch(e.target.value)}
                   placeholder="Search applications by name or category…"
-                  className="w-full bg-[#121622] border border-white/10 rounded-xl pl-9 pr-8 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#FF5E00] shadow-inner transition-colors"
+                  className="w-full bg-[#FFFFFF] border border-[#E3E2DE] pl-9 pr-8 py-2 text-xs text-[#141414] font-mono focus:outline-none focus:border-[#1351AA] transition-colors"
                 />
                 {drawerAppSearch && (
                   <button
                     type="button"
                     onClick={() => setDrawerAppSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-white/40 hover:text-white"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-[#646464] hover:text-[#141414]"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -1080,11 +1393,11 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                     key={cat}
                     type="button"
                     onClick={() => setDrawerAppCategory(cat)}
-                    className={`px-2 py-0.5 rounded-full capitalize whitespace-nowrap transition-all cursor-pointer ${
-                      drawerAppCategory === cat
-                        ? 'bg-[#FF5E00] text-black font-bold'
-                        : 'bg-white/5 text-white/50 hover:text-white hover:bg-white/10'
-                    }`}
+                    className={`px-2 py-0.5 capitalize whitespace-nowrap transition-all cursor-pointer ${
+ drawerAppCategory === cat
+ ? 'bg-[#1351AA] text-[#E3E2DE] font-bold'
+ : 'bg-[#F4F3F0] text-[#646464] hover:text-[#141414] hover:bg-[#EDECE8]'
+ }`}
                   >
                     {cat}
                   </button>
@@ -1112,9 +1425,9 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
                 if (filtered.length === 0) {
                   return (
-                    <div className="p-6 text-center text-xs font-mono text-white/40 bg-black/20 rounded-xl border border-white/5">
+                    <div className="p-6 text-center text-xs font-mono text-[#646464] bg-[#E3E2DE] border border-[#E3E2DE]">
                       {isScanningDrawerApps ? (
-                        <div className="flex items-center justify-center gap-2 text-[#FF5E00]">
+                        <div className="flex items-center justify-center gap-2 text-[#1351AA]">
                           <RefreshCw className="w-4 h-4 animate-spin" />
                           <span>Scanning computer for installed applications…</span>
                         </div>
@@ -1136,32 +1449,32 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                         setAppCustomLabel(app.name);
                         setAppCustomArgs(app.launchArgs || '');
                       }}
-                      className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#FF5E00]/15 border-[#FF5E00] shadow-[0_0_12px_rgba(255,94,0,0.25)]'
-                          : 'bg-[#121622]/80 hover:bg-[#181D2D] border-white/5 hover:border-white/15'
-                      }`}
+                      className={`p-2.5 border transition-all flex items-center justify-between gap-3 cursor-pointer ${
+ isSelected
+ ? 'bg-[#EDECE8] border-[#1351AA]'
+ : 'bg-[#FFFFFF] hover:bg-[#FFFFFF] border-[#E3E2DE] hover:border-[#C7C7C7]'
+ }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         {app.iconDataUrl ? (
                           <img
                             src={app.iconDataUrl}
                             alt={app.name}
-                            className="w-7 h-7 object-contain rounded shrink-0"
+                            className="w-7 h-7 object-contain shrink-0"
                           />
                         ) : (
-                          <div className="w-7 h-7 rounded bg-white/5 flex items-center justify-center shrink-0">
-                            <Monitor className="w-4 h-4 text-white/40" />
+                          <div className="w-7 h-7 bg-[#F4F3F0] flex items-center justify-center shrink-0">
+                            <Monitor className="w-4 h-4 text-[#646464]" />
                           </div>
                         )}
 
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-white truncate">{app.name}</p>
+                          <p className="text-xs font-bold text-[#141414] truncate">{app.name}</p>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[9px] font-mono uppercase text-white/40">
+                            <span className="text-[9px] font-mono uppercase text-[#646464]">
                               {app.category}
                             </span>
-                            <span className="text-[8px] font-mono px-1 rounded bg-white/5 text-white/40 truncate max-w-[140px]">
+                            <span className="text-[8px] font-mono px-1 bg-[#F4F3F0] text-[#646464] truncate max-w-[140px]">
                               {app.source}
                             </span>
                           </div>
@@ -1170,13 +1483,13 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
                       <div className="shrink-0 flex items-center gap-2">
                         {app.isValid ? (
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#38EF7D]" title="Executable verified" />
+                          <span className="w-1.5 h-1.5 bg-[#1351AA]" title="Executable verified" />
                         ) : (
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-400" title="Target not found" />
+                          <span className="w-1.5 h-1.5 bg-[#EDECE8]" title="Target not found" />
                         )}
-                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
-                          isSelected ? 'bg-[#FF5E00] text-black' : 'text-white/40'
-                        }`}>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 font-bold ${
+ isSelected ? 'bg-[#1351AA] text-[#E3E2DE]' : 'text-[#646464]'
+ }`}>
                           {isSelected ? 'SELECTED' : 'SELECT'}
                         </span>
                       </div>
@@ -1188,24 +1501,24 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
             {/* Selected App Customization & Assignment Panel */}
             {selectedDrawerApp && (
-              <div className="p-3.5 rounded-2xl bg-[#141926] border border-[#FF5E00]/30 space-y-3 animate-in fade-in duration-150">
+              <div className="p-3.5 bg-[#FFFFFF] border border-[#C7C7C7] space-y-3 animate-in fade-in duration-150">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {selectedDrawerApp.iconDataUrl && (
                       <img
                         src={selectedDrawerApp.iconDataUrl}
                         alt={selectedDrawerApp.name}
-                        className="w-6 h-6 object-contain rounded"
+                        className="w-6 h-6 object-contain "
                       />
                     )}
-                    <span className="text-xs font-bold text-white truncate">
+                    <span className="text-xs font-bold text-[#141414] truncate">
                       Configure: {selectedDrawerApp.name}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setSelectedDrawerApp(null)}
-                    className="p-1 text-white/40 hover:text-white"
+                    className="p-1 text-[#646464] hover:text-[#141414]"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1214,7 +1527,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                   {/* Custom Label */}
                   <div>
-                    <label className="text-[10px] text-white/50 block mb-1">
+                    <label className="text-[10px] text-[#646464] block mb-1">
                       Key Label (Max 8 chars recommended)
                     </label>
                     <input
@@ -1222,13 +1535,13 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                       value={appCustomLabel}
                       onChange={(e) => setAppCustomLabel(e.target.value)}
                       placeholder={selectedDrawerApp.name.slice(0, 8)}
-                      className="w-full px-2.5 py-1.5 bg-black/40 border border-white/10 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-[#FF5E00]"
+                      className="w-full px-2.5 py-1.5 bg-[#EDECE8] border border-[#E3E2DE] text-[#141414] font-mono text-xs focus:outline-none focus:border-[#1351AA]"
                     />
                   </div>
 
                   {/* Launch Arguments */}
                   <div>
-                    <label className="text-[10px] text-white/50 block mb-1">
+                    <label className="text-[10px] text-[#646464] block mb-1">
                       Optional Launch Arguments
                     </label>
                     <input
@@ -1236,19 +1549,19 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                       value={appCustomArgs}
                       onChange={(e) => setAppCustomArgs(e.target.value)}
                       placeholder="e.g. --new-window"
-                      className="w-full px-2.5 py-1.5 bg-black/40 border border-white/10 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-[#FF5E00]"
+                      className="w-full px-2.5 py-1.5 bg-[#EDECE8] border border-[#E3E2DE] text-[#141414] font-mono text-xs focus:outline-none focus:border-[#1351AA]"
                     />
                   </div>
                 </div>
 
                 {/* Advanced Launch Checkboxes */}
-                <div className="flex items-center gap-4 text-[11px] font-mono text-white/70 pt-1">
+                <div className="flex items-center gap-4 text-[11px] font-mono text-[#444343] pt-1">
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={appFocusExisting}
                       onChange={(e) => setAppFocusExisting(e.target.checked)}
-                      className="accent-[#FF5E00]"
+                      className="accent-[#1351AA]"
                     />
                     <span>Focus if already open</span>
                   </label>
@@ -1258,7 +1571,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                       type="checkbox"
                       checked={appLaunchMinimized}
                       onChange={(e) => setAppLaunchMinimized(e.target.checked)}
-                      className="accent-[#FF5E00]"
+                      className="accent-[#1351AA]"
                     />
                     <span>Launch minimized</span>
                   </label>
@@ -1295,7 +1608,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                       setEditedKey(updated);
                       onSave(updated);
                     }}
-                    className="flex-1 py-2 px-3 rounded-xl bg-[#FF5E00] hover:bg-[#FF6A00] text-black text-xs font-mono font-bold flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
+                    className="flex-1 py-2 px-3 bg-[#1351AA] hover:bg-[#1351AA] text-[#E3E2DE] text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                   >
                     <Zap className="w-4 h-4 fill-current" />
                     <span>Assign to Switch #{editedKey.keyIndex + 1}</span>
@@ -1321,7 +1634,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                         }
                       });
                     }}
-                    className="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
+                    className="py-2 px-3 bg-[#F4F3F0] hover:bg-[#EDECE8] text-[#444343] border border-[#E3E2DE] text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                     <span>Test</span>
@@ -1335,7 +1648,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
       </div>
 
       {/* DRAWER FOOTER: Action Testing & Save Status */}
-      <div className="px-4 py-2.5 border-t border-white/10 flex items-center justify-between bg-[#131722]/90 backdrop-blur-md shrink-0">
+      <div className="px-4 py-2.5 border-t border-[#E3E2DE] flex items-center justify-between bg-[#FFFFFF] shrink-0">
         <button
           type="button"
           onClick={() => {
@@ -1343,7 +1656,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               onTestAction(editedKey.tapAction);
             }
           }}
-          className="flex items-center gap-1.5 text-xs text-[#38EF7D] hover:underline font-mono cursor-pointer"
+          className="flex items-center gap-1.5 text-xs text-[#1351AA] hover:underline font-mono cursor-pointer"
         >
           <Play className="w-3.5 h-3.5" /> Test Switch Action
         </button>
@@ -1352,14 +1665,14 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded-lg border border-white/10 text-xs text-white/60 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 border border-[#E3E2DE] text-xs text-[#444343] hover:text-[#141414] hover:bg-[#F4F3F0] transition-colors cursor-pointer"
           >
             Close
           </button>
           <button
             type="button"
             onClick={handleManualSave}
-            className="px-4 py-1.5 rounded-lg bg-[#FF5E00] hover:bg-[#FF6A00] text-black text-xs font-bold flex items-center gap-1 shadow-md transition-transform active:scale-95 cursor-pointer"
+            className="px-4 py-1.5 bg-[#1351AA] hover:bg-[#1351AA] text-[#E3E2DE] text-xs font-bold flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
           >
             <Check className="w-3.5 h-3.5" /> Save Changes
           </button>

@@ -28,6 +28,7 @@ export const ACTION_TYPE = {
   WEBHOOK: 10,
   BOOTLOADER: 11,
   RESET_CONFIG: 12,
+  OLED_NEXT: 13,
 } as const;
 export type ActionTypeValue =
   (typeof ACTION_TYPE)[keyof typeof ACTION_TYPE];
@@ -104,7 +105,7 @@ export interface Action {
   type: number;
   /** ORed bitmask */
   flags: number;
-  /** HID usage, media usage, channel index, LED mode, or brightness — meaning depends on type */
+  /** KEYCODE: (modifiers << 8) | HID usage, so one slot sends Ctrl+C; MEDIA: consumer usage; CHANNEL: channel index; LED_MODE: ledMode; LED_BRIGHT: 0-255. Meaning depends on type. */
   code: number;
   /** NUL-terminated; only meaningful for TEXT and WEBHOOK. Validation rejects an unterminated one. */
   text: string;
@@ -151,15 +152,19 @@ export interface Global {
   /** 1 when a 74AHCT1G125 (or any inverting buffer) is in the LED data path */
   ledInvertOutput: number;
   usbReportEvents: number;
+  /** seconds each screen stays up before the panel rotates; 0 disables rotation. The panel has no touchscreen, so this timer is the default way it changes. */
+  oledAutoCycleS: number;
+  /** bit i = screen i in the rotation, in OLED_MODES order; 0 means every screen, which is what a config saved before this field existed reads as. */
+  oledPlaylist: number;
 }
 
-/** 1708 bytes on the wire. */
+/** 2268 bytes on the wire. */
 export interface Config {
   magic: number;
   version: number;
   length: number;
   global: Global;
-  channels: [Channel, Channel, Channel];
+  channels: [Channel, Channel, Channel, Channel];
   /** CRC-32/IEEE over bytes 0..1703 inclusive */
   crc32: number;
 }
@@ -219,6 +224,6 @@ export interface DecodedFrame {
   ver: number;
 }
 
-export type CommandId = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 128, 129, 130, 131, 133, 134, 136, 192, 254, 255;
-export type StatusCode = 0, 1, 2, 3, 4, 5, 6, 7, 8;
+export type CommandId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 128 | 129 | 130 | 131 | 133 | 134 | 136 | 192 | 254 | 255;
+export type StatusCode = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 

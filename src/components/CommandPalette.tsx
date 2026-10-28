@@ -6,7 +6,6 @@ import {
   Activity,
   Zap,
   Volume2,
-  Radio,
   Usb,
   Cpu,
   RefreshCw,
@@ -18,14 +17,14 @@ import {
   Command,
   CornerDownLeft,
 } from 'lucide-react';
-import { Layer } from '../types';
+import { Deck, Layer } from '../types';
 import { HardwareConnectionState } from '../utils/hardwareBridge';
 import { PC_SHORTCUTS, PCShortcut } from '../data/pcShortcuts';
 import { executeDeckAction } from '../utils/executeDeckAction';
 
 export interface PaletteItem {
   id: string;
-  group: 'Page' | 'Layer' | 'Key' | 'Hardware' | 'Audio' | 'OBS' | 'Shortcut' | 'Action';
+  group: 'Page' | 'Layer' | 'Key' | 'Hardware' | 'Audio' | 'Shortcut' | 'Action';
   label: string;
   where: string;
   also?: string;
@@ -38,11 +37,12 @@ export interface CommandPaletteProps {
   onClose: () => void;
   activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros';
   onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros') => void;
-  layers: Layer[];
+  deck: Deck;
   activeLayer: Layer;
   onSelectLayer: (layerId: string) => void;
   onOpenDiagnostics: () => void;
   onOpenFirmwareModal: () => void;
+  onExportDeck: () => void;
   hardwareState: HardwareConnectionState;
   onConnectHID: () => void;
   onConnectSerial: () => void;
@@ -89,11 +89,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onClose,
   activeTab: _activeTab,
   onChangeTab,
-  layers,
   activeLayer,
   onSelectLayer,
   onOpenDiagnostics,
   onOpenFirmwareModal,
+  deck,
+  onExportDeck,
   hardwareState,
   onConnectHID,
   onConnectSerial,
@@ -120,7 +121,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'Deck Studio',
         where: 'Layout editor & digital twin',
         also: 'home editor keymap pad simulator twin buttons',
-        icon: <Sliders className="w-4 h-4 text-[#FF5E00]" />,
+        icon: <Sliders className="w-4 h-4 text-[#1351AA]" />,
         run: () => onChangeTab('designer'),
       },
       {
@@ -129,7 +130,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'Key Tester',
         where: 'Interactive matrix validator',
         also: 'tester matrix actuation switches check',
-        icon: <CheckCircle className="w-4 h-4 text-[#38EF7D]" />,
+        icon: <CheckCircle className="w-4 h-4 text-[#1351AA]" />,
         run: () => onChangeTab('tester'),
       },
       {
@@ -138,16 +139,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'Shortcuts Library',
         where: 'Quick presets and cheatsheet',
         also: 'shortcuts hotkeys presets bindings pc',
-        icon: <Flame className="w-4 h-4 text-amber-400" />,
+        icon: <Flame className="w-4 h-4 text-[#1351AA]" />,
         run: () => onChangeTab('shortcuts'),
       },
       {
         id: 'tab-apps',
         group: 'Page',
         label: 'Application Library',
-        where: 'Detected Windows software & launchers',
+        where: 'Detected software · palette-only page',
         also: 'apps applications library programs exe launcher discover',
-        icon: <AppWindow className="w-4 h-4 text-blue-400" />,
+        icon: <AppWindow className="w-4 h-4 text-[#1351AA]" />,
         run: () => onChangeTab('apps'),
       },
       {
@@ -156,7 +157,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'RGB Lighting Studio',
         where: 'Backlight patterns & colors',
         also: 'rgb lighting led colors animation brightness',
-        icon: <Zap className="w-4 h-4 text-purple-400" />,
+        icon: <Zap className="w-4 h-4 text-[#444343]" />,
         run: () => onChangeTab('lighting'),
       },
       {
@@ -165,7 +166,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'Macro Editor',
         where: 'Timed sequential macro chains',
         also: 'macros sequence record automate delay',
-        icon: <Cpu className="w-4 h-4 text-[#00F0FF]" />,
+        icon: <Cpu className="w-4 h-4 text-[#1351AA]" />,
         run: () => onChangeTab('macros'),
       }
     );
@@ -178,7 +179,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'Open Action History & Diagnostics',
         where: 'Real-time telemetry, wire log & self-tests',
         also: 'diagnostics action history logs debug health selftest errors',
-        icon: <Activity className="w-4 h-4 text-[#00F0FF]" />,
+        icon: <Activity className="w-4 h-4 text-[#1351AA]" />,
         run: onOpenDiagnostics,
       },
       {
@@ -187,8 +188,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'RP2040 Firmware Flasher (.uf2)',
         where: 'ROM bootloader UF2 flasher',
         also: 'firmware update flash rp2040 uf2 bootloader bootsel rpi-rp2',
-        icon: <Zap className="w-4 h-4 text-[#FF5E00]" />,
+        icon: <Zap className="w-4 h-4 text-[#1351AA]" />,
         run: onOpenFirmwareModal,
+      },
+      {
+        id: 'action-export-deck',
+        group: 'Action',
+        label: 'Export Deck to JSON',
+        where: 'Backup the deck and its 4 layers',
+        also: 'export backup json save share deck layout',
+        icon: <Download className="w-4 h-4 text-[#1351AA]" />,
+        run: onExportDeck,
       }
     );
 
@@ -201,10 +211,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           label: 'Sync Keymap to Flash / EEPROM',
           where: 'Commit configuration to hardware',
           also: 'sync eeprom flash write memory upload device macropad',
-          icon: <RefreshCw className="w-4 h-4 text-[#38EF7D]" />,
+          icon: <RefreshCw className="w-4 h-4 text-[#1351AA]" />,
           run: () => {
             onSyncEEPROM();
-            onTriggerAction?.('Sync Keymap', 'Flashing 3 layers to hardware EEPROM', 'success');
+            onTriggerAction?.('Sync Keymap', 'Flashing deck to hardware EEPROM', 'success');
           },
         },
         {
@@ -213,7 +223,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           label: 'Disconnect Microcontroller',
           where: 'Close USB connection',
           also: 'disconnect unplug close port release',
-          icon: <Power className="w-4 h-4 text-red-400" />,
+          icon: <Power className="w-4 h-4 text-[#141414]" />,
           run: () => {
             onDisconnectHardware();
             onTriggerAction?.('Disconnect Hardware', 'Microcontroller session closed', 'info');
@@ -228,7 +238,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           label: 'Connect WebHID Macropad',
           where: 'QMK / Raw HID endpoint (0xFF60)',
           also: 'connect hid webhid usb qmk macropad',
-          icon: <Usb className="w-4 h-4 text-[#FF5E00]" />,
+          icon: <Usb className="w-4 h-4 text-[#1351AA]" />,
           run: onConnectHID,
         },
         {
@@ -237,21 +247,21 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           label: 'Connect USB Serial / COM Port',
           where: 'CDC Serial protocol (115200 baud)',
           also: 'connect serial com port usb rp2040 arduino cdc uart',
-          icon: <Cpu className="w-4 h-4 text-[#38EF7D]" />,
+          icon: <Cpu className="w-4 h-4 text-[#1351AA]" />,
           run: onConnectSerial,
         }
       );
     }
 
-    // 4. Layers / Channels
-    layers.forEach((l, idx) => {
+    // 4. Deck layers
+    deck.layers.forEach((l, idx) => {
       list.push({
         id: `layer-${l.id}`,
         group: 'Layer',
         label: `Switch to ${l.name}`,
         where: l.id === activeLayer.id ? 'Current active layer' : `Channel #${idx + 1}`,
         also: `layer channel ${l.name} ch${idx + 1} layer${idx + 1}`,
-        icon: <Layers className="w-4 h-4 text-[#00F0FF]" />,
+        icon: <Layers className="w-4 h-4 text-[#1351AA]" />,
         run: () => {
           onSelectLayer(l.id);
           onChangeTab('designer');
@@ -259,7 +269,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       });
     });
 
-    // 6. Active Layer Keys & Knob
+    // 5. Active layer keys & knob
     activeLayer.keys.forEach((k, idx) => {
       const actionName = k.tapAction?.name || k.label || `Switch #${idx + 1}`;
       list.push({
@@ -268,7 +278,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: `Key ${idx + 1}: ${actionName}`,
         where: `${activeLayer.name} · Switch #${idx + 1}`,
         also: `key ${idx + 1} switch button ${actionName} edit`,
-        icon: <Sliders className="w-4 h-4 text-white/50" />,
+        icon: <Sliders className="w-4 h-4 text-[#646464]" />,
         run: () => {
           onChangeTab('designer');
           onSelectKey?.(idx);
@@ -282,7 +292,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       label: `Rotary Encoder: ${activeLayer.dial.label || 'Dial Controls'}`,
       where: `${activeLayer.name} · Encoder`,
       also: 'knob dial rotary encoder volume scrub cw ccw press',
-      icon: <Volume2 className="w-4 h-4 text-[#FF5E00]" />,
+      icon: <Volume2 className="w-4 h-4 text-[#1351AA]" />,
       run: () => {
         onChangeTab('designer');
         onSelectKnob?.();
@@ -297,7 +307,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'Audio: Toggle Master Mute',
         where: 'Windows CoreAudio endpoint',
         also: 'audio master volume mute sound silence speaker',
-        icon: <Volume2 className="w-4 h-4 text-[#FF5E00]" />,
+        icon: <Volume2 className="w-4 h-4 text-[#1351AA]" />,
         run: async () => {
           await window.electronAPI?.toggleMasterMute?.();
           onTriggerAction?.('Master Mute Toggled', 'Windows master mute changed', 'info');
@@ -309,7 +319,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'Audio: Toggle Microphone Mute',
         where: 'Default capture device',
         also: 'mic microphone mute input capture silence',
-        icon: <Volume2 className="w-4 h-4 text-red-400" />,
+        icon: <Volume2 className="w-4 h-4 text-[#141414]" />,
         run: async () => {
           const mic = await window.electronAPI?.getMic?.();
           if (mic?.ok && mic.value) {
@@ -324,7 +334,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'Audio: Master Volume Up (+5%)',
         where: 'Windows CoreAudio',
         also: 'volume up louder master sound',
-        icon: <Volume2 className="w-4 h-4 text-[#38EF7D]" />,
+        icon: <Volume2 className="w-4 h-4 text-[#1351AA]" />,
         run: async () => {
           await window.electronAPI?.adjustMasterVolume?.(5);
         },
@@ -335,43 +345,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: 'Audio: Master Volume Down (-5%)',
         where: 'Windows CoreAudio',
         also: 'volume down quieter softer sound',
-        icon: <Volume2 className="w-4 h-4 text-[#38EF7D]" />,
+        icon: <Volume2 className="w-4 h-4 text-[#1351AA]" />,
         run: async () => {
           await window.electronAPI?.adjustMasterVolume?.(-5);
         },
       }
     );
 
-    // 8. Direct OBS Streaming Commands
-    list.push(
-      {
-        id: 'obs-toggle-stream',
-        group: 'OBS',
-        label: 'OBS: Toggle Stream (Start / Stop)',
-        where: 'OBS WebSocket v5',
-        also: 'obs studio toggle stream live broadcast twitch youtube',
-        icon: <Radio className="w-4 h-4 text-purple-400" />,
-        run: async () => {
-          await window.electronAPI?.obsCommand?.('toggle_stream');
-          onTriggerAction?.('OBS Stream Toggle', 'Dispatched toggle stream to OBS WebSocket', 'info');
-        },
-      },
-      {
-        id: 'obs-toggle-record',
-        group: 'OBS',
-        label: 'OBS: Toggle Recording (Start / Stop)',
-        where: 'OBS WebSocket v5',
-        also: 'obs record recording capture video clip',
-        icon: <Radio className="w-4 h-4 text-red-400" />,
-        run: async () => {
-          await window.electronAPI?.obsCommand?.('toggle_record');
-          onTriggerAction?.('OBS Record Toggle', 'Dispatched toggle record to OBS WebSocket', 'info');
-        },
-      }
-    );
-
     // 9. Shortcuts Catalog (Top ~600 popular PC shortcuts)
-    const shortcutsSample: PCShortcut[] = PC_SHORTCUTS.slice(0, 400);
+    // Every shortcut, not the first 400: the cap truncated nothing at 187 entries
+    // and would have hidden the tail of the vault the day the table grew.
+    const shortcutsSample: PCShortcut[] = PC_SHORTCUTS;
     for (const s of shortcutsSample) {
       list.push({
         id: `shortcut-${s.id}`,
@@ -379,7 +363,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         label: s.name,
         where: s.appName ? `${s.appName} (${s.keys.join('+')})` : s.keys.join('+'),
         also: `${s.category} ${s.description} ${s.appName || ''} ${s.keys.join(' ')}`,
-        icon: <Flame className="w-4 h-4 text-amber-400" />,
+        icon: <Flame className="w-4 h-4 text-[#1351AA]" />,
         run: async () => {
           await executeDeckAction({
             id: `palette-shortcut-${s.id}`,
@@ -394,13 +378,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
     return list;
   }, [
-    layers,
+    deck,
     activeLayer,
     hardwareState,
     onChangeTab,
     onSelectLayer,
     onOpenDiagnostics,
     onOpenFirmwareModal,
+    onExportDeck,
     onConnectHID,
     onConnectSerial,
     onDisconnectHardware,
@@ -473,21 +458,20 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   const getGroupBadgeColor = (group: PaletteItem['group']) => {
     switch (group) {
-      case 'Page': return 'bg-[#FF5E00]/15 text-[#FF5E00] border-[#FF5E00]/30';
-      case 'Layer': return 'bg-[#00F0FF]/15 text-[#00F0FF] border-[#00F0FF]/30';
+      case 'Page': return 'bg-[#EDECE8] text-[#1351AA] border-[#C7C7C7]';
+      case 'Layer': return 'bg-[#EDECE8] text-[#1351AA] border-[#C7C7C7]';
       case 'Key': return 'bg-white/10 text-white/80 border-white/15';
-      case 'Hardware': return 'bg-[#38EF7D]/15 text-[#38EF7D] border-[#38EF7D]/30';
-      case 'Audio': return 'bg-orange-500/15 text-orange-300 border-orange-500/30';
-      case 'OBS': return 'bg-purple-500/15 text-purple-300 border-purple-500/30';
-      case 'Shortcut': return 'bg-blue-500/15 text-blue-300 border-blue-500/30';
-      case 'Action': return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30';
+      case 'Hardware': return 'bg-[#EDECE8] text-[#1351AA] border-[#C7C7C7]';
+      case 'Audio': return 'bg-[#EDECE8]/15 text-[#1351AA] border-[#C7C7C7]/30';
+      case 'Shortcut': return 'bg-[#EDECE8]/15 text-[#1351AA] border-[#C7C7C7]/30';
+      case 'Action': return 'bg-[#EDECE8]/15 text-[#1351AA] border-[#C7C7C7]/30';
       default: return 'bg-white/10 text-white/70 border-white/10';
     }
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-20 p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-20 p-4 bg-[#EDECE8] animate-in fade-in duration-100"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -495,24 +479,24 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       aria-modal="true"
       aria-label="Global Command Palette"
     >
-      <div className="relative w-full max-w-2xl bg-[#0E1118] border border-white/15 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-100">
+      <div className="relative w-full max-w-2xl bg-[#FFFFFF] border border-[#C7C7C7] flex flex-col overflow-hidden animate-in zoom-in-95 duration-100">
         {/* Search Input Bar */}
-        <div className="relative px-5 py-4 border-b border-white/10 flex items-center gap-3 bg-black/40">
-          <Search className="w-5 h-5 text-[#00F0FF] shrink-0" />
+        <div className="relative px-5 py-4 border-b border-[#E3E2DE] flex items-center gap-3 bg-[#EDECE8]">
+          <Search className="w-5 h-5 text-[#1351AA] shrink-0" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a command, shortcut, key, or page..."
-            className="w-full bg-transparent text-sm text-white placeholder-white/40 focus:outline-hidden font-sans"
+            placeholder="Type a command, shortcut, layer, key, or page..."
+            className="w-full bg-transparent text-sm text-[#141414] placeholder-[#7A7A7A] focus:outline-hidden font-sans"
             role="combobox"
             aria-expanded="true"
             aria-controls="palette-results-list"
           />
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white/10 text-white/50 border border-white/10">
+            <span className="text-[10px] font-mono px-2 py-0.5 bg-[#EDECE8] text-[#646464] border border-[#E3E2DE]">
               ESC
             </span>
           </div>
@@ -526,9 +510,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           className="max-h-[50vh] overflow-y-auto p-2 space-y-1 font-mono text-xs"
         >
           {results.length === 0 ? (
-            <div className="py-12 px-4 text-center text-white/40 italic space-y-1">
+            <div className="py-12 px-4 text-center text-[#646464] italic space-y-1">
               <div>No actions or shortcuts matching “{query.trim()}”</div>
-              <div className="text-[11px] text-white/20">Try searching for "OBS", "Mute", "DaVinci", "Tester", or "EEPROM"</div>
+              <div className="text-[11px] text-[#646464]">Try searching for "Mute", "DaVinci", "Tester", "Layer", or "EEPROM"</div>
             </div>
           ) : (
             results.map((item, index) => {
@@ -542,27 +526,27 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   aria-selected={isSelected}
                   onMouseEnter={() => setSelected(index)}
                   onClick={() => choose(index)}
-                  className={`w-full flex items-center justify-between p-3 rounded-2xl text-left transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-[#161D2C] border border-[#00F0FF]/40 text-white shadow-md'
-                      : 'border border-transparent text-white/80 hover:bg-white/5'
-                  }`}
+                  className={`w-full flex items-center justify-between p-3 text-left transition-all cursor-pointer ${
+ isSelected
+ ? 'bg-[#FFFFFF] border border-[#C7C7C7] text-[#141414] '
+ : 'border border-transparent text-[#444343] hover:bg-[#F4F3F0]'
+ }`}
                 >
                   <div className="flex items-center gap-3 truncate pr-2">
-                    <div className="p-1.5 rounded-lg bg-black/40 border border-white/5 shrink-0">
-                      {item.icon || <Command className="w-4 h-4 text-white/40" />}
+                    <div className="p-1.5 bg-[#EDECE8] border border-[#E3E2DE] shrink-0">
+                      {item.icon || <Command className="w-4 h-4 text-[#646464]" />}
                     </div>
 
                     <div className="truncate">
                       <div className="flex items-center gap-2 truncate">
                         <span
-                          className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full border ${getGroupBadgeColor(
-                            item.group
-                          )}`}
+                          className={`text-[9px] uppercase font-bold px-1.5 py-0.5 border ${getGroupBadgeColor(
+ item.group
+ )}`}
                         >
                           {item.group}
                         </span>
-                        <span className="font-semibold text-xs text-white truncate">
+                        <span className="font-semibold text-xs text-[#141414] truncate">
                           {item.label}
                         </span>
                       </div>
@@ -570,11 +554,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] text-white/40 font-mono truncate max-w-[200px]">
+                    <span className="text-[11px] text-[#646464] font-mono truncate max-w-[200px]">
                       {item.where}
                     </span>
                     {isSelected && (
-                      <CornerDownLeft className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
+                      <CornerDownLeft className="w-3.5 h-3.5 text-[#1351AA] shrink-0" />
                     )}
                   </div>
                 </button>
@@ -584,23 +568,23 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Footer info bar */}
-        <div className="px-5 py-3 border-t border-white/10 bg-black/50 flex items-center justify-between text-[11px] font-mono text-white/40">
+        <div className="px-5 py-3 border-t border-[#E3E2DE] bg-[#EDECE8] flex items-center justify-between text-[11px] font-mono text-[#646464]">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70 border border-white/10 text-[10px]">↑↓</kbd>
+              <kbd className="px-1.5 py-0.5 bg-[#EDECE8] text-[#444343] border border-[#E3E2DE] text-[10px]">↑↓</kbd>
               Navigate
             </span>
             <span className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70 border border-white/10 text-[10px]">↵</kbd>
+              <kbd className="px-1.5 py-0.5 bg-[#EDECE8] text-[#444343] border border-[#E3E2DE] text-[10px]">↵</kbd>
               Execute
             </span>
             <span className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/70 border border-white/10 text-[10px]">Esc</kbd>
+              <kbd className="px-1.5 py-0.5 bg-[#EDECE8] text-[#444343] border border-[#E3E2DE] text-[10px]">Esc</kbd>
               Close
             </span>
           </div>
 
-          <div className="text-[10px] text-white/30">
+          <div className="text-[10px] text-[#646464]">
             {results.length} action{results.length === 1 ? '' : 's'} available
           </div>
         </div>

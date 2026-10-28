@@ -198,17 +198,22 @@ bool action_fire(const action_t *a, bool press) {
 
     switch (a->type) {
     case ACTION_TYPE_KEYCODE: {
+        /* code is (modifiers << 8) | HID usage. The high byte carries a HID
+         * modifier mask so one slot can send Ctrl+C; an unmodified key leaves it
+         * zero. `code` was a u16 with an unused upper byte all along, so the
+         * wire format and the config version do not change. */
         keys[0] = (uint8_t)(a->code & 0xFF);
+        const uint8_t kc_mods = (uint8_t)(a->code >> 8);
         if (deferred) {
             if (press) return false;      /* wait for the release */
-            send_keyboard(0, keys);       /* then tap */
+            send_keyboard(kc_mods, keys); /* then tap */
             uint8_t empty[6] = {0};
             send_keyboard(0, empty);
             return true;
         }
         if (a->flags & ACTION_FLAG_HOLD_DOWN) {
             if (press) {
-                send_keyboard(0, keys);
+                send_keyboard(kc_mods, keys);
                 s_held.keyboard_down = true;
                 memcpy(s_held.keys, keys, 6);
             } else {
@@ -230,11 +235,11 @@ bool action_fire(const action_t *a, bool press) {
                  * every later report until the unlatch above. */
                 s_latched_key = keys[0];
                 s_sticky_active = true;
-                send_keyboard(0, keys);
+                send_keyboard(kc_mods, keys);
             }
         } else if (press) {
             /* Clean tap: down then up in one go. */
-            send_keyboard(0, keys);
+            send_keyboard(kc_mods, keys);
             uint8_t empty[6] = {0};
             send_keyboard(0, empty);
         }

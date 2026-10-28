@@ -75,7 +75,7 @@ One binding slot. Fixed size so the whole config stays flat and memcpy-able; the
 |-------:|-----:|-------|-------|
 | 0 | 1 | `type` | see [actionType](#actiontype) |
 | 1 | 1 | `flags` | see [actionFlag](#actionflag) ORed bitmask |
-| 2 | 2 | `code` | HID usage, media usage, channel index, LED mode, or brightness — meaning depends on type |
+| 2 | 2 | `code` | KEYCODE: (modifiers << 8) | HID usage, so one slot sends Ctrl+C; MEDIA: consumer usage; CHANNEL: channel index; LED_MODE: ledMode; LED_BRIGHT: 0-255. Meaning depends on type. |
 | 4 | 32 | `text` | NUL-terminated; only meaningful for TEXT and WEBHOOK. Validation rejects an unterminated one. |
 | 36 | 4 | `pad` |  |
 
@@ -120,9 +120,10 @@ One complete page: 9 key bindings, 4 knob bindings, and that page's lighting.
 | 10 | 1 | `bootChannel` | default `0`. |
 | 11 | 1 | `ledInvertOutput` | default `1`. 1 when a 74AHCT1G125 (or any inverting buffer) is in the LED data path |
 | 12 | 1 | `usbReportEvents` | default `1`. |
-| 13 | 3 | `pad` |  |
+| 13 | 1 | `oledAutoCycleS` | default `30`. seconds each screen stays up before the panel rotates; 0 disables rotation. The panel has no touchscreen, so this timer is the default way it changes. |
+| 14 | 2 | `oledPlaylist` | default `0`. bit i = screen i in the rotation, in OLED_MODES order; 0 means every screen, which is what a config saved before this field existed reads as. |
 
-### `config` — 1708 bytes
+### `config` — 2268 bytes
 
 The whole saved configuration. This is what SET_CONFIG streams and what lives in flash.
 
@@ -130,9 +131,9 @@ The whole saved configuration. This is what SET_CONFIG streams and what lives in
 |-------:|-----:|-------|-------|
 | 0 | 4 | `magic` | always `0x43464733`. |
 | 4 | 2 | `version` |  |
-| 6 | 2 | `length` | always `1708`. |
+| 6 | 2 | `length` | always `2268`. |
 | 8 | 16 | `global` |  |
-| 24 | 1680 | `channels` |  |
+| 24 | 2240 | `channels` |  |
 | 1704 | 4 | `crc32` | CRC-32/IEEE over bytes 0..1703 inclusive |
 
 Checksum: **CRC-32/IEEE** over bytes `0..1703` (1704 bytes), stored at offset 1704. Reflected poly `0xEDB88320`, init `0xFFFFFFFF`, xorout `0xFFFFFFFF`; check value for `"123456789"` is `0xCBF43926`.
@@ -221,6 +222,7 @@ Prepended inside each of the two flash sectors, before the config blob.
 | `10` | `WEBHOOK` |
 | `11` | `BOOTLOADER` |
 | `12` | `RESET_CONFIG` |
+| `13` | `OLED_NEXT` |
 
 ### actionFlag
 
@@ -342,7 +344,7 @@ host                          device
   PING            ──────────▶
                   ◀──────────  PONG
   GET_INFO        ──────────▶
-                  ◀──────────  INFO   (3 channels, 9 keys, 9 LEDs, 1708-byte config)
+                  ◀──────────  INFO   (4 channels, 9 keys, 9 LEDs, 2268-byte config)
   GET_CONFIG 0    ──────────▶
                   ◀──────────  CONFIG_CHUNK (0/7)
        ⋮               ⋮              ⋮

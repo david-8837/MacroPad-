@@ -4,7 +4,7 @@ const { createWebhookServer, generateToken } = require('../electron/webhookServe
 const PORT = 38499, TOKEN = generateToken();
 const received = [];
 let deliverable = true;
-const server = createWebhookServer({ port: PORT, token: TOKEN, getStatus: () => ({ profileId: 'p1' }),
+const server = createWebhookServer({ port: PORT, token: TOKEN, getStatus: () => ({ deckId: 'deck-main', deckName: 'Studio Deck' }),
   onEvent: (e) => { if (deliverable) received.push(e); return deliverable; } });
 
 function req(method, path, { headers = {}, body, host } = {}) {
@@ -32,10 +32,14 @@ const cases = [
   ['JSON array body',                     () => req('POST', '/api/v1/trigger', { headers: auth, body: '[1]' }), 400],
   ['key index out of range',              () => req('POST', '/api/v1/trigger', { headers: auth, body: { target: 'key', index: 9 } }), 400],
   ['channel out of range',                () => req('POST', '/api/v1/action', { headers: auth, body: { channel: 4 } }), 400],
+  ['layer 0 is valid (0-based)',          () => req('POST', '/api/v1/action', { headers: auth, body: { layer: 0 } }), 202],
+  ['negative layer is rejected',          () => req('POST', '/api/v1/action', { headers: auth, body: { layer: -1 } }), 400],
   ['oled line too long',                  () => req('POST', '/api/v1/oled', { headers: auth, body: { line1: 'x'.repeat(40) } }), 400],
   ['oversize body (>64KB)',               () => req('POST', '/api/v1/oled', { headers: auth, body: JSON.stringify({ line1: 'a', pad: 'x'.repeat(70000) }) }), 413],
   ['OPTIONS preflight: no CORS grant',    () => req('OPTIONS', '/api/v1/trigger', { headers: { Origin: 'https://evil.example' } }), 204],
-  ['valid but window unavailable',        async () => { deliverable = false; const r = await req('POST', '/api/v1/profile', { headers: auth, body: { profileId: 'x' } }); deliverable = true; return r; }, 503],
+  ['retired profile endpoint is 404',     () => req('POST', '/api/v1/profile', { headers: auth, body: { profileId: 'x' } }), 404],
+  ['action without layer is 400',         () => req('POST', '/api/v1/action', { headers: auth, body: {} }), 400],
+  ['valid but renderer unavailable',      async () => { deliverable = false; const r = await req('POST', '/api/v1/action', { headers: auth, body: { layer: 2 } }); deliverable = true; return r; }, 503],
 ];
 server.listen(PORT, '127.0.0.1', async () => {
   let pass = 0;
@@ -45,7 +49,7 @@ server.listen(PORT, '127.0.0.1', async () => {
     if (ok) pass++;
     console.log((ok ? 'PASS' : 'FAIL').padEnd(5), String(r.status).padEnd(4), '(want ' + want + ')', name, r.cors ? '  <-- CORS header leaked: ' + r.cors : '');
   }
-  console.log(`\n${pass}/${cases.length} passed; events delivered to renderer: ${received.length} (expected 2)`);
+  console.log(`\n${pass}/${cases.length} passed; events delivered to renderer: ${received.length} (expected 3)`);
   server.close();
-  if (pass !== cases.length || received.length !== 2) process.exit(1);
+  if (pass !== cases.length || received.length !== 3) process.exit(1);
 });

@@ -20,17 +20,21 @@ BUILD   := build-host
 CFLAGS  := -std=gnu11 -g -O1 -Wall -Wextra -Wno-unused-parameter -Wshadow \
            -Ifirmware/include -Iinclude -Itests -Ifirmware/tests \
            -DSCAN_NO_HW -DLEDS_NO_HW -DSTORAGE_NO_HW -DHID_DEV_NO_HW \
-           -DUSB_PROTO_NO_HW
+           -DUSB_PROTO_NO_HW -DOLED_NO_HW
 LDFLAGS :=
 
 SRC := \
   src/core/actions.c \
+  src/core/ascii_cmd.c \
   src/core/channel.c \
   src/core/crc.c \
   src/core/dispatch.c \
   src/core/events.c \
   src/core/gesture.c \
+  src/core/oled_playlist.c \
   src/core/protocol.c \
+  src/drivers/oled.c \
+  src/drivers/oled_frames.c \
   src/drivers/scan.c \
   src/lighting/leds.c \
   src/storage/config_defaults.c \
@@ -45,18 +49,23 @@ TEST_SRC := \
   tests/test_scan.c \
   tests/test_config.c \
   tests/test_actions.c \
+  tests/test_ascii_cmd.c \
   tests/test_leds.c \
-  tests/test_protocol.c
+  tests/test_protocol.c \
+  tests/test_oled.c \
+  tests/test_oled_playlist.c
 
 OBJ      := $(addprefix $(BUILD)/,$(SRC:.c=.o))
 TEST_OBJ := $(addprefix $(BUILD)/,$(TEST_SRC:.c=.o))
 BIN      := $(BUILD)/run_tests
+LEDVEC_BIN := $(BUILD)/dump_leds
+LEDVEC_OUT := $(BUILD)/led-vectors.json
 LAYOUT_BIN := $(BUILD)/dump_layout
 LAYOUT_JSON := $(BUILD)/layout.json
 DEFAULTS_BIN := $(BUILD)/dump_defaults
 DEFAULTS_OUT := $(BUILD)/defaults.bin
 
-.PHONY: all test layout defaults hostartifacts clean
+.PHONY: all test layout defaults ledvectors hostartifacts clean
 all: $(BIN)
 
 $(BIN): $(OBJ) $(TEST_OBJ)
@@ -66,6 +75,15 @@ $(BIN): $(OBJ) $(TEST_OBJ)
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(LEDVEC_BIN): $(OBJ) $(BUILD)/tests/dump_leds.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# Scenario dump for the TypeScript port of the LED engine (tests/ledEngine.test.cjs).
+ledvectors: $(LEDVEC_BIN)
+	$(LEDVEC_BIN) > $(LEDVEC_OUT)
+	@echo "wrote $(LEDVEC_OUT)"
 
 test: $(BIN)
 	@./$(BIN)

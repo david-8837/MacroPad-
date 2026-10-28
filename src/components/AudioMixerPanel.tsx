@@ -1,155 +1,155 @@
-import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Mic, MicOff, Music, MessageSquare, Gamepad2, Laptop } from 'lucide-react';
-import { AudioSessionItem } from '../types';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Volume2, VolumeX, Mic, MicOff } from 'lucide-react';
 
-interface AudioMixerPanelProps {
-  onAdjustVolume?: (processName: string, delta: number) => void;
-}
+/**
+ * Master output and microphone, measured on Windows.
+ *
+ * This panel used to seed five plausible-looking sessions — "Spotify Music 60 %",
+ * "Discord Voice 85 %", an "Active Game" at 70 % — and paint a peak meter from the
+ * volume number. None of it was measured: the rows appeared whether or not those
+ * apps were running, and the "peak" was the slider value. It now shows the two
+ * things the bridge can actually read, and says so when it cannot read them.
+ *
+ * Per-app volume still exists, but as a key action: bind a switch to
+ * `audio_session` and `actionExecutor` calls the WASAPI session API directly. That
+ * is why the per-app bridge channels were removed from here but the engine stayed.
+ */
+export const AudioMixerPanel: React.FC = () => {
+  const [masterVolume, setMasterVolume] = useState<number | null>(null);
+  const [masterMuted, setMasterMuted] = useState(false);
+  const [micLevel, setMicLevel] = useState<number | null>(null);
+  const [micMuted, setMicMuted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-export const AudioMixerPanel: React.FC<AudioMixerPanelProps> = ({ onAdjustVolume }) => {
-  const [sessions, setSessions] = useState<AudioSessionItem[]>([
-    { id: 'master', name: 'Master Output', process: 'master', icon: 'Laptop', volume: 75, isMuted: false, peakDb: -6 },
-    { id: 'spotify', name: 'Spotify Music', process: 'spotify.exe', icon: 'Music', volume: 60, isMuted: false, peakDb: -12 },
-    { id: 'discord', name: 'Discord Voice', process: 'discord.exe', icon: 'MessageSquare', volume: 85, isMuted: false, peakDb: -4 },
-    { id: 'game', name: 'Active Game / Window', process: 'focus', icon: 'Gamepad2', volume: 70, isMuted: false, peakDb: -9 },
-    { id: 'mic', name: 'Microphone Input', process: 'mic', icon: 'Mic', volume: 90, isMuted: false, peakDb: -3 },
-  ]);
+  const bridge = typeof window !== 'undefined' ? window.electronAPI : undefined;
+  const hasBridge = Boolean(bridge?.getMasterVolume);
 
   useEffect(() => {
-    if (!window.electronAPI) return;
+    if (!bridge) return;
 
-    window.electronAPI.getMasterVolume?.().then(res => {
-      if (res && res.ok && typeof res.value === 'number') {
-        setSessions(prev => prev.map(s => s.id === 'master' ? { ...s, volume: res.value! } : s));
-      }
-    });
+    bridge.getMasterVolume?.()
+      .then((res) => {
+        if (res.ok && typeof res.value === 'number') setMasterVolume(res.value);
+        else if (!res.ok) setError(res.error || 'Windows did not report a master volume.');
+      })
+      .catch((err) => setError(String(err?.message || err)));
 
-    window.electronAPI.getMasterMute?.().then(res => {
-      if (res && res.ok && typeof res.value === 'boolean') {
-        setSessions(prev => prev.map(s => s.id === 'master' ? { ...s, isMuted: res.value! } : s));
-      }
-    });
+    bridge.getMasterMute?.()
+      .then((res) => { if (res.ok && typeof res.value === 'boolean') setMasterMuted(res.value); })
+      .catch(() => { /* the mute state simply stays unknown */ });
 
-    window.electronAPI.getMic?.().then(res => {
-      if (res && res.ok && res.value) {
-        setSessions(prev => prev.map(s => s.id === 'mic' ? { ...s, volume: res.value!.level, isMuted: res.value!.muted } : s));
-      }
-    });
-  }, []);
+    bridge.getMic?.()
+      .then((res) => {
+        if (res.ok && res.value) {
+          setMicLevel(res.value.level);
+          setMicMuted(res.value.muted);
+        }
+      })
+      .catch(() => { /* no microphone on this machine */ });
+  }, [bridge]);
 
-  const toggleMute = async (id: string) => {
-    const targetSession = sessions.find(s => s.id === id);
-    if (!targetSession) return;
-    const nextMuted = !targetSession.isMuted;
+  const changeMaster = useCallback(async (next: number) => {
+    setMasterVolume(next);
+    await bridge?.setMasterVolume?.(next);
+  }, [bridge]);
 
-    setSessions(prev =>
-      prev.map(s => s.id === id ? { ...s, isMuted: nextMuted } : s)
-    );
+  const changeMic = useCallback(async (next: number) => {
+    setMicLevel(next);
+    await bridge?.setMic?.({ level: next });
+  }, [bridge]);
 
-    if (window.electronAPI) {
-      if (id === 'master') {
-        await window.electronAPI.toggleMasterMute?.();
-      } else if (id === 'mic') {
-        await window.electronAPI.setMic?.({ muted: nextMuted });
-      } else {
-        await window.electronAPI.setProcessMute?.(targetSession.process, nextMuted);
-      }
-    }
+  const toggleMasterMute = async () => {
+    const next = !masterMuted;
+    setMasterMuted(next);
+    await bridge?.toggleMasterMute?.();
   };
 
-  const setVolume = async (id: string, vol: number) => {
-    const targetSession = sessions.find(s => s.id === id);
-    if (!targetSession) return;
-
-    setSessions(prev =>
-      prev.map(s => s.id === id ? { ...s, volume: vol } : s)
-    );
-
-    if (onAdjustVolume) {
-      const delta = vol - targetSession.volume;
-      onAdjustVolume(targetSession.process, delta);
-    }
-
-    if (window.electronAPI) {
-      if (id === 'master') {
-        await window.electronAPI.setMasterVolume?.(vol);
-      } else if (id === 'mic') {
-        await window.electronAPI.setMic?.({ level: vol });
-      } else {
-        await window.electronAPI.setProcessVolume?.(targetSession.process, vol);
-      }
-    }
+  const toggleMicMute = async () => {
+    const next = !micMuted;
+    setMicMuted(next);
+    await bridge?.setMic?.({ muted: next });
   };
+
+  const row = (
+    label: string,
+    device: string,
+    value: number | null,
+    muted: boolean,
+    onVolume: (v: number) => void,
+    onMute: () => void,
+    MuteIcon: React.FC<{ className?: string }>,
+    LevelIcon: React.FC<{ className?: string }>,
+  ) => (
+    <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE] flex items-center gap-3">
+      <button
+        type="button"
+        onClick={onMute}
+        title={muted ? `Unmute ${device}` : `Mute ${device}`}
+        className={`w-8 h-8 flex items-center justify-center border transition-colors ${
+          muted
+            ? 'bg-[#EDECE8] text-[#141414] border-[#C7C7C7]'
+            : 'bg-[#F4F3F0] text-[#444343] border-transparent hover:bg-[#EDECE8]'
+        }`}
+      >
+        {muted ? <MuteIcon className="w-4 h-4" /> : <LevelIcon className="w-4 h-4" />}
+      </button>
+
+      <div className="w-36">
+        <div className="text-xs font-medium text-[#141414] truncate">{label}</div>
+        <div className="text-[9px] font-mono text-[#646464] truncate">{device}</div>
+      </div>
+
+      <div className="flex-1 flex items-center gap-2">
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={value ?? 0}
+          disabled={value === null}
+          onChange={(e) => onVolume(parseInt(e.target.value, 10))}
+          className="w-full accent-[#1351AA] cursor-pointer h-1.5 bg-[#EDECE8] appearance-none disabled:cursor-not-allowed"
+        />
+        <span className="w-12 text-right font-mono text-xs text-[#444343]">
+          {value === null ? '--' : muted ? 'MUTE' : `${value}%`}
+        </span>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="glass-panel p-4 rounded-2xl border border-white/10 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="panel p-4 border border-[#E3E2DE] space-y-4">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-white text-sm flex items-center gap-2">
-            <Volume2 className="w-4 h-4 text-[#FF5E00]" />
-            WASAPI Per-Process Audio Mixer
+          <h3 className="font-semibold text-[#141414] text-sm flex items-center gap-2">
+            <Volume2 className="w-4 h-4 text-[#1351AA]" />
+            Windows Audio
           </h3>
-          <p className="text-[11px] text-white/40">
-            Control discrete application volumes via rotary encoder or macropad switches
+          <p className="text-[11px] text-[#646464] leading-relaxed">
+            Master output and microphone, read from Windows. Per-app volume is a key
+            action — bind a switch to <span className="font-mono">AUDIO SESSION</span>.
           </p>
         </div>
-        <span className="text-[10px] font-mono text-[#38EF7D] bg-[#38EF7D]/10 px-2 py-0.5 rounded-full border border-[#38EF7D]/20">
-          WASAPI ACTIVE
+        <span className={`text-[10px] font-mono px-2 py-0.5 border flex-none ${
+          hasBridge && !error
+            ? 'text-[#1351AA] bg-[#EDECE8] border-[#C7C7C7]'
+            : 'text-[#646464] bg-[#F4F3F0] border-[#C7C7C7]'
+        }`}>
+          {hasBridge && !error ? 'WASAPI' : 'UNAVAILABLE'}
         </span>
       </div>
 
-      {/* Audio Sliders Grid */}
-      <div className="space-y-3">
-        {sessions.map(s => (
-          <div
-            key={s.id}
-            className="p-2.5 rounded-xl bg-[#0F1218] border border-white/5 flex items-center gap-3 hover:border-white/10 transition-colors"
-          >
-            {/* Mute Button */}
-            <button
-              onClick={() => toggleMute(s.id)}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                s.isMuted
-                  ? 'bg-red-500/20 text-red-400 border border-red-500/40'
-                  : 'bg-white/5 text-white/80 hover:bg-white/10'
-              }`}
-            >
-              {s.isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-            </button>
-
-            {/* Label & Process info */}
-            <div className="w-36">
-              <div className="text-xs font-medium text-white truncate">{s.name}</div>
-              <div className="text-[9px] font-mono text-white/40 truncate">{s.process}</div>
-            </div>
-
-            {/* Volume Slider */}
-            <div className="flex-1 flex items-center gap-2">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={s.isMuted ? 0 : s.volume}
-                onChange={(e) => setVolume(s.id, parseInt(e.target.value))}
-                className="w-full accent-[#FF5E00] cursor-pointer h-1.5 bg-white/10 rounded-lg appearance-none"
-              />
-              <span className="w-8 text-right font-mono text-xs text-white/70">
-                {s.isMuted ? 'MUTE' : `${s.volume}%`}
-              </span>
-            </div>
-
-            {/* Live Peak Meter Bar */}
-            <div className="w-8 h-4 bg-black/60 rounded flex items-end p-0.5 border border-white/5">
-              <div
-                className={`w-full rounded-xs transition-all duration-150 ${
-                  s.isMuted ? 'h-0' : s.volume > 85 ? 'bg-red-500' : 'bg-[#38EF7D]'
-                }`}
-                style={{ height: s.isMuted ? '0%' : `${Math.min(100, (s.volume / 100) * 100)}%` }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
+      {hasBridge && !error ? (
+        <div className="space-y-2">
+          {row('Master Output', 'default playback device', masterVolume, masterMuted, changeMaster, toggleMasterMute, VolumeX, Volume2)}
+          {row('Microphone', 'default capture device', micLevel, micMuted, changeMic, toggleMicMute, MicOff, Mic)}
+        </div>
+      ) : (
+        <div className="text-[11px] font-mono text-[#646464] leading-relaxed border border-[#E3E2DE] bg-[#F4F3F0] p-3">
+          {error
+            ? `Windows did not answer: ${error}`
+            : 'No audio bridge. These values come from Windows through PowerShell, so they exist only in the desktop app — the browser preview has nothing to read. Per-app volume keys still work on the device.'}
+        </div>
+      )}
     </div>
   );
 };

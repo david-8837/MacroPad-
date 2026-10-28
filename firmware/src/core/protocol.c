@@ -72,6 +72,10 @@ bool frame_build_ack(frame_out_t *out, uint8_t cmd, uint8_t status) {
 }
 
 /* ---- frame parse -------------------------------------------------------- */
+bool protocol_parser_hunting(const protocol_parser_t *p) {
+    return p && p->state == PS_HUNT_SOF0;
+}
+
 void protocol_parser_init(protocol_parser_t *p) {
     if (!p) return;
     memset(p, 0, sizeof(*p));

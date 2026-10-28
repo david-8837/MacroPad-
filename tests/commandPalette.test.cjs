@@ -44,12 +44,10 @@ function runTests() {
     { id: 'page-apps', group: 'Page', label: 'Application Library', where: 'Detected software', also: 'exe launch' },
     { id: 'act-diag', group: 'Action', label: 'Open Action History & Diagnostics', where: 'Telemetry', also: 'logs debug' },
     { id: 'act-firmware', group: 'Action', label: 'RP2040 Firmware Flasher (.uf2)', where: 'Bootloader', also: 'bootsel flash rpi-rp2' },
-    { id: 'profile-davinci', group: 'Profile', label: 'Switch Profile: DaVinci Resolve', where: 'Video editing', also: 'resolve cut color' },
-    { id: 'profile-obs', group: 'Profile', label: 'Switch Profile: OBS Studio', where: 'Streaming', also: 'broadcast twitch' },
+    { id: 'layer-edit', group: 'Layer', label: 'Switch to Edit Layer', where: 'Current active layer', also: 'layer 1 channel edit' },
+    { id: 'layer-color', group: 'Layer', label: 'Switch to Color Layer', where: 'Channel #2', also: 'layer 2 channel color' },
     { id: 'audio-mute', group: 'Audio', label: 'Audio: Toggle Master Mute', where: 'CoreAudio', also: 'sound silence volume' },
     { id: 'audio-vol-up', group: 'Audio', label: 'Audio: Master Volume Up (+5%)', where: 'CoreAudio', also: 'louder sound' },
-    { id: 'obs-stream', group: 'OBS', label: 'OBS: Toggle Stream (Start / Stop)', where: 'WebSocket v5', also: 'live broadcast twitch' },
-    { id: 'obs-record', group: 'OBS', label: 'OBS: Toggle Recording (Start / Stop)', where: 'WebSocket v5', also: 'capture video' },
     { id: 'sc-snip', group: 'Shortcut', label: 'Snipping Tool (Screen Capture)', where: 'Win+Shift+S', also: 'screenshot screenshot' },
   ];
 
@@ -76,14 +74,14 @@ function runTests() {
   console.log('✓ Keyword / alias matching correctly resolves target command');
 
   // 5. Multi-word out-of-order search
-  const multiWordRes = rank(mockItems, 'stream obs');
+  const multiWordRes = rank(mockItems, 'silence sound');
   assert.ok(multiWordRes.length > 0);
-  assert.ok(multiWordRes.some((x) => x.id === 'obs-stream'));
+  assert.ok(multiWordRes.some((x) => x.id === 'audio-mute'));
   console.log('✓ Multi-word query matches items regardless of token order');
 
   // 6. Case insensitivity
-  const caseRes = rank(mockItems, 'davinci resolve');
-  assert.strictEqual(caseRes[0].id, 'profile-davinci');
+  const caseRes = rank(mockItems, 'COLOR LAYER');
+  assert.strictEqual(caseRes[0].id, 'layer-color');
   console.log('✓ Search query matching is completely case-insensitive');
 
   // 7. Non-matching query returns empty array

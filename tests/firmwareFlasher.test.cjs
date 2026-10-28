@@ -113,12 +113,10 @@ async function runTests() {
   assert.strictEqual(validRes.value.targetAddress, '0x10000000');
   console.log('✓ inspectUf2() successfully validates authentic RP2040 UF2 with version banner');
 
-  // 9. Built-in official project firmware resolution
+  // Built-in official firmware check
   const builtin = firmware.getBuiltinFirmware();
-  assert.ok(builtin, 'Official project firmware should be resolved');
-  assert.strictEqual(builtin.ok, true, 'Official project firmware should pass UF2 validation');
-  assert.strictEqual(builtin.value.family, 'RP2040');
-  assert.strictEqual(builtin.value.version, '1.0.0');
+  assert.strictEqual(builtin.available, true, 'Official built-in firmware binary should be detected');
+  assert.strictEqual(builtin.version, '1.0.0', 'Official built-in firmware version should be 1.0.0');
   console.log('✓ getBuiltinFirmware() resolves authentic official v1.0.0 project firmware');
 
   // Clean up

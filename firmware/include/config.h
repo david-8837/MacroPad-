@@ -15,13 +15,18 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #include "actions.h"
 #include "board.h"
 #include "magic.h"
 
 /* ---- layout constants (part of the wire protocol — do not change lightly) -- */
-#define CFG_CHANNEL_COUNT 3
+/* Four pages, numbered 0-3. The app has always called these "layers"; the wire
+ * calls them channels. They are the same thing, and there are four of them, so
+ * the two ends agree instead of the app drawing a fourth page the device cannot
+ * hold. */
+#define CFG_CHANNEL_COUNT 4
 #define CFG_KEY_COUNT BOARD_KEY_COUNT /* 9 */
 #define CFG_LED_COUNT BOARD_LED_COUNT /* 9, one per key */
 #define CFG_TEXT_MAX ACTION_TEXT_MAX  /* 32 bytes, NUL included */
@@ -105,7 +110,8 @@ typedef struct __attribute__((packed)) {
      * clean press+release with no rotation in between; knob_hold fires once on
      * crossing the threshold. knob_hold is RESERVED for channel switching in
      * the default config, but it is still a full action slot so you can
-     * re-point it (e.g. to ACTION_TYPE_LAYER_HOLD) if you ever want a 4th page. */
+     * re-point it (e.g. to ACTION_TYPE_LAYER_HOLD) if you would rather have a
+     * dedicated key for paging. */
     cfg_action_t knob_cw;
     cfg_action_t knob_ccw;
     cfg_action_t knob_tap;
@@ -127,10 +133,21 @@ typedef struct __attribute__((packed)) {
     uint8_t boot_channel;     /* channel selected at power-on */
     uint8_t led_invert_output; /* mirror of the board define, runtime-settable */
     uint8_t usb_report_events; /* 1 = stream key/gesture events to the host */
-    uint8_t _pad[3];           /* 8 + 5 + 3 = 16 */
+
+    /* OLED rotation. The panel has no touchscreen, so these two bytes are the
+     * whole interaction model: how long a screen stays up, and which screens are
+     * in the rotation. Both fit in the three bytes of padding this struct
+     * already had, so the config wire format and CONFIG_FORMAT_VERSION do not
+     * change and old saved configs stay valid. */
+    uint8_t oled_auto_cycle_s; /* 0 = do not auto-advance; 3..255 = seconds   */
+    uint16_t oled_playlist;    /* bit i = screen i in rotation; 0 = all of them */
 } cfg_global_t; /* 16 bytes */
 
 _Static_assert(sizeof(cfg_global_t) == 16, "cfg_global_t must stay 16 bytes on the wire");
+/* The two OLED fields took the old `_pad[3]`, so the size did not move. Pin the
+ * offsets anyway: the host codec and the generated TS both hard-code them. */
+_Static_assert(offsetof(cfg_global_t, oled_auto_cycle_s) == 13, "oled_auto_cycle_s offset moved");
+_Static_assert(offsetof(cfg_global_t, oled_playlist) == 14, "oled_playlist offset moved");
 
 /* The whole blob. Header first so a reader can reject an incompatible file
  * before touching the payload. */
@@ -143,7 +160,8 @@ typedef struct __attribute__((packed)) {
     uint32_t crc32;    /* over every byte above this field */
 } cfg_blob_t;
 
-_Static_assert(sizeof(cfg_blob_t) == 8 + 16 + (3 * 560) + 4, "cfg_blob_t layout changed");
+_Static_assert(sizeof(cfg_blob_t) == 8 + 16 + (CFG_CHANNEL_COUNT * 560) + 4, "cfg_blob_t layout changed");
+_Static_assert(CFG_CHANNEL_COUNT == 4, "four layers, numbered 0-3");
 
 /* Offset of the CRC inside the blob — the host needs it too. */
 #define CFG_CRC_OFFSET (sizeof(cfg_blob_t) - 4)

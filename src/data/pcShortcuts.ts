@@ -1455,20 +1455,4 @@ export const PC_SHORTCUTS: PCShortcut[] = [
     appName: 'After Effects',
     keys: ['Ctrl', 'Shift', 'D'],
   },
-  {
-    id: 'obs-stream',
-    name: 'OBS Toggle Streaming',
-    description: 'Start or stop live stream broadcast in OBS Studio',
-    category: 'creative',
-    appName: 'OBS Studio',
-    keys: ['Ctrl', 'Shift', 'F1'],
-  },
-  {
-    id: 'obs-record',
-    name: 'OBS Toggle Recording',
-    description: 'Start or stop local video recording in OBS Studio',
-    category: 'creative',
-    appName: 'OBS Studio',
-    keys: ['Ctrl', 'Shift', 'F2'],
-  },
 ];

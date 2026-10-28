@@ -27,9 +27,16 @@ release
 
 # Firmware builds & Pico SDK
 firmware/build/
+firmware/build-host/
 pico-sdk/
 *.uf2
 !firmware/kadowaz_deck_rp2040_v1.0.0.uf2
 *.elf
 *.hex
 __pycache__/
+
+# Generated build scratch
+.tmp/
+
+# Browser-check screenshots
+checks/artifacts/

@@ -181,6 +181,36 @@
 #define BOARD_CONFIG_SECTOR_B_OFFSET (BOARD_FLASH_SIZE_BYTES - 0x1000u)
 #define BOARD_CONFIG_SECTOR_SIZE 0x1000u
 
+/* ---- OLED frame region --------------------------------------------------- */
+/* Baked animation frames are `const`, so they live in flash and are read
+ * straight through the XIP cache — no RAM cost per mode, which is why RAM (264
+ * kB) is not what limits how many screens the panel can hold. Flash is.
+ *
+ * The region sits directly below the config sectors so that a firmware reflash
+ * cannot touch saved frames and a frame write cannot touch saved config. It
+ * starts on a 4 KiB erase-sector boundary and its length is an exact multiple of
+ * the 512 B frame, so no single frame straddles the sector that holds config.
+ *
+ *   app image   0x00000000 .. 0x001DFFFF  (1 965 824 B = 1.87 MiB available)
+ *   frames      0x001E0000 .. 0x001FDFFF  (122 880 B = 120 KiB = 240 frames)
+ *   config A/B  0x001FE000 .. 0x001FFFFF  (8 KiB)
+ *
+ * This is the number src/oled/capacity.ts derives and the exporter enforces;
+ * tools/check_flash_budget.py checks the built image stays below 0x1E0000. */
+#define BOARD_OLED_FRAME_REGION_OFFSET 0x1E0000u
+#define BOARD_OLED_FRAME_REGION_BYTES                                                          \
+    (BOARD_CONFIG_SECTOR_A_OFFSET - BOARD_OLED_FRAME_REGION_OFFSET) /* 122 880 = 120 KiB */
+#define BOARD_OLED_FRAME_BYTES 512u                                     /* 128 x 32 / 8      */
+#define BOARD_OLED_FRAME_SLOTS (BOARD_OLED_FRAME_REGION_BYTES / BOARD_OLED_FRAME_BYTES) /* 240 */
+
+_Static_assert(BOARD_OLED_FRAME_REGION_OFFSET % BOARD_CONFIG_SECTOR_SIZE == 0,
+               "frame region must start on an erase-sector boundary");
+_Static_assert(BOARD_OLED_FRAME_REGION_BYTES % BOARD_OLED_FRAME_BYTES == 0,
+               "frame region must hold a whole number of frames");
+_Static_assert(BOARD_OLED_FRAME_REGION_OFFSET + BOARD_OLED_FRAME_REGION_BYTES ==
+                   BOARD_CONFIG_SECTOR_A_OFFSET,
+               "frame region must end where the config sectors begin");
+
 /* ---- CPU ---- */
 /* 133 MHz is the RP2040 maximum and the SDK default. Stated explicitly because
  * the PIO clock divider in leds.c is computed from clock_get_hz(), and a silent

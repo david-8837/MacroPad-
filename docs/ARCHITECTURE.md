@@ -47,7 +47,7 @@ allowed to know.** Everything else follows.
 
 The payoff is that `gesture.c`, `actions.c`, `leds.c` and `config_store.c` compile
 and run on a PC with gcc and no SDK. That is not a purity exercise: it is why
-946 assertions run in 0.3 s instead of requiring a board, a cable, and a human
+1389 assertions run in 0.3 s instead of requiring a board, a cable, and a human
 pressing keys.
 
 ## Two seams make this work
@@ -211,6 +211,34 @@ three different fixes and the app cannot tell them apart any other way. Bytes th
 never formed a frame are dropped silently while the parser hunts for `A5 5A`:
 replying to garbage would let one line glitch generate a flood of error frames.
 
+### Which paths the app actually uses
+
+The CDC port speaks the binary MPAD3 frame protocol, and the app now uses it for
+every direction except the OLED settings:
+
+| What | Frames | Code |
+| :--- | :--- | :--- |
+| Upload the deck | `GET_CONFIG` (one per chunk) → `SET_CONFIG` ×9 → `COMMIT` | `App.handleSyncEEPROM` → `hardwareBridge.uploadDeck` → `src/utils/deckToConfig.ts` |
+| Lighting | `GET_LIGHTING`, `PREVIEW_LIGHTING`, `SET_LIGHTING`, `LED_TEST` | `ViaLightingPanel` → `Mpad3Link` |
+| Physical input | unsolicited `KEY_EVENT` (0xC0) | `Mpad3Link.dispatch` → `hardwareBridge.handleLinkEvent` → `notifyInput` / `notifyChannel` |
+| OLED settings | ASCII lines: `OLED:NEXT`, `OLED:MODE:<n>`, `OLED:AUTO:<s>`, `OLED:PL:<mask>`, `OLED:CH:<n>` | `firmware/src/core/ascii_cmd.c` |
+
+Two paths used to exist and no longer do:
+
+- **`SYNC_KEYMAP`** — a JSON object written straight to the serial port. Nothing on
+  the device parses JSON, so it "succeeded" whenever the port accepted the bytes
+  and changed nothing on the pad. Upload is now a real config write, and the number
+  it reports is what the pad acknowledged with `COMMIT_ACK`.
+- **Serial text events (`KEY:0:DOWN`, `ENV:CW`, `CHANNEL:2`)** — the app subscribed
+  to lines this firmware never sends, so a physical key press never reached the
+  editor. Those notifications now come from `KEY_EVENT` frames. The line parser is
+  kept only because `ascii_cmd.c` still answers the `OLED:` family.
+
+Not every binding can be uploaded, and the ones that cannot are named rather than
+dropped: an app launcher, a WASAPI volume move, a MIDI note or a raw VIA keycode
+runs on the PC, not on an RP2040. A shortcut like Ctrl+C does fit — one
+`cfg_action_t` with the HID modifier mask in the high byte of `code`.
+
 ## Scheduling
 
 Superloop, no RTOS. Five things to do, one core, and an RTOS would add a scheduler,
@@ -247,9 +275,12 @@ would need a C parser or a template engine. Instead:
   test vectors (`"123456789"` → `0x29B1` and `0xCBF43926`). Two independent
   implementations agreeing is evidence; one agreeing with itself is not.
 - `make -C firmware -f Makefile.host defaults` dumps the firmware's factory config
-  as 1708 raw bytes, and the JS builds its own and they are compared **byte for
+  as 2268 raw bytes, and the JS builds its own and they are compared **byte for
   byte**, with a `describeOffset()` helper that names the field in the failure
   message.
+- Neither dump is committed: `firmware/build-host/` is build output, so
+  `npm test` starts with `node scripts/host-artifacts.mjs`, which runs
+  `make -C firmware -f Makefile.host hostartifacts` when either file is missing.
 
 That last one is the strongest check in the project. It catches the case where both
 sides are individually self-consistent and jointly wrong — which is the case that
@@ -320,6 +351,22 @@ What would close the remaining gap properly is hardware-in-the-loop: flash the b
 this project — the protocol already has a command whose only purpose is to put known
 bytes on known LEDs — but it needs a board on a runner, which this repository does
 not assume.
+
+### The desktop side's Windows calls
+
+The same honesty applies to the Electron half. Everything that talks to Windows —
+`typeperf`, the GPU counters, the ACPI thermal zone, the media session (SMTC), the
+WASAPI interop in `audio.cs` — is a `powershell.exe` call, and none of it can run on
+a Linux runner or in this container.
+
+The split is deliberate: **the parsing is pure and tested, the call is not.**
+`tests/media.test.cjs` feeds `parseNowPlaying()` the payload shapes Windows actually
+returns (ticks, `hh:mm:ss`, ISO timestamps, `PlaybackStatus` as both enum name and
+number) and checks the extrapolation, the 5 s drift cap and the empty-session case;
+`tests/systemMetrics.test.cjs` checks that an unmeasured value is `null` and that a
+measured one names its source. The PowerShell invocation itself is only exercised on
+a Windows machine, which is why `audioControl` skips rather than fails elsewhere and
+why the drawer prints `--` instead of a number when the bridge is absent.
 
 ## Bugs the tests caught while this was being written
 

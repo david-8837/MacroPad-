@@ -197,6 +197,44 @@ static void test_sticky_toggles_on_second_press(void) {
     ASSERT_EQ(R[Rn - 2].mods, 0);
 }
 
+static void test_keycode_carries_modifiers_in_the_high_byte(void) {
+    g_current = __func__;
+    reset_recording();
+    /* Ctrl+C in one slot: code = (MOD_LCTL << 8) | HID_C. This is how the app
+     * uploads every shortcut that is not a bare key. */
+    action_t a = mk(ACTION_TYPE_KEYCODE, 0, (uint16_t)((MOD_LCTL << 8) | HID_C));
+    ASSERT(action_fire(&a, true));
+    ASSERT_EQ(Rn, 2);
+    ASSERT_EQ(R[0].keys[0], HID_C);
+    ASSERT_EQ(R[0].mods, MOD_LCTL); /* the modifier rides in the report */
+    ASSERT_EQ(R[1].keys[0], 0);
+    ASSERT_EQ(R[1].mods, 0);         /* and is released with the key */
+
+    /* A plain keycode still has a zero high byte, so nothing changes for the
+     * bindings that were already on the pad. */
+    action_t plain = mk(ACTION_TYPE_KEYCODE, 0, HID_A);
+    ASSERT(action_fire(&plain, true));
+    ASSERT_EQ(R[Rn - 2].keys[0], HID_A);
+    ASSERT_EQ(R[Rn - 2].mods, 0);
+
+    /* Shift+Ctrl+S: two modifiers, one key. */
+    reset_recording();
+    action_t three = mk(ACTION_TYPE_KEYCODE, 0,
+                        (uint16_t)(((MOD_LSFT | MOD_LCTL) << 8) | HID_S));
+    ASSERT(action_fire(&three, true));
+    ASSERT_EQ(R[0].mods, (uint8_t)(MOD_LSFT | MOD_LCTL));
+    ASSERT_EQ(R[0].keys[0], HID_S);
+
+    /* Hold-down keeps the modifier on the down half and clears it on release. */
+    reset_recording();
+    action_t held = mk(ACTION_TYPE_KEYCODE, ACTION_FLAG_HOLD_DOWN,
+                       (uint16_t)((MOD_LALT << 8) | HID_TAB));
+    ASSERT(action_fire(&held, true));
+    ASSERT_EQ(R[0].mods, MOD_LALT);
+    ASSERT(action_fire(&held, false));
+    ASSERT_EQ(R[Rn - 1].mods, 0);
+}
+
 static void test_media_action_uses_the_consumer_report(void) {
     g_current = __func__;
     reset_recording();
@@ -328,6 +366,8 @@ static void test_action_for_gesture_reads_the_active_channel(void) {
     m->channels[1].keys[1].code = HID_B;
     m->channels[2].keys[1].type = ACTION_TYPE_KEYCODE;
     m->channels[2].keys[1].code = HID_C;
+    m->channels[3].keys[1].type = ACTION_TYPE_KEYCODE;
+    m->channels[3].keys[1].code = HID_D;
     config_reseal(m);
 
     channel_set(0);
@@ -341,12 +381,16 @@ static void test_action_for_gesture_reads_the_active_channel(void) {
     ASSERT_EQ(channel_active(), 2);
     ASSERT_EQ(action_for_gesture(GESTURE_TAP, 1)->code, HID_C);
 
-    channel_next(); /* wraps */
+    channel_next();
+    ASSERT_EQ(channel_active(), 3);
+    ASSERT_EQ(action_for_gesture(GESTURE_TAP, 1)->code, HID_D);
+
+    channel_next(); /* wraps at four */
     ASSERT_EQ(channel_active(), 0);
     ASSERT_EQ(action_for_gesture(GESTURE_TAP, 1)->code, HID_A);
 
-    channel_prev();
-    ASSERT_EQ(channel_active(), 2);
+    channel_prev(); /* and wraps backwards */
+    ASSERT_EQ(channel_active(), 3);
 }
 
 static void test_knob_gestures_map_to_the_right_slots(void) {
@@ -409,6 +453,7 @@ static void test_events_disabled_push_nothing(void) {
 const test_case_t actions_tests[] = {
     {"empty_action_does_nothing", test_empty_action_does_nothing},
     {"keycode_tap_sends_down_then_up", test_keycode_tap_sends_down_then_up},
+    {"keycode_carries_modifiers_in_the_high_byte", test_keycode_carries_modifiers_in_the_high_byte},
     {"hold_down_flag_defers_release", test_hold_down_flag_defers_release},
     {"on_release_flag_ignores_the_press", test_on_release_flag_ignores_the_press},
     {"sticky_toggles_on_second_press", test_sticky_toggles_on_second_press},

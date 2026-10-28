@@ -7,32 +7,73 @@ export default {
   theme: {
     extend: {
       colors: {
+        /* ---- Reality-First system (see /DESIGN.md) ---- */
+        cream: '#E3E2DE',
+        ink: '#141414',
+        blue: '#1351AA',
+        gray: '#444343',
+        muted: '#7A7A7A',
+        line: '#C7C7C7',
+        surface: '#FFFFFF',
+        well: '#EDECE8',
+        shell: '#EFEEEA',
+
+        /* Legacy aliases kept so older call sites still resolve;
+           every one of them now renders inside the monochrome system. */
         kadowaz: {
-          orange: '#FF5E00',
-          orangeDark: '#D44C00',
-          orangeGlow: 'rgba(255, 94, 0, 0.4)',
-          metalDark: '#121316',
-          metalMid: '#1C1E24',
-          metalLight: '#262A33',
-          keyNavy: '#1E2430',
-          keyNavyHover: '#293242',
-          keyNavyActive: '#171B24',
-          oledBg: '#090A0C',
-          oledCyan: '#00F0FF',
-          oledAmber: '#FFB800',
-        }
+          orange: '#1351AA',
+          orangeDark: '#141414',
+          orangeGlow: 'transparent',
+          metalDark: '#E3E2DE',
+          metalMid: '#EDECE8',
+          metalLight: '#FFFFFF',
+          keyNavy: '#FFFFFF',
+          keyNavyHover: '#EDECE8',
+          keyNavyActive: '#E3E2DE',
+          oledBg: '#141414',
+          oledCyan: '#1351AA',
+          oledAmber: '#444343',
+        },
       },
       fontFamily: {
-        mono: ['"JetBrains Mono"', 'Menlo', 'Consolas', 'monospace'],
-        sans: ['"Inter"', 'system-ui', 'sans-serif'],
+        sans: ['"General Sans"', '"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
+        display: ['"Switzer"', '"General Sans"', '"Helvetica Neue"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
+      letterSpacing: {
+        label: '0.2em',
+        tighter2: '-0.03em',
+        display: '-0.04em',
+      },
+      borderRadius: {
+        none: '0px',
+        DEFAULT: '0px',
+      },
+      /* Flat system: no shadows exist. Names kept for source compatibility. */
       boxShadow: {
-        'chassis': '0 20px 50px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-        'key-raised': '0 6px 0 #0D1017, 0 10px 15px rgba(0,0,0,0.5)',
-        'key-pressed': '0 1px 0 #0D1017, 0 2px 5px rgba(0,0,0,0.5)',
-        'orange-glow': '0 0 25px rgba(255, 94, 0, 0.45)',
-        'knob': '0 8px 20px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.25), inset 0 -2px 4px rgba(0, 0, 0, 0.5)',
-      }
+        none: 'none',
+        chassis: 'none',
+        'key-raised': 'none',
+        'key-pressed': 'none',
+        'orange-glow': 'none',
+        knob: 'none',
+        xs: 'none',
+        sm: 'none',
+        md: 'none',
+        lg: 'none',
+        xl: 'none',
+        '2xl': 'none',
+        inner: 'none',
+      },
+      keyframes: {
+        'fade-in': {
+          '0%': { opacity: '1' },
+          '100%': { opacity: '1' },
+        },
+      },
+      animation: {
+        'in': 'fade-in 0.001ms linear',
+      },
     },
   },
   plugins: [],

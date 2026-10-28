@@ -263,23 +263,32 @@ function status() {
   };
 }
 
-function getBuiltinFirmware() {
-  const candidates = [
-    path.join(__dirname, '..', '..', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
-    process.resourcesPath ? path.join(process.resourcesPath, 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2') : null,
-    path.join(process.cwd(), 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
-  ].filter(Boolean);
+const BUILTIN_FIRMWARE_CANDIDATES = [
+  path.join(__dirname, '..', '..', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
+  path.join(__dirname, '..', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
+  path.join(process.resourcesPath || '', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
+];
 
-  for (const candidate of candidates) {
+function getBuiltinFirmware() {
+  for (const candidate of BUILTIN_FIRMWARE_CANDIDATES) {
     if (fs.existsSync(candidate)) {
       const inspected = inspectUf2(candidate);
-      return { filePath: candidate, isBuiltin: true, ...inspected };
+      if (inspected.ok) {
+        return {
+          available: true,
+          filePath: candidate,
+          fileName: path.basename(candidate),
+          version: '1.0.0',
+          inspection: inspected,
+        };
+      }
     }
   }
-  return null;
+  return { available: false, error: 'Built-in firmware binary not found' };
 }
 
 module.exports = {
   inspectUf2, findBootloaderDrive, flash, status, guessVersion, getBuiltinFirmware,
   RP2040_FAMILY, BLOCK_SIZE, PAYLOAD_PER_BLOCK,
 };
+

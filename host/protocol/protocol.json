@@ -1,11 +1,11 @@
 {
   "$comment": [
-    "mpad3 wire protocol — the single source of truth shared by firmware and host.",
+    "mpad3 wire protocol \u2014 the single source of truth shared by firmware and host.",
     "",
     "This file describes the SAME bytes that firmware/include/config.h and",
     "firmware/include/magic.h describe in C. It is not generated from them and",
     "they are not generated from it, because a generator that reads C structs",
-    "needs a C parser and a generator that emits C needs a template engine —",
+    "needs a C parser and a generator that emits C needs a template engine \u2014",
     "both are more machinery than this project should carry.",
     "",
     "Instead the two are kept honest by a test on each side:",
@@ -371,7 +371,7 @@
           "type": "bytes",
           "offset": 0,
           "length": 27,
-          "note": "9 LEDs x 3 bytes, in R,G,B order (NOT the strip's GRB — the firmware converts)"
+          "note": "9 LEDs x 3 bytes, in R,G,B order (NOT the strip's GRB \u2014 the firmware converts)"
         }
       ]
     },
@@ -435,7 +435,7 @@
           "name": "code",
           "type": "u16",
           "offset": 2,
-          "note": "HID usage, media usage, channel index, LED mode, or brightness — meaning depends on type"
+          "note": "KEYCODE: (modifiers << 8) | HID usage, so one slot sends Ctrl+C; MEDIA: consumer usage; CHANNEL: channel index; LED_MODE: ledMode; LED_BRIGHT: 0-255. Meaning depends on type."
         },
         {
           "name": "text",
@@ -541,7 +541,7 @@
           "name": "knobHold",
           "type": "action",
           "offset": 480,
-          "note": "defaults to CHANNEL_NEXT, i.e. the page switch. It is a normal slot, so you CAN repoint it — and then you lose the only hardware way to change page."
+          "note": "defaults to CHANNEL_NEXT, i.e. the page switch. It is a normal slot, so you CAN repoint it \u2014 and then you lose the only hardware way to change page."
         },
         {
           "name": "lighting",
@@ -612,15 +612,23 @@
           "default": 1
         },
         {
-          "name": "pad",
-          "type": "bytes",
+          "name": "oledAutoCycleS",
+          "type": "u8",
           "offset": 13,
-          "length": 3
+          "default": 30,
+          "note": "seconds each screen stays up before the panel rotates; 0 disables rotation. The panel has no touchscreen, so this timer is the default way it changes."
+        },
+        {
+          "name": "oledPlaylist",
+          "type": "u16",
+          "offset": 14,
+          "default": 0,
+          "note": "bit i = screen i in the rotation, in OLED_MODES order; 0 means every screen, which is what a config saved before this field existed reads as."
         }
       ]
     },
     "config": {
-      "size": 1708,
+      "size": 2268,
       "note": "The whole saved configuration. This is what SET_CONFIG streams and what lives in flash.",
       "fields": [
         {
@@ -638,7 +646,7 @@
           "name": "length",
           "type": "u16",
           "offset": 6,
-          "value": 1708
+          "value": 2268
         },
         {
           "name": "global",
@@ -647,7 +655,7 @@
         },
         {
           "name": "channels",
-          "type": "channel[3]",
+          "type": "channel[4]",
           "offset": 24
         },
         {
@@ -713,7 +721,8 @@
       "9": "LAYER_HOLD",
       "10": "WEBHOOK",
       "11": "BOOTLOADER",
-      "12": "RESET_CONFIG"
+      "12": "RESET_CONFIG",
+      "13": "OLED_NEXT"
     },
     "actionFlag": {
       "0x01": "HOLD_DOWN",

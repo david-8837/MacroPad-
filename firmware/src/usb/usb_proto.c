@@ -21,6 +21,7 @@
 #include "dispatch.h"
 #include "events.h"
 #include "hid_dev.h"
+#include "ascii_cmd.h"
 #include "protocol.h"
 #include "leds.h"
 #include "storage.h"
@@ -325,6 +326,14 @@ void usb_proto_pump(uint32_t now_ms) {
         uint8_t b;
         uint32_t n = tud_cdc_n_read(CDC_INSTANCE, &b, 1);
         if (n == 0) break;
+        /* Two protocols, one wire. While no frame is in flight, printable bytes
+         * belong to a text command line (OLED:NEXT, OLED:MODE:3, ...); a binary
+         * frame can never start with one, because SOF0 is 0xA5. Once the parser
+         * has a partial frame, every byte goes to it. */
+        if (protocol_parser_hunting(&s_parser) && b >= 0x20 && b != 0x7f) {
+            (void)ascii_cmd_feed(b);
+            continue;
+        }
         parse_result_t r = protocol_parser_push(&s_parser, b, &f);
         if (r == PARSE_OK) {
             dispatch_command(&f);

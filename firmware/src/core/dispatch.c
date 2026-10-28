@@ -13,6 +13,7 @@
 #include "channel.h"
 #include "config.h"
 #include "events.h"
+#include "oled_playlist.h"
 #include "storage.h"
 
 static uint16_t s_hit_mask;
@@ -83,6 +84,11 @@ static bool handle_system_action(const action_t *a, bool press) {
         } else {
             channel_prev();
         }
+        return true;
+    case ACTION_TYPE_OLED_NEXT:
+        /* Manual switch, for people who would rather not wait for the timer.
+         * code -1 (0xFF) steps backwards; anything else steps forwards. */
+        if (press) (void)oled_playlist_advance((int8_t)a->code);
         return true;
     case ACTION_TYPE_BOOTLOADER:
     case ACTION_TYPE_RESET_CONFIG:

@@ -43,23 +43,15 @@ const ROUTES = {
     if (b.line1 === undefined && b.line2 === undefined) return 'provide line1 and/or line2';
     return null;
   },
-  '/api/v1/profile': (b) => {
-    if (typeof b.profileId !== 'string' || !b.profileId) return 'profileId must be a non-empty string';
-    if (b.layerId !== undefined && typeof b.layerId !== 'string') return 'layerId must be a string';
-    return null;
-  },
+  // Single-deck build: switching is layer-only, so `layer` is the sole selector.
+  // Layers are 0-based: 0, 1, 2, 3.
   '/api/v1/action': (b) => {
     if (b.channel === undefined && b.layer !== undefined) {
       b.channel = b.layer;
     }
-    const hasChannel = b.channel !== undefined;
-    const hasProfile = b.profileId !== undefined;
-    if (!hasChannel && !hasProfile) return 'provide "layer" (1-3) and/or "profileId"';
-    if (hasChannel && (!Number.isInteger(b.channel) || b.channel < 1 || b.channel > 3)) {
-      return 'layer must be an integer 1-3';
-    }
-    if (hasProfile && (typeof b.profileId !== 'string' || !b.profileId)) {
-      return 'profileId must be a non-empty string';
+    if (b.channel === undefined) return 'provide "layer" (0-3)';
+    if (!Number.isInteger(b.channel) || b.channel < 0 || b.channel > 3) {
+      return 'layer must be an integer 0-3';
     }
     return null;
   },
