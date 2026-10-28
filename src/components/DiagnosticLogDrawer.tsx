@@ -16,6 +16,7 @@ import {
   Network,
   Download,
   X,
+  Zap,
 } from 'lucide-react';
 import type { DiagnosticLogEntry, DiagnosticSelfTestResult } from '../types/electron';
 
@@ -35,6 +36,7 @@ interface DiagnosticLogDrawerProps {
   onClose: () => void;
   actionHistory: ActionHistoryEntry[];
   onClearHistory: () => void;
+  onOpenFirmwareModal?: () => void;
 }
 
 export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
@@ -42,6 +44,7 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
   onClose,
   actionHistory,
   onClearHistory,
+  onOpenFirmwareModal,
 }) => {
   const [activeTab, setActiveTab] = useState<'timeline' | 'health' | 'nativelog'>('timeline');
   const [searchQuery, setSearchQuery] = useState('');
@@ -425,6 +428,30 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
                       <p className="text-xs text-white/60 font-mono mt-1">{selfTestResult.webhook.detail}</p>
                     </div>
                   </div>
+
+                  {/* RP2040 Firmware & Bootloader */}
+                  <div className="p-4 rounded-2xl bg-black/40 border border-white/5 flex items-start gap-4">
+                    <div className="p-2.5 rounded-xl bg-[#FF5E00]/10 text-[#FF5E00] border border-[#FF5E00]/20">
+                      <Zap className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white font-mono">RP2040 FIRMWARE & BOOTLOADER</span>
+                        {onOpenFirmwareModal && (
+                          <button
+                            onClick={onOpenFirmwareModal}
+                            className="px-2.5 py-1 rounded-lg bg-[#FF5E00]/15 hover:bg-[#FF5E00]/25 text-[#FF5E00] border border-[#FF5E00]/30 text-[10px] font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Zap className="w-3 h-3 fill-current" />
+                            Flash Firmware (.uf2)
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/60 font-mono mt-1">
+                        RP2040 mass-storage bootloader (RPI-RP2) detection and safe block-level UF2 validation.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="h-64 flex flex-col items-center justify-center text-white/30 text-xs italic">
@@ -473,3 +500,4 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
     </div>
   );
 };
+

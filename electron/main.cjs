@@ -14,6 +14,7 @@ const { getActiveWindow, subscribe: subscribeWindow } = require('./native/window
 const audio = require('./native/audio.cjs');
 const obs = require('./native/obs.cjs');
 const util = require('./native/util.cjs');
+const firmware = require('./native/firmware.cjs');
 
 let mainWindow = null;
 let tray = null;
@@ -308,6 +309,29 @@ ipcMain.handle('diag:selftest', async () => {
       time: new Date().toISOString(),
     },
   };
+});
+
+// In-App RP2040 UF2 Firmware Flashing Handlers
+ipcMain.handle('firmware:status', async () => firmware.status());
+ipcMain.handle('firmware:inspect', async (_event, filePath) => firmware.inspectUf2(filePath));
+ipcMain.handle('firmware:browse', async () => {
+  if (!mainWindow) return null;
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select RP2040 Firmware Image (.uf2)',
+    filters: [{ name: 'UF2 Firmware Image', extensions: ['uf2'] }],
+    properties: ['openFile'],
+  });
+  if (canceled || !filePaths.length) return null;
+  const filePath = filePaths[0];
+  const inspected = firmware.inspectUf2(filePath);
+  return { filePath, ...inspected };
+});
+ipcMain.handle('firmware:flash', async (_event, filePath) => {
+  return firmware.flash(filePath, (progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('firmware-flash-progress', progress);
+    }
+  });
 });
 
 function startObsTracking() {

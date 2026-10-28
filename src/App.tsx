@@ -24,6 +24,7 @@ import { WebhookDocPanel } from './components/WebhookDocPanel';
 import { AudioMixerPanel } from './components/AudioMixerPanel';
 import { OBSPanel } from './components/OBSPanel';
 import { DiagnosticLogDrawer, ActionHistoryEntry } from './components/DiagnosticLogDrawer';
+import { FirmwareModal } from './components/FirmwareModal';
 import type { ElectronHardwareEvent } from './types/electron';
 import {
   Terminal,
@@ -225,6 +226,7 @@ export const App: React.FC = () => {
   const [osdVisible, setOsdVisible] = useState(false);
   const [actionLogs, setActionLogs] = useState<ActionHistoryEntry[]>([]);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+  const [isFirmwareModalOpen, setIsFirmwareModalOpen] = useState(false);
 
   // Live OLED state
   const [oledState, setOledState] = useState<OLEDState>(() => loadOledState({
@@ -915,6 +917,7 @@ export const App: React.FC = () => {
         onToggleAutoProfileSwitch={() => setAutoProfileSwitch((prev) => !prev)}
         activeWindowApp={activeWindowApp}
         onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
+        onOpenFirmwareModal={() => setIsFirmwareModalOpen(true)}
       />
 
       {/* Main Workspace Area */}
@@ -1252,6 +1255,16 @@ export const App: React.FC = () => {
         onClose={() => setIsDiagnosticsOpen(false)}
         actionHistory={actionLogs}
         onClearHistory={() => setActionLogs([])}
+        onOpenFirmwareModal={() => {
+          setIsDiagnosticsOpen(false);
+          setIsFirmwareModalOpen(true);
+        }}
+      />
+
+      {/* RP2040 UF2 Firmware Flasher Modal */}
+      <FirmwareModal
+        isOpen={isFirmwareModalOpen}
+        onClose={() => setIsFirmwareModalOpen(false)}
       />
     </div>
   );

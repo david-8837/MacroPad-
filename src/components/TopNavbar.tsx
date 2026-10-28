@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Power,
   Activity,
+  Zap,
 } from 'lucide-react';
 
 interface TopNavbarProps {
@@ -38,11 +39,13 @@ interface TopNavbarProps {
   deviceInfo: ConnectedDeviceInfo | null;
   onConnectHID: () => void;
   onConnectSerial: () => void;
+  onDisconnectHardware?: () => void;
   onSyncEEPROM: () => void;
   autoProfileSwitch?: boolean;
   onToggleAutoProfileSwitch?: () => void;
   activeWindowApp?: string;
   onOpenDiagnostics?: () => void;
+  onOpenFirmwareModal?: () => void;
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
@@ -67,6 +70,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   autoProfileSwitch = true,
   onToggleAutoProfileSwitch,
   activeWindowApp,
+  onOpenDiagnostics,
+  onOpenFirmwareModal,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showConnectMenu, setShowConnectMenu] = useState(false);
@@ -309,6 +314,19 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                     </div>
                     <div className="text-[9px] text-white/40 font-normal">Arduino / RP2040 CDC Serial (115200)</div>
                   </button>
+
+                  <div className="border-t border-white/10 pt-1 mt-1">
+                    <button
+                      onClick={() => { setShowConnectMenu(false); onOpenFirmwareModal?.(); }}
+                      className="w-full text-left p-2 rounded-lg bg-black/40 hover:bg-[#00F0FF]/10 hover:text-[#00F0FF] text-xs font-mono border border-white/5 transition-colors cursor-pointer"
+                    >
+                      <div className="font-bold flex items-center gap-1.5 text-white/90">
+                        <Zap className="w-3 h-3 text-[#FF5E00]" />
+                        Flash Firmware (.uf2)...
+                      </div>
+                      <div className="text-[9px] text-white/40 font-normal">RP2040 BOOTSEL mass-storage</div>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

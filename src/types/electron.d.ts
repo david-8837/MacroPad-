@@ -96,6 +96,34 @@ export interface ElectronAPI {
 
   getDiagnosticLog?: () => Promise<{ ok: boolean; value: DiagnosticLogEntry[] }>;
   runDiagnosticSelfTest?: () => Promise<{ ok: boolean; value: DiagnosticSelfTestResult }>;
+
+  // RP2040 Firmware Flashing
+  getFirmwareStatus?: () => Promise<FirmwareStatus>;
+  browseFirmwareUf2?: () => Promise<({ filePath: string; ok: boolean; value?: Uf2Inspection; error?: string }) | null>;
+  inspectFirmwareUf2?: (filePath: string) => Promise<{ ok: boolean; value?: Uf2Inspection; error?: string }>;
+  flashFirmwareUf2?: (filePath: string) => Promise<{ ok: boolean; value?: Uf2Inspection & { flashed: boolean; note?: string }; error?: string }>;
+  onFirmwareFlashProgress?: (callback: (progress: FlashProgress) => void) => () => void;
+}
+
+export interface FirmwareStatus {
+  inBootloader: boolean;
+  drivePath: string | null;
+  driveInfo: string | null;
+}
+
+export interface Uf2Inspection {
+  blockCount: number;
+  firmwareBytes: number;
+  fileBytes: number;
+  family: string;
+  targetAddress: string;
+  firstSeq: number;
+  version: string | null;
+}
+
+export interface FlashProgress {
+  stage: 'copying' | 'rebooting' | 'done';
+  percent: number;
 }
 
 export interface DiagnosticLogEntry {
