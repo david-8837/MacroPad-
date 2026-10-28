@@ -78,3 +78,4 @@ runTests().catch((err) => {
   console.error('obsWebSocket test failed:', err);
   process.exit(1);
 });
+

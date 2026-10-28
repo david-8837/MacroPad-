@@ -93,6 +93,24 @@ export interface ElectronAPI {
   obsGetState?: () => Promise<{ ok: boolean; value: ObsState }>;
   obsCommand?: (action: string, arg?: unknown) => Promise<{ ok: boolean; error?: string }>;
   onObsStateChanged?: (callback: (state: ObsState) => void) => () => void;
+
+  getDiagnosticLog?: () => Promise<{ ok: boolean; value: DiagnosticLogEntry[] }>;
+  runDiagnosticSelfTest?: () => Promise<{ ok: boolean; value: DiagnosticSelfTestResult }>;
+}
+
+export interface DiagnosticLogEntry {
+  at: number;
+  where: string;
+  message: string;
+  extra?: string | null;
+}
+
+export interface DiagnosticSelfTestResult {
+  system: { ok: boolean; detail: string };
+  audio: { ok: boolean; detail: string };
+  obs: { ok: boolean; detail: string };
+  webhook: { ok: boolean; detail: string };
+  time: string;
 }
 
 declare global {

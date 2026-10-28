@@ -23,10 +23,12 @@ import { executeDeckAction } from './utils/executeDeckAction';
 import { WebhookDocPanel } from './components/WebhookDocPanel';
 import { AudioMixerPanel } from './components/AudioMixerPanel';
 import { OBSPanel } from './components/OBSPanel';
+import { DiagnosticLogDrawer, ActionHistoryEntry } from './components/DiagnosticLogDrawer';
 import type { ElectronHardwareEvent } from './types/electron';
 import {
   Terminal,
   Trash2,
+  Activity,
 } from 'lucide-react';
 
 const SESSION_KEY = 'kadowaz_session';
@@ -49,14 +51,6 @@ function loadOledState(fallback: OLEDState): OLEDState {
   } catch {
     return fallback;
   }
-}
-
-interface ActionLogItem {
-  id: string;
-  timestamp: string;
-  name: string;
-  category: string;
-  type: 'success' | 'safety' | 'info';
 }
 
 export const App: React.FC = () => {
@@ -229,7 +223,8 @@ export const App: React.FC = () => {
   };
 
   const [osdVisible, setOsdVisible] = useState(false);
-  const [actionLogs, setActionLogs] = useState<ActionLogItem[]>([]);
+  const [actionLogs, setActionLogs] = useState<ActionHistoryEntry[]>([]);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
 
   // Live OLED state
   const [oledState, setOledState] = useState<OLEDState>(() => loadOledState({
@@ -338,14 +333,23 @@ export const App: React.FC = () => {
     );
   };
 
-  const pushLog = (name: string, category: string, type: ActionLogItem['type'] = 'success') => {
+  const pushLog = (
+    name: string,
+    category: string,
+    type: ActionHistoryEntry['type'] = 'success',
+    detail?: string,
+    source: ActionHistoryEntry['source'] = 'app'
+  ) => {
     setActionLogs(prev => [{
       id: `${Date.now()}-${Math.random()}`,
       timestamp: new Date().toLocaleTimeString(),
+      at: Date.now(),
       name,
       category,
       type,
-    }, ...prev.slice(0, 40)]);
+      detail,
+      source,
+    }, ...prev.slice(0, 199)]);
   };
 
   // Action Dispatcher & Native Application Launcher
@@ -363,11 +367,6 @@ export const App: React.FC = () => {
       name: actionName,
       payload: payload || {},
     };
-
-    if (category === 'obs') {
-      pushLog('OBS WebSocket is not configured. Assign a hotkey if you control OBS from the deck.', 'obs', 'info');
-      return;
-    }
 
     if (category === 'midi') {
       pushLog('MIDI output is not connected in this build. The action was logged only.', 'midi', 'info');
@@ -915,6 +914,7 @@ export const App: React.FC = () => {
         autoProfileSwitch={autoProfileSwitch}
         onToggleAutoProfileSwitch={() => setAutoProfileSwitch((prev) => !prev)}
         activeWindowApp={activeWindowApp}
+        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
       />
 
       {/* Main Workspace Area */}
@@ -1118,13 +1118,22 @@ export const App: React.FC = () => {
                           ACTION TELEMETRY STREAM
                         </span>
                       </div>
-                      <button
-                        onClick={() => setActionLogs([])}
-                        title="Clear Logs"
-                        className="text-white/40 hover:text-white transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setIsDiagnosticsOpen(true)}
+                          title="Open Full Diagnostics & History"
+                          className="p-1 rounded hover:bg-white/5 text-white/40 hover:text-[#00F0FF] transition-colors"
+                        >
+                          <Activity className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setActionLogs([])}
+                          title="Clear Logs"
+                          className="p-1 rounded hover:bg-white/5 text-white/40 hover:text-white transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Logs Stream */}
@@ -1235,6 +1244,14 @@ export const App: React.FC = () => {
         profileName={activeProfile.name}
         isVisible={osdVisible}
         onClose={() => setOsdVisible(false)}
+      />
+
+      {/* Full Diagnostics & Action History Drawer */}
+      <DiagnosticLogDrawer
+        isOpen={isDiagnosticsOpen}
+        onClose={() => setIsDiagnosticsOpen(false)}
+        actionHistory={actionLogs}
+        onClearHistory={() => setActionLogs([])}
       />
     </div>
   );

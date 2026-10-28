@@ -17,7 +17,8 @@ import {
   Usb,
   Cpu,
   RefreshCw,
-  Power
+  Power,
+  Activity,
 } from 'lucide-react';
 
 interface TopNavbarProps {
@@ -41,6 +42,7 @@ interface TopNavbarProps {
   autoProfileSwitch?: boolean;
   onToggleAutoProfileSwitch?: () => void;
   activeWindowApp?: string;
+  onOpenDiagnostics?: () => void;
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
@@ -336,6 +338,15 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           onChange={handleFileUpload}
           className="hidden"
         />
+
+        {/* Diagnostics & Action History Drawer Trigger */}
+        <button
+          onClick={onOpenDiagnostics}
+          title="Diagnostics & Action History Log"
+          className="p-1.5 rounded-lg border border-white/10 text-white/60 hover:text-[#00F0FF] hover:border-[#00F0FF]/40 hover:bg-[#00F0FF]/10 transition-colors"
+        >
+          <Activity className="w-3.5 h-3.5" />
+        </button>
 
         {/* Window controls */}
         <div className="flex items-center gap-1 pl-2 border-l border-white/10">

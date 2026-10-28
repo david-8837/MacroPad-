@@ -60,4 +60,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('obs-state-changed', listener);
     return () => ipcRenderer.removeListener('obs-state-changed', listener);
   },
+
+  // System Diagnostics & Health Logging
+  getDiagnosticLog: () => ipcRenderer.invoke('diag:log'),
+  runDiagnosticSelfTest: () => ipcRenderer.invoke('diag:selftest'),
 });

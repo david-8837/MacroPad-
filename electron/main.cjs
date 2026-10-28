@@ -9,10 +9,11 @@ const {
   launchApplication,
 } = require('./appDiscovery.cjs');
 const { executeAction } = require('./actionExecutor.cjs');
-const { getMetrics } = require('./native/system.cjs');
+const { getMetrics, selfTest: systemSelfTest } = require('./native/system.cjs');
 const { getActiveWindow, subscribe: subscribeWindow } = require('./native/window.cjs');
 const audio = require('./native/audio.cjs');
 const obs = require('./native/obs.cjs');
+const util = require('./native/util.cjs');
 
 let mainWindow = null;
 let tray = null;
@@ -285,6 +286,29 @@ ipcMain.handle('obs:connect', async (_event, url, password) => obs.connect(url, 
 ipcMain.handle('obs:disconnect', async () => obs.disconnect());
 ipcMain.handle('obs:get-state', async () => obs.getState());
 ipcMain.handle('obs:command', async (_event, action, arg) => obs.command(action, arg));
+
+// Diagnostics & Subsystem Health Self-Tests
+ipcMain.handle('diag:log', async () => ({ ok: true, value: util.getLog() }));
+ipcMain.handle('diag:selftest', async () => {
+  const [sys, aud, ob] = await Promise.all([
+    systemSelfTest(),
+    audio.selfTest(),
+    obs.selfTest(),
+  ]);
+  return {
+    ok: true,
+    value: {
+      system: sys,
+      audio: aud,
+      obs: ob,
+      webhook: {
+        ok: Boolean(webhookServer && webhookServer.listening),
+        detail: webhookServer && webhookServer.listening ? `Port ${WEBHOOK_PORT} listening (token-protected)` : 'Server stopped',
+      },
+      time: new Date().toISOString(),
+    },
+  };
+});
 
 function startObsTracking() {
   if (unsubscribeObs) return;
