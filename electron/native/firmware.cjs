@@ -263,7 +263,23 @@ function status() {
   };
 }
 
+function getBuiltinFirmware() {
+  const candidates = [
+    path.join(__dirname, '..', '..', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
+    process.resourcesPath ? path.join(process.resourcesPath, 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2') : null,
+    path.join(process.cwd(), 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      const inspected = inspectUf2(candidate);
+      return { filePath: candidate, isBuiltin: true, ...inspected };
+    }
+  }
+  return null;
+}
+
 module.exports = {
-  inspectUf2, findBootloaderDrive, flash, status, guessVersion,
+  inspectUf2, findBootloaderDrive, flash, status, guessVersion, getBuiltinFirmware,
   RP2040_FAMILY, BLOCK_SIZE, PAYLOAD_PER_BLOCK,
 };

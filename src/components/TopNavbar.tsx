@@ -1,41 +1,26 @@
-import React, { useRef, useState } from 'react';
-import { Profile, Layer } from '../types';
+import React, { useState } from 'react';
+import { Layer } from '../types';
 import { ConnectedDeviceInfo, HardwareConnectionState } from '../utils/hardwareBridge';
 import {
   Sliders,
-  Download,
-  Upload,
   Minus,
   Square,
   X,
-  Radio,
-  Video,
-  Music,
-  Terminal,
-  ChevronDown,
-  Plus,
   Usb,
   Cpu,
   RefreshCw,
   Power,
   Activity,
   Zap,
-  Search,
 } from 'lucide-react';
 
 interface TopNavbarProps {
-  profiles: Profile[];
-  activeProfile: Profile;
   activeLayer: Layer;
-  onSelectProfile: (profileId: string) => void;
   onSelectLayer: (layerId: string) => void;
   onToggleLock: () => void;
   onTriggerOSD: () => void;
-  onExportProfiles: () => void;
-  onImportProfiles: (json: string) => void;
   activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros';
   onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros') => void;
-  onOpenProfileModal: () => void;
   hardwareState: HardwareConnectionState;
   deviceInfo: ConnectedDeviceInfo | null;
   onConnectHID: () => void;
@@ -43,27 +28,17 @@ interface TopNavbarProps {
   onDisconnectHardware?: () => void;
   onSyncEEPROM: () => void;
   onOpenUploadModal?: () => void;
-  autoProfileSwitch?: boolean;
-  onToggleAutoProfileSwitch?: () => void;
-  activeWindowApp?: string;
   onOpenDiagnostics?: () => void;
   onOpenFirmwareModal?: () => void;
-  onOpenCommandPalette?: () => void;
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
-  profiles,
-  activeProfile,
   activeLayer,
-  onSelectProfile,
   onSelectLayer,
   onToggleLock,
   onTriggerOSD,
-  onExportProfiles,
-  onImportProfiles,
   activeTab,
   onChangeTab,
-  onOpenProfileModal,
   hardwareState,
   deviceInfo,
   onConnectHID,
@@ -71,43 +46,14 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onDisconnectHardware,
   onSyncEEPROM,
   onOpenUploadModal,
-  autoProfileSwitch = true,
-  onToggleAutoProfileSwitch,
-  activeWindowApp,
   onOpenDiagnostics,
   onOpenFirmwareModal,
-  onOpenCommandPalette,
 }) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showConnectMenu, setShowConnectMenu] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-
-  const getProfileIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Video': return <Video className="w-3.5 h-3.5" />;
-      case 'Radio': return <Radio className="w-3.5 h-3.5" />;
-      case 'Music': return <Music className="w-3.5 h-3.5" />;
-      case 'Terminal': return <Terminal className="w-3.5 h-3.5" />;
-      default: return <Sliders className="w-3.5 h-3.5" />;
-    }
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        onImportProfiles(content);
-      }
-    };
-    reader.readAsText(file);
-  };
 
   return (
     <header className="h-14 border-b border-white/10 bg-[#0C0E14] px-4 flex items-center justify-between select-none">
-      {/* Left: Branding & User Profile Selector */}
+      {/* Left: Branding */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#FF6A00] to-[#D44400] flex items-center justify-center font-mono font-black text-xs text-black shadow-orange-glow">
@@ -117,81 +63,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             KADOWAZ <span className="text-[#FF5E00]">DECK</span>
           </span>
         </div>
-
-        <div className="h-4 w-px bg-white/10" />
-
-        {/* Profile Dropdown Selector */}
-        <div className="relative">
-          <button
-            onClick={() => setShowProfileMenu(!showProfileMenu)}
-            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-white transition-colors cursor-pointer"
-          >
-            {getProfileIcon(activeProfile.icon)}
-            <span className="max-w-[130px] truncate">{activeProfile.name}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-white/50" />
-          </button>
-
-          {showProfileMenu && (
-            <div className="absolute top-full left-0 mt-1.5 w-60 rounded-xl bg-[#161B26] border border-white/15 shadow-2xl p-1.5 z-50 space-y-1 animate-in fade-in duration-100">
-              <div className="text-[10px] font-mono text-white/40 px-2 py-1 uppercase">
-                Switch Profile
-              </div>
-              {profiles.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    onSelectProfile(p.id);
-                    setShowProfileMenu(false);
-                  }}
-                  className={`w-full flex items-center justify-between p-2 rounded-lg text-xs font-mono transition-colors cursor-pointer ${
-                    p.id === activeProfile.id
-                      ? 'bg-[#FF5E00]/15 text-[#FF5E00] font-bold border border-[#FF5E00]/30'
-                      : 'text-white/80 hover:bg-white/5 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    {getProfileIcon(p.icon)}
-                    <span className="truncate">{p.name}</span>
-                  </div>
-                  {p.targetProcess && (
-                    <span className="text-[9px] text-white/30 font-mono ml-1 shrink-0">
-                      {p.targetProcess}
-                    </span>
-                  )}
-                </button>
-              ))}
-
-              <div className="border-t border-white/10 pt-1 mt-1">
-                <button
-                  onClick={() => {
-                    setShowProfileMenu(false);
-                    onOpenProfileModal();
-                  }}
-                  className="w-full flex items-center gap-1.5 p-2 rounded-lg text-xs font-mono text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 text-[#FF5E00]" />
-                  <span>Manage Profiles...</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Auto-Profile Switch Toggle */}
-        {onToggleAutoProfileSwitch && (
-          <button
-            onClick={onToggleAutoProfileSwitch}
-            title={autoProfileSwitch ? `Auto Profile Switching: ON (tracking foreground window${activeWindowApp ? `: ${activeWindowApp}` : ''})` : 'Auto Profile Switching: OFF'}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono transition-colors border cursor-pointer ${
-              autoProfileSwitch
-                ? 'bg-[#10B981]/10 text-[#38EF7D] border-[#10B981]/30 hover:bg-[#10B981]/20'
-                : 'bg-white/5 text-white/40 border-white/10 hover:text-white/60'
-            }`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${autoProfileSwitch ? 'bg-[#10B981] animate-pulse' : 'bg-white/30'}`} />
-            <span>AUTO</span>
-          </button>
-        )}
       </div>
 
       {/* Center: Module Navigation Tabs (VIA Suite) */}
@@ -348,29 +219,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           <span>UPLOAD TO DECK</span>
         </button>
 
-        {/* Export / Import Profiles */}
-        <button
-          onClick={onExportProfiles}
-          title="Export Profiles to JSON"
-          className="p-1.5 rounded-lg border border-white/10 text-white/60 hover:text-white hover:bg-white/5 transition-colors"
-        >
-          <Download className="w-3.5 h-3.5" />
-        </button>
-
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          title="Import Profiles from JSON"
-          className="p-1.5 rounded-lg border border-white/10 text-white/60 hover:text-white hover:bg-white/5 transition-colors"
-        >
-          <Upload className="w-3.5 h-3.5" />
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          onChange={handleFileUpload}
-          className="hidden"
-        />
 
         {/* Diagnostics & Action History Drawer Trigger */}
         <button
@@ -379,16 +227,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           className="p-1.5 rounded-lg border border-white/10 text-white/60 hover:text-[#00F0FF] hover:border-[#00F0FF]/40 hover:bg-[#00F0FF]/10 transition-colors"
         >
           <Activity className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Command Palette (Ctrl+K) Trigger */}
-        <button
-          onClick={onOpenCommandPalette}
-          title="Command Palette (Ctrl+K)"
-          className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-white/10 text-white/60 hover:text-white hover:border-[#00F0FF]/50 hover:bg-[#00F0FF]/10 transition-colors text-xs font-mono cursor-pointer"
-        >
-          <Search className="w-3.5 h-3.5 text-[#00F0FF]" />
-          <span className="hidden xl:inline text-[10px] text-white/40">Ctrl+K</span>
         </button>
 
         {/* Window controls */}

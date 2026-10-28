@@ -65,9 +65,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDiagnosticLog: () => ipcRenderer.invoke('diag:log'),
   runDiagnosticSelfTest: () => ipcRenderer.invoke('diag:selftest'),
 
-  // In-App RP2040 Firmware Flasher
+  // In-App RP2040 Firmware Flasher (Official Project Firmware)
   getFirmwareStatus: () => ipcRenderer.invoke('firmware:status'),
-  browseFirmwareUf2: () => ipcRenderer.invoke('firmware:browse'),
+  getBuiltinFirmware: () => ipcRenderer.invoke('firmware:builtin'),
+  flashBuiltinFirmware: () => ipcRenderer.invoke('firmware:flashBuiltin'),
   inspectFirmwareUf2: (filePath) => ipcRenderer.invoke('firmware:inspect', filePath),
   flashFirmwareUf2: (filePath) => ipcRenderer.invoke('firmware:flash', filePath),
   onFirmwareFlashProgress: (callback) => {

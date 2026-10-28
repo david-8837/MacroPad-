@@ -5,7 +5,6 @@ import { Activity, Music, Cpu, Sparkles, Layers } from 'lucide-react';
 interface OLEDDisplayProps {
   state: OLEDState;
   activeLayerName: string;
-  activeProfileName: string;
   onCycleMode: () => void;
   channelIndex?: number;
 }
@@ -13,7 +12,6 @@ interface OLEDDisplayProps {
 export const OLEDDisplay: React.FC<OLEDDisplayProps> = ({
   state,
   activeLayerName,
-  activeProfileName,
   onCycleMode,
   channelIndex = 0,
 }) => {
@@ -124,7 +122,7 @@ export const OLEDDisplay: React.FC<OLEDDisplayProps> = ({
               <span>{state.customTitle || 'KADOWAZ IND.'}</span>
             </div>
             <span className="text-[8px] text-[#00F0FF]/80 bg-[#00F0FF]/10 px-1 py-0.2 rounded font-semibold truncate max-w-[80px]">
-              {activeProfileName.toUpperCase()}
+              {`CH 0${chNum}`}
             </span>
           </div>
 

@@ -24,7 +24,6 @@ interface DisplayConfigDrawerProps {
   oledState: OLEDState;
   onUpdateOLEDState: (state: OLEDState) => void;
   onClose: () => void;
-  activeProfileName: string;
   activeLayerName: string;
   onTriggerAction?: (actionId: string, actionName: string, category: string) => void;
 }
@@ -33,7 +32,6 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
   oledState,
   onUpdateOLEDState,
   onClose,
-  activeProfileName,
   activeLayerName,
   onTriggerAction,
 }) => {
@@ -55,7 +53,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
       sublabel: 'Branding & Active Layer',
       icon: <Sparkles className="w-4 h-4" />,
       color: '#00F0FF',
-      description: 'Classic deck display with customizable banner title, active profile, and online layer indicator.',
+      description: 'Classic deck display with customizable banner title, active channel, and online layer indicator.',
     },
     {
       mode: 'system',
@@ -217,7 +215,6 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
               <OLEDDisplay
                 state={localState}
                 activeLayerName={activeLayerName}
-                activeProfileName={activeProfileName}
                 onCycleMode={() => {
                   const modes: OLEDMode[] = ['kadowaz', 'system', 'visualizer', 'media'];
                   const nextIdx = (modes.indexOf(localState.mode) + 1) % modes.length;

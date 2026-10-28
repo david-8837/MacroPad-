@@ -19,7 +19,7 @@ const SNIPPETS: { title: string; endpoint: string; body: Record<string, unknown>
   { title: 'Trigger Key Switch #1 (Tap)', endpoint: '/api/v1/trigger', body: { target: 'key', index: 0, action: 'tap' } },
   { title: 'Rotate Knob Clockwise (1 Detent)', endpoint: '/api/v1/dial', body: { direction: 'cw', step: 1 } },
   { title: 'Push Text to the OLED Display', endpoint: '/api/v1/oled', body: { line1: 'STREAM STARTING', line2: 'COUNTDOWN 05:00' } },
-  { title: 'Switch Profile to DaVinci Resolve', endpoint: '/api/v1/profile', body: { profileId: 'profile-davinci', layerId: 'layer-edit' } },
+  { title: 'Switch Active Deck Layer', endpoint: '/api/v1/action', body: { layerId: 'layer-1', channel: 1 } },
   { title: 'Switch to Channel 2', endpoint: '/api/v1/action', body: { channel: 2 } },
 ];
 

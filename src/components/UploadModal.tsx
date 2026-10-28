@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Profile } from '../types';
+import { Layer } from '../types';
 import { ConnectedDeviceInfo, HardwareConnectionState } from '../utils/hardwareBridge';
 import {
   X,
@@ -19,7 +19,7 @@ import {
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  activeProfile: Profile;
+  layers: Layer[];
   hardwareState: HardwareConnectionState;
   deviceInfo: ConnectedDeviceInfo | null;
   onConnectHID: () => void;
@@ -30,7 +30,7 @@ interface UploadModalProps {
 export const UploadModal: React.FC<UploadModalProps> = ({
   isOpen,
   onClose,
-  activeProfile,
+  layers,
   hardwareState,
   deviceInfo,
   onConnectHID,
@@ -45,7 +45,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
   if (!isOpen) return null;
 
-  const currentLayer = activeProfile.layers[selectedLayerIdx] || activeProfile.layers[0];
+  const currentLayer = layers[selectedLayerIdx] || layers[0];
 
   // Calculate statistics across all 3 layers
   let totalKeys = 0;
@@ -53,7 +53,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   let appCount = 0;
   let mediaCount = 0;
 
-  activeProfile.layers.forEach(layer => {
+  layers.forEach(layer => {
     totalKeys += layer.keys.length;
     layer.keys.forEach(k => {
       const cat = k.tapAction?.category;
@@ -108,7 +108,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs font-mono text-white/50">
-                Write profile configuration directly into physical EEPROM / Onboard Flash
+                Write layout configuration directly into physical EEPROM / Onboard Flash
               </p>
             </div>
           </div>
@@ -123,13 +123,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5">
           
-          {/* Active Profile Info & Statistics */}
+          {/* Deck Configuration & Statistics */}
           <div className="bg-[#141720] border border-white/10 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
               <div className="text-[10px] font-mono text-[#FF5E00] uppercase tracking-wider font-semibold">
-                TARGET PROFILE
+                HARDWARE KEYMAP
               </div>
-              <div className="text-lg font-black text-white">{activeProfile.name}</div>
+              <div className="text-lg font-black text-white">3-LAYER DECK CONFIGURATION</div>
               <div className="text-xs text-white/50 font-mono mt-0.5">
                 3 Independent Layers • 9 Switches • 1 Continuous Rotary Encoder
               </div>
@@ -166,7 +166,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
             {/* Layer Tabs */}
             <div className="grid grid-cols-3 gap-2">
-              {activeProfile.layers.map((layer, idx) => (
+              {layers.map((layer, idx) => (
                 <button
                   key={layer.id}
                   onClick={() => setSelectedLayerIdx(idx)}
@@ -323,3 +323,4 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     </div>
   );
 };
+

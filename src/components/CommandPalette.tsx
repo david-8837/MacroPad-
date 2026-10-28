@@ -18,14 +18,14 @@ import {
   Command,
   CornerDownLeft,
 } from 'lucide-react';
-import { Profile, Layer } from '../types';
+import { Layer } from '../types';
 import { HardwareConnectionState } from '../utils/hardwareBridge';
 import { PC_SHORTCUTS, PCShortcut } from '../data/pcShortcuts';
 import { executeDeckAction } from '../utils/executeDeckAction';
 
 export interface PaletteItem {
   id: string;
-  group: 'Page' | 'Profile' | 'Layer' | 'Key' | 'Hardware' | 'Audio' | 'OBS' | 'Shortcut' | 'Action';
+  group: 'Page' | 'Layer' | 'Key' | 'Hardware' | 'Audio' | 'OBS' | 'Shortcut' | 'Action';
   label: string;
   where: string;
   also?: string;
@@ -38,17 +38,11 @@ export interface CommandPaletteProps {
   onClose: () => void;
   activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros';
   onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros') => void;
-  profiles: Profile[];
-  activeProfile: Profile;
-  onSelectProfile: (profileId: string) => void;
-  onOpenProfileModal: () => void;
+  layers: Layer[];
   activeLayer: Layer;
   onSelectLayer: (layerId: string) => void;
   onOpenDiagnostics: () => void;
   onOpenFirmwareModal: () => void;
-  onExportProfiles: () => void;
-  autoProfileSwitch: boolean;
-  onToggleAutoProfileSwitch: () => void;
   hardwareState: HardwareConnectionState;
   onConnectHID: () => void;
   onConnectSerial: () => void;
@@ -95,17 +89,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onClose,
   activeTab: _activeTab,
   onChangeTab,
-  profiles,
-  activeProfile,
-  onSelectProfile,
-  onOpenProfileModal,
+  layers,
   activeLayer,
   onSelectLayer,
   onOpenDiagnostics,
   onOpenFirmwareModal,
-  onExportProfiles,
-  autoProfileSwitch,
-  onToggleAutoProfileSwitch,
   hardwareState,
   onConnectHID,
   onConnectSerial,
@@ -201,33 +189,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         also: 'firmware update flash rp2040 uf2 bootloader bootsel rpi-rp2',
         icon: <Zap className="w-4 h-4 text-[#FF5E00]" />,
         run: onOpenFirmwareModal,
-      },
-      {
-        id: 'action-manage-profiles',
-        group: 'Action',
-        label: 'Manage Profiles...',
-        where: 'Create, clone or delete profiles',
-        also: 'profile manager new delete clone rename',
-        icon: <Sliders className="w-4 h-4 text-white/70" />,
-        run: onOpenProfileModal,
-      },
-      {
-        id: 'action-export-profiles',
-        group: 'Action',
-        label: 'Export Profiles to JSON',
-        where: 'Backup layout configuration',
-        also: 'export backup json save share profiles',
-        icon: <Download className="w-4 h-4 text-[#00F0FF]" />,
-        run: onExportProfiles,
-      },
-      {
-        id: 'action-toggle-autoprofile',
-        group: 'Action',
-        label: `Auto-Profile Switching: ${autoProfileSwitch ? 'Turn OFF' : 'Turn ON'}`,
-        where: 'Foreground active window detection',
-        also: 'auto profile switch window focus process tracking automatic',
-        icon: <RefreshCw className="w-4 h-4 text-[#38EF7D]" />,
-        run: onToggleAutoProfileSwitch,
       }
     );
 
@@ -243,7 +204,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           icon: <RefreshCw className="w-4 h-4 text-[#38EF7D]" />,
           run: () => {
             onSyncEEPROM();
-            onTriggerAction?.('Sync Keymap', 'Flashing profile to hardware EEPROM', 'success');
+            onTriggerAction?.('Sync Keymap', 'Flashing 3 layers to hardware EEPROM', 'success');
           },
         },
         {
@@ -282,21 +243,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       );
     }
 
-    // 4. Profiles
-    for (const p of profiles) {
-      list.push({
-        id: `profile-${p.id}`,
-        group: 'Profile',
-        label: `Switch Profile: ${p.name}`,
-        where: p.id === activeProfile.id ? 'Currently active' : p.targetProcess ? `Target: ${p.targetProcess}` : 'Switch deck profile',
-        also: `profile ${p.name} ${p.targetProcess || ''}`,
-        icon: <Layers className="w-4 h-4 text-amber-400" />,
-        run: () => onSelectProfile(p.id),
-      });
-    }
-
-    // 5. Active Profile Layers / Channels
-    activeProfile.layers.forEach((l, idx) => {
+    // 4. Layers / Channels
+    layers.forEach((l, idx) => {
       list.push({
         id: `layer-${l.id}`,
         group: 'Layer',
@@ -446,19 +394,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
     return list;
   }, [
-    profiles,
-    activeProfile,
+    layers,
     activeLayer,
     hardwareState,
-    autoProfileSwitch,
     onChangeTab,
-    onSelectProfile,
-    onOpenProfileModal,
     onSelectLayer,
     onOpenDiagnostics,
     onOpenFirmwareModal,
-    onExportProfiles,
-    onToggleAutoProfileSwitch,
     onConnectHID,
     onConnectSerial,
     onDisconnectHardware,
@@ -532,7 +474,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const getGroupBadgeColor = (group: PaletteItem['group']) => {
     switch (group) {
       case 'Page': return 'bg-[#FF5E00]/15 text-[#FF5E00] border-[#FF5E00]/30';
-      case 'Profile': return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
       case 'Layer': return 'bg-[#00F0FF]/15 text-[#00F0FF] border-[#00F0FF]/30';
       case 'Key': return 'bg-white/10 text-white/80 border-white/15';
       case 'Hardware': return 'bg-[#38EF7D]/15 text-[#38EF7D] border-[#38EF7D]/30';
@@ -564,7 +505,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a command, shortcut, profile, key, or page..."
+            placeholder="Type a command, shortcut, key, or page..."
             className="w-full bg-transparent text-sm text-white placeholder-white/40 focus:outline-hidden font-sans"
             role="combobox"
             aria-expanded="true"

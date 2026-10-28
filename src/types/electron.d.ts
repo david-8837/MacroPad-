@@ -97,8 +97,10 @@ export interface ElectronAPI {
   getDiagnosticLog?: () => Promise<{ ok: boolean; value: DiagnosticLogEntry[] }>;
   runDiagnosticSelfTest?: () => Promise<{ ok: boolean; value: DiagnosticSelfTestResult }>;
 
-  // RP2040 Firmware Flashing
+  // RP2040 Firmware Flashing (Official Project Firmware)
   getFirmwareStatus?: () => Promise<FirmwareStatus>;
+  getBuiltinFirmware?: () => Promise<({ filePath: string; isBuiltin: boolean; ok: boolean; value?: Uf2Inspection; error?: string }) | null>;
+  flashBuiltinFirmware?: () => Promise<{ ok: boolean; value?: Uf2Inspection & { flashed: boolean; note?: string }; error?: string }>;
   browseFirmwareUf2?: () => Promise<({ filePath: string; ok: boolean; value?: Uf2Inspection; error?: string }) | null>;
   inspectFirmwareUf2?: (filePath: string) => Promise<{ ok: boolean; value?: Uf2Inspection; error?: string }>;
   flashFirmwareUf2?: (filePath: string) => Promise<{ ok: boolean; value?: Uf2Inspection & { flashed: boolean; note?: string }; error?: string }>;

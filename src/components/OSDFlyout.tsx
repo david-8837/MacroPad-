@@ -4,14 +4,12 @@ import * as LucideIcons from 'lucide-react';
 
 interface OSDFlyoutProps {
   layer: Layer;
-  profileName: string;
   isVisible: boolean;
   onClose: () => void;
 }
 
 export const OSDFlyout: React.FC<OSDFlyoutProps> = ({
   layer,
-  profileName,
   isVisible,
   onClose,
 }) => {
@@ -34,8 +32,8 @@ export const OSDFlyout: React.FC<OSDFlyoutProps> = ({
               style={{ backgroundColor: layer.accentColor, boxShadow: `0 0 8px ${layer.accentColor}` }}
             />
             <div>
-              <div className="text-[9px] font-mono text-white/50 uppercase tracking-wider">
-                {profileName}
+              <div className="text-[9px] font-mono text-[#FF5E00] uppercase tracking-wider font-bold">
+                KADOWAZ DECK
               </div>
               <div className="text-xs font-bold leading-tight">
                 {layer.name}

@@ -4,7 +4,6 @@ import { playKeyClick } from '../utils/soundEffects';
 import { 
   X, 
   Play, 
-  ShieldAlert, 
   Check, 
   CircleDot, 
   Keyboard as KeyboardIcon, 
@@ -241,7 +240,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   onTestAction,
 }) => {
   const [editedKey, setEditedKey] = useState<KeyBinding>({ ...keyBinding });
-  const [activeTab, setActiveTab] = useState<'keyboard' | 'recorder' | 'text' | 'safety' | 'app'>(
+  const [activeTab, setActiveTab] = useState<'keyboard' | 'text' | 'app'>(
     keyBinding.tapAction?.category === 'app_launch' ? 'app' : 'keyboard'
   );
   const [keyboardLayout, setKeyboardLayout] = useState<'full' | 'tkl' | '60'>('full');
@@ -688,18 +687,6 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         </button>
 
         <button
-          onClick={() => { setActiveTab('recorder'); setIsRecording(false); }}
-          className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
-            activeTab === 'recorder'
-              ? 'border-[#FF5E00] text-[#FF5E00] font-bold'
-              : 'border-transparent text-white/50 hover:text-white'
-          }`}
-        >
-          <CircleDot className="w-3.5 h-3.5" />
-          2. Recorder
-        </button>
-
-        <button
           onClick={() => { setActiveTab('text'); setIsRecording(false); }}
           className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
             activeTab === 'text'
@@ -708,19 +695,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           }`}
         >
           <Type className="w-3.5 h-3.5" />
-          3. Text Macro
-        </button>
-
-        <button
-          onClick={() => { setActiveTab('safety'); setIsRecording(false); }}
-          className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
-            activeTab === 'safety'
-              ? 'border-red-500 text-red-400 font-bold'
-              : 'border-transparent text-white/50 hover:text-white'
-          }`}
-        >
-          <ShieldAlert className="w-3.5 h-3.5" />
-          4. Safety Hold
+          2. Text Macro
         </button>
 
         <button
@@ -732,7 +707,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          5. Open App
+          3. Open App
         </button>
       </div>
 
@@ -874,137 +849,6 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               </div>
             </div>
 
-            {/* Layout Switcher (Full Size / TKL / 60%) */}
-            <div className="flex items-center justify-between text-[11px] font-mono pt-1">
-              <span className="text-white/40 uppercase tracking-wider text-[9.5px]">Virtual Keyboard:</span>
-              <div className="flex items-center gap-1 p-0.5 bg-black/40 rounded-lg border border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setKeyboardLayout('full')}
-                  className={`px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer ${
-                    keyboardLayout === 'full' ? 'bg-[#FF5E00] text-black font-bold' : 'text-white/60 hover:text-white'
-                  }`}
-                >
-                  Full 104
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setKeyboardLayout('tkl')}
-                  className={`px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer ${
-                    keyboardLayout === 'tkl' ? 'bg-[#FF5E00] text-black font-bold' : 'text-white/60 hover:text-white'
-                  }`}
-                >
-                  TKL
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setKeyboardLayout('60')}
-                  className={`px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer ${
-                    keyboardLayout === '60' ? 'bg-[#FF5E00] text-black font-bold' : 'text-white/60 hover:text-white'
-                  }`}
-                >
-                  60%
-                </button>
-              </div>
-            </div>
-
-            {/* VISUAL KEYBOARD CONTAINER (Zero horizontal scrolling, perfect fit) */}
-            <div className="p-2.5 bg-[#07090E] rounded-xl border border-white/10 shadow-inner overflow-x-hidden select-none">
-              <div className="flex gap-2 justify-center">
-                
-                {/* ALPHANUMERIC 15u */}
-                <div className="space-y-[1.5px] shrink-0">
-                  {/* Function row */}
-                  <div className="flex gap-[1.5px] mb-1">
-                    {DRAWER_MAIN_ROW_0.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* Number row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_1.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* QWERTY row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_2.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* Home row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_3.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* Shift row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_4.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* Bottom Space row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_5.map(k => renderDrawerKey(k))}
-                  </div>
-                </div>
-
-                {/* NAVIGATION & ARROWS */}
-                {keyboardLayout !== '60' && (
-                  <div className="space-y-[1.5px] flex flex-col justify-between shrink-0">
-                    <div className="flex gap-[1.5px] mb-1">
-                      {DRAWER_NAV_ROW_0.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div className="flex gap-[1.5px]">
-                      {DRAWER_NAV_ROW_1.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div className="flex gap-[1.5px]">
-                      {DRAWER_NAV_ROW_2.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div className="h-[22px]" />
-                    <div className="flex gap-[1.5px]">
-                      {DRAWER_ARROW_ROW_4.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div className="flex gap-[1.5px]">
-                      {DRAWER_ARROW_ROW_5.map(k => renderDrawerKey(k))}
-                    </div>
-                  </div>
-                )}
-
-                {/* NUMPAD */}
-                {keyboardLayout === 'full' && (
-                  <div className="space-y-[1.5px] shrink-0">
-                    <div className="flex gap-[1.5px] mb-1">
-                      {DRAWER_NUMPAD_ROW_0.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div
-                      className="grid gap-[1.5px]"
-                      style={{
-                        gridTemplateColumns: `repeat(4, ${UNIT_WIDTH}px)`,
-                        gridTemplateRows: `repeat(5, ${UNIT_HEIGHT}px)`
-                      }}
-                    >
-                      {DRAWER_NUMPAD_GRID.map(k => {
-                        const isSelected = isKeyActive(k, recordedKeys);
-                        return (
-                          <button
-                            key={k.code}
-                            type="button"
-                            onClick={() => handleVirtualKeyClick(k.label || k.code)}
-                            style={{ gridArea: k.gridArea }}
-                            className={`rounded flex flex-col items-center justify-between p-0.5 font-mono text-[8.5px] font-bold border transition-all select-none cursor-pointer ${
-                              isSelected
-                                ? 'bg-gradient-to-b from-[#FF7A1A] to-[#E65100] text-black border-[#FF9100] font-black shadow-[0_0_12px_rgba(255,94,0,0.7)] scale-95 z-10'
-                                : 'bg-gradient-to-b from-[#181C26] to-[#11141C] text-white/80 border-white/10 hover:border-white/40 hover:bg-[#202636] hover:text-white active:scale-95'
-                            }`}
-                          >
-                            <span className="truncate leading-none">{k.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            </div>
-
             {/* Quick Media Keys */}
             <div>
               <label className="text-[10px] font-mono text-white/40 uppercase block mb-1">
@@ -1033,76 +877,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           </div>
         )}
 
-        {/* TAB 2: LIVE MACRO RECORDER */}
-        {activeTab === 'recorder' && (
-          <div className="space-y-3">
-            <div className="p-4 rounded-xl bg-[#0B0D13] border border-white/10 text-center space-y-3">
-              <div className="text-xs text-white/60">
-                {isRecording ? (
-                  <span className="text-red-400 font-bold flex items-center justify-center gap-2 animate-pulse text-xs">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                    RECORDING LIVE KEYSTROKES: PRESS KEYS ON KEYBOARD...
-                  </span>
-                ) : (
-                  "Click 'Record Keys' and press your desired shortcut combo on your physical keyboard"
-                )}
-              </div>
-
-              {/* Recorded Badges */}
-              <div className="min-h-[52px] p-2.5 rounded-lg bg-[#151923] border border-white/10 flex items-center justify-center gap-1.5 flex-wrap">
-                {recordedKeys.length === 0 ? (
-                  <span className="text-white/30 text-xs italic">No keys recorded</span>
-                ) : (
-                  recordedKeys.map((k, i) => (
-                    <React.Fragment key={i}>
-                      {i > 0 && <span className="text-white/40 text-xs font-bold font-mono">+</span>}
-                      <span className="px-2.5 py-1 rounded bg-[#242A38] border border-white/20 font-mono text-xs font-bold text-white shadow-xs">
-                        {k}
-                      </span>
-                    </React.Fragment>
-                  ))
-                )}
-              </div>
-
-              <div className="flex items-center justify-center gap-2 pt-1">
-                {!isRecording ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRecordedKeys([]);
-                      setIsRecording(true);
-                    }}
-                    className="px-3.5 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-bold font-mono flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
-                  >
-                    <CircleDot className="w-3.5 h-3.5 animate-pulse" />
-                    Record Keys
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsRecording(false)}
-                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    Done Recording
-                  </button>
-                )}
-
-                {recordedKeys.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={clearShortcut}
-                    className="px-3 py-1.5 rounded-lg border border-white/10 text-white/50 hover:text-white text-xs font-mono transition-colors cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: TEXT SNIPPET MACRO */}
+        {/* TAB 2: TEXT SNIPPET MACRO */}
         {activeTab === 'text' && (
           <div className="space-y-3">
             <div className="text-xs text-white/60">
@@ -1124,95 +899,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           </div>
         )}
 
-        {/* TAB 4: LONG-PRESS SAFETY ISOLATION */}
-        {activeTab === 'safety' && (
-          <div className="p-3.5 rounded-xl bg-red-950/20 border border-red-500/20 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
-                <div>
-                  <h4 className="text-xs font-bold text-red-300">Long-Press Safety Isolation</h4>
-                  <p className="text-[10px] text-red-200/60">
-                    Suppresses quick accidental taps. Requires holding down to execute.
-                  </p>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={editedKey.isDestructiveSafety || false}
-                onChange={(e) => {
-                  const updated = {
-                    ...editedKey,
-                    isDestructiveSafety: e.target.checked,
-                    safetyConfirmAction: e.target.checked
-                      ? editedKey.safetyConfirmAction || {
-                          id: `safety-${Date.now()}`,
-                          category: 'hotkey' as const,
-                          name: 'Confirmed Operation',
-                          payload: {}
-                        }
-                      : null
-                  };
-                  setEditedKey(updated);
-                  onSave(updated);
-                }}
-                className="w-4 h-4 accent-red-500 cursor-pointer"
-              />
-            </div>
-
-            {editedKey.isDestructiveSafety && (
-              <div className="space-y-3 pt-1">
-                <div>
-                  <div className="flex justify-between text-xs text-white/70 mb-1">
-                    <span>Hold Threshold Duration</span>
-                    <span className="font-mono text-[#FF5E00] font-bold">
-                      {((editedKey.longPressThresholdMs || 1500) / 1000).toFixed(1)}s
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="500"
-                    max="4000"
-                    step="100"
-                    value={editedKey.longPressThresholdMs || 1500}
-                    onChange={(e) => {
-                      const updated = {
-                        ...editedKey,
-                        longPressThresholdMs: parseInt(e.target.value)
-                      };
-                      setEditedKey(updated);
-                      onSave(updated);
-                    }}
-                    className="w-full accent-[#FF5E00] cursor-pointer"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] text-white/50 block mb-1">Safety Action Name</label>
-                  <input
-                    type="text"
-                    value={editedKey.safetyConfirmAction?.name || ''}
-                    onChange={(e) => {
-                      const updated = {
-                        ...editedKey,
-                        safetyConfirmAction: {
-                          ...editedKey.safetyConfirmAction!,
-                          name: e.target.value
-                        }
-                      };
-                      setEditedKey(updated);
-                      onSave(updated);
-                    }}
-                    className="w-full px-2.5 py-1.5 bg-[#191012] border border-red-500/30 rounded text-xs text-white font-mono"
-                    placeholder="e.g. TERMINATE STREAM"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 5: APPLICATION LAUNCHER & APP PICKER */}
+        {/* TAB 3: APPLICATION LAUNCHER & APP PICKER */}
         {activeTab === 'app' && (
           <div className="space-y-3.5">
             {/* Current Assignment Status Box */}

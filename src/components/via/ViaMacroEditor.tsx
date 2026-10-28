@@ -18,8 +18,6 @@ import {
   Copy,
   ArrowRight,
   ChevronRight,
-  Download,
-  Upload,
   AlertCircle
 } from 'lucide-react';
 import { playKeyClick } from '../../utils/soundEffects';
@@ -173,8 +171,6 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   const [assignedSuccess, setAssignedSuccess] = useState(false);
   const [isPlayingTest, setIsPlayingTest] = useState(false);
   const [activePlayStep, setActivePlayStep] = useState<number | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync to localStorage
   useEffect(() => {
@@ -428,35 +424,6 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     );
   };
 
-  // Export / Import JSON
-  const handleExportJSON = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(macros, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `kadowaz_deck_macros_${Date.now()}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
-
-  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target?.result as string);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMacros(parsed);
-          alert('Macro configuration successfully loaded!');
-        }
-      } catch {
-        alert('Invalid JSON file format.');
-      }
-    };
-    reader.readAsText(file);
-  };
-
   const MODIFIERS = ['Ctrl', 'Shift', 'Alt', 'Win'];
   const POPULAR_KEYS = [
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
@@ -489,29 +456,6 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Export / Import */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImportJSON}
-            accept=".json"
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            title="Import Macro JSON"
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleExportJSON}
-            title="Export Macro JSON"
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white transition-colors"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-
           {/* Save to Flash / EEPROM button */}
           <button
             onClick={handleSaveToEEPROM}

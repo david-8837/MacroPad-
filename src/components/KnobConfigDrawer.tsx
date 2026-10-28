@@ -576,72 +576,74 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
       {/* DRAWER BODY */}
       <div className="flex-1 p-3.5 overflow-y-auto space-y-3">
 
-        {/* DEDICATED HOLD LAYER SWITCH CARD (Hold is only for Layer Switch) */}
-        <div className="p-3 bg-gradient-to-r from-purple-950/40 via-[#161224] to-[#0D101A] rounded-xl border border-purple-500/30 shadow-md space-y-2">
-          <div className="flex items-center justify-between font-mono text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#A855F7] animate-pulse" />
-              <span className="text-white font-bold tracking-wide">HOLD KNOB TO SWITCH LAYERS:</span>
-              <span className="text-[10px] text-white/50 hidden sm:inline">
-                (Hold knob down to cycle Layer 1 → Layer 2 → Layer 3)
-              </span>
+        {/* DEDICATED HOLD LAYER SWITCH CARD (Hold is only for Layer Switch - Only shown on TAP / PRESS) */}
+        {selectedRotaryKey === 'press' && (
+          <div className="p-3 bg-gradient-to-r from-purple-950/40 via-[#161224] to-[#0D101A] rounded-xl border border-purple-500/30 shadow-md space-y-2">
+            <div className="flex items-center justify-between font-mono text-xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#A855F7] animate-pulse" />
+                <span className="text-white font-bold tracking-wide">HOLD KNOB TO SWITCH LAYERS:</span>
+                <span className="text-[10px] text-white/50 hidden sm:inline">
+                  (Hold knob down to cycle Layer 1 → Layer 2 → Layer 3)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-purple-300/70 font-mono">Hold Threshold:</span>
+                <span className="font-bold text-[#A855F7] text-xs bg-black/60 px-2 py-0.5 rounded border border-[#A855F7]/30">
+                  {channelHoldThresholdMs} ms
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-purple-300/70 font-mono">Hold Threshold:</span>
-              <span className="font-bold text-[#A855F7] text-xs bg-black/60 px-2 py-0.5 rounded border border-[#A855F7]/30">
-                {channelHoldThresholdMs} ms
-              </span>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={300}
+                max={2500}
+                step={50}
+                value={channelHoldThresholdMs}
+                onChange={(e) => {
+                  setChannelHoldThresholdMs(Number(e.target.value));
+                  setHasChanges(true);
+                }}
+                className="flex-1 accent-[#A855F7] cursor-pointer"
+              />
+              {/* Live Hold Test Button */}
+              <button
+                type="button"
+                onMouseDown={handleTestHoldStart}
+                onMouseUp={handleTestHoldEnd}
+                onMouseLeave={handleTestHoldEnd}
+                onTouchStart={handleTestHoldStart}
+                onTouchEnd={handleTestHoldEnd}
+                className={`px-3 py-1 rounded-lg font-mono text-xs font-bold border transition-all cursor-pointer shrink-0 select-none ${
+                  testHolding
+                    ? 'bg-purple-600 text-white border-purple-400 scale-95 shadow-[0_0_12px_rgba(168,85,247,0.7)]'
+                    : 'bg-[#1D172A] hover:bg-[#281F3B] text-purple-300 border-purple-500/30'
+                }`}
+              >
+                {testHolding ? `Holding (${Math.round(testHoldProgress)}%)...` : 'Test Hold'}
+              </button>
             </div>
-          </div>
 
-          <div className="flex items-center gap-3">
-            <input
-              type="range"
-              min={300}
-              max={2500}
-              step={50}
-              value={channelHoldThresholdMs}
-              onChange={(e) => {
-                setChannelHoldThresholdMs(Number(e.target.value));
-                setHasChanges(true);
-              }}
-              className="flex-1 accent-[#A855F7] cursor-pointer"
-            />
-            {/* Live Hold Test Button */}
-            <button
-              type="button"
-              onMouseDown={handleTestHoldStart}
-              onMouseUp={handleTestHoldEnd}
-              onMouseLeave={handleTestHoldEnd}
-              onTouchStart={handleTestHoldStart}
-              onTouchEnd={handleTestHoldEnd}
-              className={`px-3 py-1 rounded-lg font-mono text-xs font-bold border transition-all cursor-pointer shrink-0 select-none ${
-                testHolding
-                  ? 'bg-purple-600 text-white border-purple-400 scale-95 shadow-[0_0_12px_rgba(168,85,247,0.7)]'
-                  : 'bg-[#1D172A] hover:bg-[#281F3B] text-purple-300 border-purple-500/30'
-              }`}
-            >
-              {testHolding ? `Holding (${Math.round(testHoldProgress)}%)...` : 'Test Hold'}
-            </button>
-          </div>
-
-          <div className="flex justify-between items-center text-[9px] font-mono text-white/40">
-            <span>300ms (Fast)</span>
-            <span>800ms (Default)</span>
-            <span>1500ms</span>
-            <span>2500ms (Long)</span>
-          </div>
-
-          {testLog && (
-            <div className={`text-[10px] font-mono px-2 py-1 rounded border ${
-              testLog.type === 'hold'
-                ? 'bg-purple-950/60 text-purple-300 border-purple-500/40'
-                : 'bg-cyan-950/60 text-cyan-300 border-cyan-500/40'
-            }`}>
-              {testLog.message}
+            <div className="flex justify-between items-center text-[9px] font-mono text-white/40">
+              <span>300ms (Fast)</span>
+              <span>800ms (Default)</span>
+              <span>1500ms</span>
+              <span>2500ms (Long)</span>
             </div>
-          )}
-        </div>
+
+            {testLog && (
+              <div className={`text-[10px] font-mono px-2 py-1 rounded border ${
+                testLog.type === 'hold'
+                  ? 'bg-purple-950/60 text-purple-300 border-purple-500/40'
+                  : 'bg-cyan-950/60 text-cyan-300 border-cyan-500/40'
+              }`}>
+                {testLog.message}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-3">
             

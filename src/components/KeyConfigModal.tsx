@@ -4,7 +4,6 @@ import { playKeyClick } from '../utils/soundEffects';
 import { 
   X, 
   Play, 
-  ShieldAlert, 
   Check, 
   CircleDot, 
   Keyboard as KeyboardIcon, 
@@ -202,7 +201,7 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
   onTestAction,
 }) => {
   const [editedKey, setEditedKey] = useState<KeyBinding>({ ...keyBinding });
-  const [activeTab, setActiveTab] = useState<'recorder' | 'keyboard' | 'text' | 'safety' | 'modtap'>('keyboard');
+  const [activeTab, setActiveTab] = useState<'keyboard' | 'text' | 'modtap'>('keyboard');
   
   // Macro Recorder & Shortcut State
   const [isRecording, setIsRecording] = useState(false);
@@ -436,18 +435,6 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
           </button>
 
           <button
-            onClick={() => { setActiveTab('recorder'); setIsRecording(false); }}
-            className={`py-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
-              activeTab === 'recorder'
-                ? 'border-[#FF5E00] text-[#FF5E00] font-bold'
-                : 'border-transparent text-white/50 hover:text-white'
-            }`}
-          >
-            <CircleDot className="w-3.5 h-3.5" />
-            2. Macro Recorder
-          </button>
-
-          <button
             onClick={() => { setActiveTab('text'); setIsRecording(false); }}
             className={`py-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
               activeTab === 'text'
@@ -456,20 +443,9 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
             }`}
           >
             <Type className="w-3.5 h-3.5" />
-            3. Text Typer
+            2. Text Typer
           </button>
 
-          <button
-            onClick={() => { setActiveTab('safety'); setIsRecording(false); }}
-            className={`py-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
-              activeTab === 'safety'
-                ? 'border-red-500 text-red-400 font-bold'
-                : 'border-transparent text-white/50 hover:text-white'
-            }`}
-          >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            4. Hold Safety
-          </button>
         </div>
 
         {/* Tab Body Content */}
@@ -643,105 +619,7 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: LIVE MACRO RECORDER */}
-          {activeTab === 'recorder' && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-[#0B0D13] border border-white/5 text-center space-y-3">
-                <div className="text-xs text-white/60">
-                  {isRecording ? (
-                    <span className="text-red-400 font-bold flex items-center justify-center gap-2 animate-pulse">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                      RECORDING: PRESS ANY KEYS ON YOUR PHYSICAL KEYBOARD NOW...
-                    </span>
-                  ) : (
-                    "Click 'Start Recording' and press your desired shortcut (e.g. Ctrl+Shift+T, F5, Win+E)"
-                  )}
-                </div>
-
-                {/* Captured Key Badges Display */}
-                <div className="min-h-[60px] p-3 rounded-lg bg-[#151923] border border-white/10 flex items-center justify-center gap-2 flex-wrap">
-                  {recordedKeys.length === 0 ? (
-                    <span className="text-white/30 text-xs italic">No keys recorded yet</span>
-                  ) : (
-                    recordedKeys.map((k, i) => (
-                      <React.Fragment key={i}>
-                        {i > 0 && <span className="text-white/40 text-xs font-bold">+</span>}
-                        <span className="px-3 py-1.5 rounded-md bg-[#242A38] border border-white/20 font-mono text-sm font-bold text-white shadow-xs">
-                          {k}
-                        </span>
-                      </React.Fragment>
-                    ))
-                  )}
-                </div>
-
-                {/* Recording Controls */}
-                <div className="flex items-center justify-center gap-3 pt-1">
-                  {!isRecording ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRecordedKeys([]);
-                        setIsRecording(true);
-                      }}
-                      className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold font-mono flex items-center gap-2 shadow-lg shadow-red-500/20 transition-all active:scale-95"
-                    >
-                      <CircleDot className="w-4 h-4 animate-pulse" />
-                      Start Keystroke Recording
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setIsRecording(false)}
-                      className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold font-mono flex items-center gap-2 transition-colors"
-                    >
-                      <Check className="w-4 h-4 text-[#38EF7D]" />
-                      Stop Recording
-                    </button>
-                  )}
-
-                  {recordedKeys.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={clearShortcut}
-                      className="px-3 py-2 rounded-xl border border-white/10 text-white/50 hover:text-white text-xs font-mono transition-colors"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Labels & Visual Naming Customizer */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <div>
-                  <label className="text-xs font-mono uppercase text-white/50 block mb-1">
-                    Keycap Legend (Main Text)
-                  </label>
-                  <input
-                    type="text"
-                    value={editedKey.label}
-                    onChange={(e) => setEditedKey({ ...editedKey, label: e.target.value })}
-                    className="w-full px-3 py-1.5 bg-[#0C0E14] border border-white/10 rounded-lg text-sm text-white focus:border-[#FF5E00] focus:outline-hidden"
-                    placeholder="e.g. C, Play, Cut"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-mono uppercase text-white/50 block mb-1">
-                    Sublabel (Bottom Subtitle)
-                  </label>
-                  <input
-                    type="text"
-                    value={editedKey.sublabel || ''}
-                    onChange={(e) => setEditedKey({ ...editedKey, sublabel: e.target.value })}
-                    className="w-full px-3 py-1.5 bg-[#0C0E14] border border-white/10 rounded-lg text-sm text-white focus:border-[#FF5E00] focus:outline-hidden"
-                    placeholder="e.g. Ctrl + C"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: TEXT SNIPPET MACRO */}
+          {/* TAB 2: TEXT SNIPPET MACRO */}
           {activeTab === 'text' && (
             <div className="space-y-3">
               <div className="text-xs text-white/60">
@@ -760,82 +638,6 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
                 <Check className="w-3.5 h-3.5 text-[#38EF7D]" />
                 <span>Text is typed with simulated keystrokes directly into active application.</span>
               </div>
-            </div>
-          )}
-
-          {/* TAB 4: LONG-PRESS SAFETY ISOLATION */}
-          {activeTab === 'safety' && (
-            <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/20 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <ShieldAlert className="w-5 h-5 text-red-400" />
-                  <div>
-                    <h4 className="text-xs font-bold text-red-300">Long-Press Safety Isolation</h4>
-                    <p className="text-[11px] text-red-200/60">
-                      Completely suppresses momentary taps. Prevents accidental misfires on critical actions.
-                    </p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={editedKey.isDestructiveSafety || false}
-                  onChange={(e) => setEditedKey({
-                    ...editedKey,
-                    isDestructiveSafety: e.target.checked,
-                    safetyConfirmAction: e.target.checked
-                      ? editedKey.safetyConfirmAction || {
-                          id: `safety-${Date.now()}`,
-                          category: 'hotkey',
-                          name: 'Confirmed Operation',
-                          payload: {}
-                        }
-                      : null
-                  })}
-                  className="w-4 h-4 accent-red-500"
-                />
-              </div>
-
-              {editedKey.isDestructiveSafety && (
-                <div className="space-y-3 pt-2">
-                  <div>
-                    <div className="flex justify-between text-xs text-white/70 mb-1">
-                      <span>Hold Threshold Duration</span>
-                      <span className="font-mono text-[#FF5E00]">
-                        {((editedKey.longPressThresholdMs || 1500) / 1000).toFixed(1)}s
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="500"
-                      max="4000"
-                      step="100"
-                      value={editedKey.longPressThresholdMs || 1500}
-                      onChange={(e) => setEditedKey({
-                        ...editedKey,
-                        longPressThresholdMs: parseInt(e.target.value)
-                      })}
-                      className="w-full accent-[#FF5E00]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] text-white/50 block mb-1">Safety Action Name</label>
-                    <input
-                      type="text"
-                      value={editedKey.safetyConfirmAction?.name || ''}
-                      onChange={(e) => setEditedKey({
-                        ...editedKey,
-                        safetyConfirmAction: {
-                          ...editedKey.safetyConfirmAction!,
-                          name: e.target.value
-                        }
-                      })}
-                      className="w-full px-2.5 py-1 bg-[#191012] border border-red-500/30 rounded text-xs text-white"
-                      placeholder="e.g. TERMINATE STREAM / FORCE PUSH"
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

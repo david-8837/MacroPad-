@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Profile, Layer, KeyBinding, DialBinding, OLEDState, ActionDefinition, DiscoveredApp } from './types';
+import { Layer, KeyBinding, DialBinding, OLEDState, ActionDefinition, DiscoveredApp } from './types';
 import { defaultProfiles } from './data/defaultProfiles';
 import { TopNavbar } from './components/TopNavbar';
 import { DigitalTwin } from './components/DigitalTwin';
@@ -10,7 +10,6 @@ import { ShortcutsPanel } from './components/ShortcutsPanel';
 import { AppLauncherPanel } from './components/AppLauncherPanel';
 import { PCShortcut } from './data/pcShortcuts';
 import { normalizeProfileChannels } from './utils/channelLayers';
-import { ProfileModal } from './components/ProfileModal';
 
 import { OSDFlyout } from './components/OSDFlyout';
 import { ViaKeyTester } from './components/via/ViaKeyTester';
@@ -26,18 +25,12 @@ import { OBSPanel } from './components/OBSPanel';
 import { DiagnosticLogDrawer, ActionHistoryEntry } from './components/DiagnosticLogDrawer';
 import { FirmwareModal } from './components/FirmwareModal';
 import { UploadModal } from './components/UploadModal';
-import { CommandPalette } from './components/CommandPalette';
 import type { ElectronHardwareEvent } from './types/electron';
-import {
-  Terminal,
-  Trash2,
-  Activity,
-} from 'lucide-react';
 
 const SESSION_KEY = 'kadowaz_session';
 const OLED_KEY = 'kadowaz_oled';
 
-function loadSession(): { activeProfileId?: string; activeLayerId?: string } {
+function loadSession(): { activeLayerId?: string } {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -57,47 +50,41 @@ function loadOledState(fallback: OLEDState): OLEDState {
 }
 
 export const App: React.FC = () => {
-  // Profiles initialized with 3 independent layers (Layer 1, Layer 2, Layer 3)
-  const [profiles, setProfiles] = useState<Profile[]>(() => {
-    const saved = localStorage.getItem('kadowaz_profiles');
+  // 3 Independent Hardware Layers (Layer 1, Layer 2, Layer 3)
+  const [layers, setLayers] = useState<Layer[]>(() => {
+    const saved = localStorage.getItem('kadowaz_layers');
     if (saved) {
       try {
-        const parsed: Profile[] = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(normalizeProfileChannels);
+        const parsed: Layer[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= 3) {
+          return parsed;
         }
       } catch { /* ignore */ }
     }
-    return defaultProfiles.map(normalizeProfileChannels);
+    const legacy = localStorage.getItem('kadowaz_profiles');
+    if (legacy) {
+      try {
+        const parsed = JSON.parse(legacy);
+        if (Array.isArray(parsed) && parsed[0]?.layers?.length >= 3) {
+          return normalizeProfileChannels(parsed[0]).layers;
+        }
+      } catch { /* ignore */ }
+    }
+    return normalizeProfileChannels(defaultProfiles[0]).layers;
   });
 
-  const [activeProfileId, setActiveProfileId] = useState<string>(() => {
-    const session = loadSession();
-    if (session.activeProfileId && profiles.some((p) => p.id === session.activeProfileId)) {
-      return session.activeProfileId;
-    }
-    return profiles[0]?.id || 'profile-davinci';
-  });
   const [activeLayerId, setActiveLayerId] = useState<string>(() => {
     const session = loadSession();
-    const profile = profiles.find((p) => p.id === (session.activeProfileId || profiles[0]?.id)) || profiles[0];
-    if (session.activeLayerId && profile?.layers.some((l) => l.id === session.activeLayerId)) {
+    if (session.activeLayerId && layers.some((l) => l.id === session.activeLayerId)) {
       return session.activeLayerId;
     }
-    return profile?.activeLayerId || profile?.layers[0]?.id || 'layer-edit';
+    return layers[0]?.id || 'layer-edit';
   });
   const [selectedKeyIndex, setSelectedKeyIndex] = useState<number | null>(0);
   const [editingKeyBinding, setEditingKeyBinding] = useState<KeyBinding | null>(null);
   const [isEditingKnob, setIsEditingKnob] = useState<boolean>(false);
   const [isEditingDisplay, setIsEditingDisplay] = useState<boolean>(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros'>('designer');
-  
-  // Active Window & Auto-Profile Switch State
-  const [autoProfileSwitch, setAutoProfileSwitch] = useState<boolean>(() => {
-    return localStorage.getItem('kadowaz_auto_profile') !== 'false';
-  });
-  const [activeWindowApp, setActiveWindowApp] = useState<string>('');
 
   // Hardware Connection State
   const [hardwareState, setHardwareState] = useState<HardwareConnectionState>('disconnected');
@@ -106,28 +93,22 @@ export const App: React.FC = () => {
 
   // VIA Keycode Assignment Handlers
   const handleAssignViaKeycode = (keyIndex: number, item: ViaKeycodeItem) => {
-    setProfiles(prev => prev.map(p => {
-      if (p.id !== activeProfile.id) return p;
+    setLayers(prev => prev.map(l => {
+      if (l.id !== activeLayer.id) return l;
       return {
-        ...p,
-        layers: p.layers.map(l => {
-          if (l.id !== activeLayer.id) return l;
+        ...l,
+        keys: l.keys.map(k => {
+          if (k.keyIndex !== keyIndex) return k;
           return {
-            ...l,
-            keys: l.keys.map(k => {
-              if (k.keyIndex !== keyIndex) return k;
-              return {
-                ...k,
-                label: item.label,
-                sublabel: item.code,
-                tapAction: {
-                  id: `via-${item.code}-${Date.now()}`,
-                  category: item.category === 'media' ? 'media' : 'hotkey',
-                  name: item.tooltip,
-                  payload: { keys: [item.code] }
-                }
-              };
-            })
+            ...k,
+            label: item.label,
+            sublabel: item.code,
+            tapAction: {
+              id: `via-${item.code}-${Date.now()}`,
+              category: item.category === 'media' ? 'media' : 'hotkey',
+              name: item.tooltip,
+              payload: { keys: [item.code] }
+            }
           };
         })
       };
@@ -136,28 +117,22 @@ export const App: React.FC = () => {
   };
 
   const handleAssignCustomCode = (keyIndex: number, rawCode: string) => {
-    setProfiles(prev => prev.map(p => {
-      if (p.id !== activeProfile.id) return p;
+    setLayers(prev => prev.map(l => {
+      if (l.id !== activeLayer.id) return l;
       return {
-        ...p,
-        layers: p.layers.map(l => {
-          if (l.id !== activeLayer.id) return l;
+        ...l,
+        keys: l.keys.map(k => {
+          if (k.keyIndex !== keyIndex) return k;
           return {
-            ...l,
-            keys: l.keys.map(k => {
-              if (k.keyIndex !== keyIndex) return k;
-              return {
-                ...k,
-                label: rawCode.slice(0, 6),
-                sublabel: rawCode,
-                tapAction: {
-                  id: `custom-${Date.now()}`,
-                  category: 'hotkey',
-                  name: `Custom: ${rawCode}`,
-                  payload: { keys: [rawCode] }
-                }
-              };
-            })
+            ...k,
+            label: rawCode.slice(0, 6),
+            sublabel: rawCode,
+            tapAction: {
+              id: `custom-${Date.now()}`,
+              category: 'hotkey',
+              name: `Custom: ${rawCode}`,
+              payload: { keys: [rawCode] }
+            }
           };
         })
       };
@@ -166,28 +141,22 @@ export const App: React.FC = () => {
   };
 
   const handleAssignPCShortcut = (keyIndex: number, shortcut: PCShortcut) => {
-    setProfiles(prev => prev.map(p => {
-      if (p.id !== activeProfile.id) return p;
+    setLayers(prev => prev.map(l => {
+      if (l.id !== activeLayer.id) return l;
       return {
-        ...p,
-        layers: p.layers.map(l => {
-          if (l.id !== activeLayer.id) return l;
+        ...l,
+        keys: l.keys.map(k => {
+          if (k.keyIndex !== keyIndex) return k;
           return {
-            ...l,
-            keys: l.keys.map(k => {
-              if (k.keyIndex !== keyIndex) return k;
-              return {
-                ...k,
-                label: shortcut.name.slice(0, 8),
-                sublabel: shortcut.keys.join('+'),
-                tapAction: {
-                  id: `pc-${shortcut.id}-${Date.now()}`,
-                  category: shortcut.category === 'media' ? 'media' : 'hotkey',
-                  name: shortcut.name,
-                  payload: { keys: shortcut.keys }
-                }
-              };
-            })
+            ...k,
+            label: shortcut.name.slice(0, 8),
+            sublabel: shortcut.keys.join('+'),
+            tapAction: {
+              id: `pc-${shortcut.id}-${Date.now()}`,
+              category: shortcut.category === 'media' ? 'media' : 'hotkey',
+              name: shortcut.name,
+              payload: { keys: shortcut.keys }
+            }
           };
         })
       };
@@ -196,28 +165,22 @@ export const App: React.FC = () => {
   };
 
   const handleAssignMacro = (keyIndex: number, macroId: number, macroName: string) => {
-    setProfiles(prev => prev.map(p => {
-      if (p.id !== activeProfile.id) return p;
+    setLayers(prev => prev.map(l => {
+      if (l.id !== activeLayer.id) return l;
       return {
-        ...p,
-        layers: p.layers.map(l => {
-          if (l.id !== activeLayer.id) return l;
+        ...l,
+        keys: l.keys.map(k => {
+          if (k.keyIndex !== keyIndex) return k;
           return {
-            ...l,
-            keys: l.keys.map(k => {
-              if (k.keyIndex !== keyIndex) return k;
-              return {
-                ...k,
-                label: `M${macroId}`,
-                sublabel: macroName || `Macro ${macroId}`,
-                tapAction: {
-                  id: `via-macro-${macroId}-${Date.now()}`,
-                  category: 'script',
-                  name: `Macro M${macroId}: ${macroName}`,
-                  payload: { command: `macro:M${macroId}` }
-                }
-              };
-            })
+            ...k,
+            label: `M${macroId}`,
+            sublabel: macroName || `Macro ${macroId}`,
+            tapAction: {
+              id: `via-macro-${macroId}-${Date.now()}`,
+              category: 'script',
+              name: `Macro M${macroId}: ${macroName}`,
+              payload: { command: `macro:M${macroId}` }
+            }
           };
         })
       };
@@ -230,7 +193,6 @@ export const App: React.FC = () => {
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const [isFirmwareModalOpen, setIsFirmwareModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   // Live OLED state
   const [oledState, setOledState] = useState<OLEDState>(() => loadOledState({
@@ -247,10 +209,9 @@ export const App: React.FC = () => {
     audioVURight: 65,
   }));
 
-  // Active Profile & Layer getters
-  const activeProfile = profiles.find(p => p.id === activeProfileId) || profiles[0];
-  const activeLayer = activeProfile.layers.find(l => l.id === activeLayerId) || activeProfile.layers[0];
-  const activeChannelIdx = Math.max(0, activeProfile.layers.findIndex(l => l.id === activeLayer.id));
+  // Active Layer getters
+  const activeLayer = layers.find(l => l.id === activeLayerId) || layers[0];
+  const activeChannelIdx = Math.max(0, layers.findIndex(l => l.id === activeLayer.id));
 
   // Keep key editor drawer in sync when switching channels
   useEffect(() => {
@@ -262,35 +223,16 @@ export const App: React.FC = () => {
 
   // Save to localStorage on change
   useEffect(() => {
-    localStorage.setItem('kadowaz_profiles', JSON.stringify(profiles));
-  }, [profiles]);
+    localStorage.setItem('kadowaz_layers', JSON.stringify(layers));
+  }, [layers]);
 
   useEffect(() => {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ activeProfileId, activeLayerId }));
-  }, [activeProfileId, activeLayerId]);
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ activeLayerId }));
+  }, [activeLayerId]);
 
   useEffect(() => {
     localStorage.setItem(OLED_KEY, JSON.stringify(oledState));
   }, [oledState]);
-
-  useEffect(() => {
-    window.electronAPI?.reportProfiles?.(
-      profiles.map((p) => ({ id: p.id, name: p.name })),
-      activeProfileId
-    );
-  }, [profiles, activeProfileId]);
-
-  // Global Ctrl+K / Cmd+K listener for Command Palette
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
 
   // App Assignment Handler for Application Library & Launcher
   const handleAssignApp = (
@@ -306,39 +248,33 @@ export const App: React.FC = () => {
   ) => {
     const targetChannel = options?.channelIndex !== undefined ? options.channelIndex : activeChannelIdx;
     
-    setProfiles(prev => prev.map(p => {
-      if (p.id !== activeProfile.id) return p;
+    setLayers(prev => prev.map((l, lIdx) => {
+      if (lIdx !== targetChannel) return l;
       return {
-        ...p,
-        layers: p.layers.map((l, lIdx) => {
-          if (lIdx !== targetChannel) return l;
+        ...l,
+        keys: l.keys.map(k => {
+          if (k.keyIndex !== keyIndex) return k;
           return {
-            ...l,
-            keys: l.keys.map(k => {
-              if (k.keyIndex !== keyIndex) return k;
-              return {
-                ...k,
-                label: options?.customLabel?.trim() || app.name.slice(0, 8),
-                sublabel: app.category.toUpperCase(),
-                iconName: 'Sparkles',
-                tapAction: {
-                  id: `app-launch-${Date.now()}`,
-                  category: 'app_launch' as const,
-                  name: `Launch ${app.name}`,
-                  payload: {
-                    appId: app.appId || '',
-                    appName: app.name,
-                    exePath: app.exePath,
-                    launchArgs: options?.launchArgs || app.launchArgs || '',
-                    focusExisting: options?.focusExisting || false,
-                    launchMinimized: options?.launchMinimized || false,
-                    iconDataUrl: app.iconDataUrl,
-                    targetType: app.targetType,
-                    source: app.source,
-                  }
-                }
-              };
-            })
+            ...k,
+            label: options?.customLabel?.trim() || app.name.slice(0, 8),
+            sublabel: app.category.toUpperCase(),
+            iconName: 'Sparkles',
+            tapAction: {
+              id: `app-launch-${Date.now()}`,
+              category: 'app_launch' as const,
+              name: `Launch ${app.name}`,
+              payload: {
+                appId: app.appId || '',
+                appName: app.name,
+                exePath: app.exePath,
+                launchArgs: options?.launchArgs || app.launchArgs || '',
+                focusExisting: options?.focusExisting || false,
+                launchMinimized: options?.launchMinimized || false,
+                iconDataUrl: app.iconDataUrl,
+                targetType: app.targetType,
+                source: app.source,
+              }
+            }
           };
         })
       };
@@ -541,7 +477,7 @@ export const App: React.FC = () => {
       unsubHold();
       if (hwDialTimer) clearTimeout(hwDialTimer);
     };
-  }, [activeLayer, activeChannelIdx, activeProfile]);
+  }, [activeLayer, activeChannelIdx, layers]);
 
   // Live hardware telemetry ticker for CPU/GPU/RAM/Temp
   useEffect(() => {
@@ -582,58 +518,11 @@ export const App: React.FC = () => {
   }, []);
 
   // Events from the Electron main process: tray menu, localhost webhook, launcher status.
-  // A ref keeps the handler fresh without re-subscribing on every state change.
   const hardwareEventHandlerRef = useRef<(event: ElectronHardwareEvent) => void>(() => {});
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onHardwareEvent?.((event) => hardwareEventHandlerRef.current(event));
     return () => { unsubscribe?.(); };
   }, []);
-
-  // Save autoProfileSwitch preference
-  useEffect(() => {
-    localStorage.setItem('kadowaz_auto_profile', String(autoProfileSwitch));
-  }, [autoProfileSwitch]);
-
-  // Active Window Tracker: automatic profile switching based on foreground application
-  useEffect(() => {
-    if (!window.electronAPI?.onActiveWindowChanged) return;
-
-    const unsubscribe = window.electronAPI.onActiveWindowChanged((win) => {
-      if (win.app) {
-        setActiveWindowApp(win.app);
-      }
-
-      if (!autoProfileSwitch) return;
-      const appName = win.app.toLowerCase();
-      const winTitle = win.title;
-
-      const matched = profiles.find((p) => {
-        if (p.targetProcess) {
-          const targetClean = p.targetProcess.toLowerCase().replace(/\.exe$/, '');
-          if (targetClean === appName || appName.includes(targetClean)) return true;
-        }
-        if (p.windowTitleRegex) {
-          try {
-            const re = new RegExp(p.windowTitleRegex, 'i');
-            if (re.test(winTitle)) return true;
-          } catch { /* ignore bad regex */ }
-        }
-        return false;
-      });
-
-      if (matched && matched.id !== activeProfileId) {
-        setActiveProfileId(matched.id);
-        const firstLayer = matched.layers[0]?.id;
-        if (firstLayer) setActiveLayerId(firstLayer);
-        triggerOSDFlyout();
-        handleTriggerAction('auto-profile', `Auto-switched profile to “${matched.name}” (${win.app})`, 'info');
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [profiles, activeProfileId, autoProfileSwitch]);
 
   // Show transient OSD helper
   const triggerOSDFlyout = () => {
@@ -652,90 +541,19 @@ export const App: React.FC = () => {
     handleTriggerAction('oled-cycle', `OLED Mode: ${modes[nextIdx].toUpperCase()}`, 'navigation');
   };
 
-  // Profile creation
-  const handleCreateProfile = (newProfile: Profile) => {
-    const normalized = normalizeProfileChannels(newProfile);
-    setProfiles(prev => [...prev, normalized]);
-    setActiveProfileId(normalized.id);
-    setActiveLayerId(normalized.layers[0].id);
-    handleTriggerAction('profile-create', `Created Profile: "${normalized.name}"`, 'info');
-  };
-
-  // Profile deletion
-  const handleDeleteProfile = (profileId: string) => {
-    if (profiles.length <= 1) {
-      alert('You must have at least one profile.');
-      return;
-    }
-    const filtered = profiles.filter(p => p.id !== profileId);
-    setProfiles(filtered);
-    if (activeProfileId === profileId) {
-      setActiveProfileId(filtered[0].id);
-      setActiveLayerId(filtered[0].layers[0].id);
-    }
-    handleTriggerAction('profile-delete', `Deleted Profile`, 'info');
-  };
-
-  // Profile selection
-  const handleSelectProfile = (id: string) => {
-    setActiveProfileId(id);
-    const prof = profiles.find(p => p.id === id);
-    if (prof) {
-      const layerId = prof.layers.some(l => l.id === prof.activeLayerId)
-        ? prof.activeLayerId
-        : (prof.layers[0]?.id || '');
-      setActiveLayerId(layerId);
-    }
-    triggerOSDFlyout();
-  };
-
   // Layer selection
   const handleSelectLayer = (id: string) => {
     setActiveLayerId(id);
     triggerOSDFlyout();
   };
 
-  // Export profiles to JSON
-  const handleExportProfiles = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(profiles, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `kadowaz_profiles_backup_${Date.now()}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-    handleTriggerAction('export', 'Exported profile configuration to JSON', 'info');
-  };
-
-  // Import profiles from JSON
-  const handleImportProfiles = (json: string) => {
-    try {
-      const parsed = JSON.parse(json);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const normalized = parsed.map(normalizeProfileChannels);
-        setProfiles(normalized);
-        setActiveProfileId(normalized[0].id);
-        setActiveLayerId(normalized[0].layers[0].id);
-        handleTriggerAction('import', 'Successfully imported profile configuration!', 'info');
-      }
-    } catch {
-      alert('Invalid profile JSON file format.');
-    }
-  };
-
   // Key save handler
   const handleSaveKey = (updated: KeyBinding) => {
-    setProfiles(prev => prev.map(p => {
-      if (p.id !== activeProfile.id) return p;
+    setLayers(prev => prev.map(l => {
+      if (l.id !== activeLayer.id) return l;
       return {
-        ...p,
-        layers: p.layers.map(l => {
-          if (l.id !== activeLayer.id) return l;
-          return {
-            ...l,
-            keys: l.keys.map(k => k.keyIndex === updated.keyIndex ? updated : k)
-          };
-        })
+        ...l,
+        keys: l.keys.map(k => k.keyIndex === updated.keyIndex ? updated : k)
       };
     }));
     handleTriggerAction('key-save', `Saved Switch #${updated.keyIndex + 1} (${updated.label})`, 'info');
@@ -743,33 +561,26 @@ export const App: React.FC = () => {
 
   // Dial / Rotary Encoder Save handler
   const handleSaveDial = (updatedDial: DialBinding) => {
-    setProfiles(prev => prev.map(p => {
-      if (p.id !== activeProfile.id) return p;
+    setLayers(prev => prev.map(l => {
+      if (l.id !== activeLayer.id) return l;
       return {
-        ...p,
-        layers: p.layers.map(l => {
-          if (l.id !== activeLayer.id) return l;
-          return {
-            ...l,
-            dial: updatedDial
-          };
-        })
+        ...l,
+        dial: updatedDial
       };
     }));
     handleTriggerAction('dial-save', `Saved Dial Configuration (${updatedDial.activeModeName})`, 'info');
   };
 
   // Sync Keymap to Microcontroller Flash
-  // Sync Keymap to Microcontroller Flash (Send to Micro Pad)
   const handleSyncEEPROM = async () => {
     // 1. Validate all 3 layer configurations
-    if (!activeProfile.layers || activeProfile.layers.length < 3) {
-      handleTriggerAction('sync-fail', 'Profile must contain all 3 independent layers (Layer 1, Layer 2, Layer 3)', 'safety');
+    if (!layers || layers.length < 3) {
+      handleTriggerAction('sync-fail', 'Macropad must contain all 3 independent layers (Layer 1, Layer 2, Layer 3)', 'safety');
       return;
     }
 
     let totalAppLaunchers = 0;
-    const channelSummary = activeProfile.layers.map((layer, chIdx) => {
+    const channelSummary = layers.map((layer, chIdx) => {
       const appCount = layer.keys.filter(k => k.tapAction?.category === 'app_launch').length;
       totalAppLaunchers += appCount;
       return `Layer ${chIdx + 1}: ${layer.keys.length} keys (${appCount} apps)`;
@@ -781,8 +592,8 @@ export const App: React.FC = () => {
     const encoder = new TextEncoder();
     const packet = encoder.encode(JSON.stringify({
       cmd: 'SYNC_KEYMAP',
-      profile: activeProfile.name,
-      channels: activeProfile.layers.map((layer, chIdx) => ({
+      profile: 'Kadowaz Deck',
+      channels: layers.map((layer, chIdx) => ({
         channel: chIdx + 1,
         name: layer.name,
         keys: layer.keys.map(k => ({
@@ -870,21 +681,10 @@ export const App: React.FC = () => {
       }
       case '/api/v1/profile':
       case '/api/v1/action': {
-        const profileId = typeof data.profileId === 'string' ? data.profileId : undefined;
-        if (profileId) {
-          const target = profiles.find(p => p.id === profileId);
-          if (!target) {
-            note(`Profile "${profileId}" not found`, 'safety');
-            return;
-          }
-          handleSelectProfile(target.id);
-          if (typeof data.layerId === 'string' && target.layers.some(l => l.id === data.layerId)) {
-            setActiveLayerId(data.layerId);
-          }
-          note(`Switched to profile "${target.name}"`);
-        }
-        if (endpoint === '/api/v1/action' && typeof data.channel === 'number') {
+        if (typeof data.channel === 'number') {
           handleCycleDialMode(data.channel - 1);
+        } else if (typeof data.layerId === 'string') {
+          setActiveLayerId(data.layerId);
         }
         return;
       }
@@ -894,9 +694,7 @@ export const App: React.FC = () => {
   };
 
   hardwareEventHandlerRef.current = (event) => {
-    if (event.source === 'tray' && event.action === 'switch-profile' && event.id) {
-      if (profiles.some(p => p.id === event.id)) handleSelectProfile(event.id);
-    } else if (event.source === 'webhook' && event.endpoint) {
+    if (event.source === 'webhook' && event.endpoint) {
       handleWebhookRequest(event.endpoint, event.data || {});
     } else if (event.source === 'app-launcher' && event.status === 'error') {
       pushLog(`[ACTION FAILED] ${event.error || 'App launch failed'}`, 'app_launch', 'safety');
@@ -907,22 +705,12 @@ export const App: React.FC = () => {
     <div className="flex flex-col h-screen w-screen bg-[#0C0E14] text-white overflow-hidden">
       {/* Top Application Navbar */}
       <TopNavbar
-        profiles={profiles}
-        activeProfile={activeProfile}
         activeLayer={activeLayer}
-        onSelectProfile={handleSelectProfile}
         onSelectLayer={handleSelectLayer}
-        onToggleLock={() => {
-          setProfiles(prev => prev.map(p => 
-            p.id === activeProfile.id ? { ...p, isLocked: !p.isLocked } : p
-          ));
-        }}
+        onToggleLock={() => {}}
         onTriggerOSD={triggerOSDFlyout}
-        onExportProfiles={handleExportProfiles}
-        onImportProfiles={handleImportProfiles}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-        onOpenProfileModal={() => setIsProfileModalOpen(true)}
         hardwareState={hardwareState}
         deviceInfo={deviceInfo}
         onConnectHID={() => hardwareBridge.connectHID()}
@@ -930,12 +718,8 @@ export const App: React.FC = () => {
         onDisconnectHardware={() => hardwareBridge.disconnect()}
         onSyncEEPROM={handleSyncEEPROM}
         onOpenUploadModal={() => setIsUploadModalOpen(true)}
-        autoProfileSwitch={autoProfileSwitch}
-        onToggleAutoProfileSwitch={() => setAutoProfileSwitch((prev) => !prev)}
-        activeWindowApp={activeWindowApp}
         onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
         onOpenFirmwareModal={() => setIsFirmwareModalOpen(true)}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       />
 
       {/* Main Workspace Area */}
@@ -949,7 +733,6 @@ export const App: React.FC = () => {
                 layer={activeLayer}
                 channelIndex={activeChannelIdx}
                 oledState={oledState}
-                activeProfileName={activeProfile.name}
                 selectedKeyIndex={selectedKeyIndex}
                 isDrawerKeyOpen={Boolean(editingKeyBinding)}
                 isDrawerKnobOpen={isEditingKnob}
@@ -957,8 +740,9 @@ export const App: React.FC = () => {
                 onSelectKey={(idx) => {
                   setSelectedKeyIndex(idx);
                   const k = activeLayer.keys.find(item => item.keyIndex === idx);
-                  // If drawer is already open, tapping any key on macropad switches drawer to edit that key!
-                  if (editingKeyBinding && k) {
+                  setIsEditingKnob(false);
+                  setIsEditingDisplay(false);
+                  if (k) {
                     setEditingKeyBinding(k);
                   }
                 }}
@@ -980,7 +764,6 @@ export const App: React.FC = () => {
                   setIsEditingKnob(false);
                   setIsEditingDisplay(true);
                 }}
-                onOpenUploadModal={() => setIsUploadModalOpen(true)}
                 onTriggerAction={handleTriggerAction}
                 onCycleOLEDMode={handleCycleOLEDMode}
                 onCycleDialMode={handleCycleDialMode}
@@ -1034,7 +817,6 @@ export const App: React.FC = () => {
                   oledState={oledState}
                   onUpdateOLEDState={(updated) => setOledState(updated)}
                   onClose={() => setIsEditingDisplay(false)}
-                  activeProfileName={activeProfile.name}
                   activeLayerName={activeLayer.name}
                   onTriggerAction={handleTriggerAction}
                 />
@@ -1094,7 +876,7 @@ export const App: React.FC = () => {
                       })()
                     ) : (
                       <p className="text-xs text-white/40 italic">
-                        Click any switch on the deck to inspect its shortcut, record new keys, or configure safety.
+                        Click any switch on the deck to inspect its shortcut, record new keys, or launch apps.
                       </p>
                     )}
                   </div>
@@ -1251,19 +1033,9 @@ export const App: React.FC = () => {
 
 
 
-      {/* Profile Creation & Management Modal */}
-      <ProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        onCreateProfile={handleCreateProfile}
-        onDeleteProfile={handleDeleteProfile}
-        currentProfiles={profiles}
-      />
-
       {/* Transient OSD Overlay */}
       <OSDFlyout
         layer={activeLayer}
-        profileName={activeProfile.name}
         isVisible={osdVisible}
         onClose={() => setOsdVisible(false)}
       />
@@ -1290,43 +1062,12 @@ export const App: React.FC = () => {
       <UploadModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
-        activeProfile={activeProfile}
+        layers={layers}
         hardwareState={hardwareState}
         deviceInfo={deviceInfo}
         onConnectHID={() => hardwareBridge.connectHID()}
         onConnectSerial={() => hardwareBridge.connectSerial()}
         onSyncEEPROM={handleSyncEEPROM}
-      />
-
-      {/* Global Command Palette (Ctrl+K) */}
-      <CommandPalette
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        activeTab={activeTab}
-        onChangeTab={setActiveTab}
-        profiles={profiles}
-        activeProfile={activeProfile}
-        onSelectProfile={handleSelectProfile}
-        onOpenProfileModal={() => setIsProfileModalOpen(true)}
-        activeLayer={activeLayer}
-        onSelectLayer={handleSelectLayer}
-        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
-        onOpenFirmwareModal={() => setIsFirmwareModalOpen(true)}
-        onExportProfiles={handleExportProfiles}
-        autoProfileSwitch={autoProfileSwitch}
-        onToggleAutoProfileSwitch={() => setAutoProfileSwitch((prev) => !prev)}
-        hardwareState={hardwareState}
-        onConnectHID={() => hardwareBridge.connectHID()}
-        onConnectSerial={() => hardwareBridge.connectSerial()}
-        onDisconnectHardware={() => hardwareBridge.disconnect()}
-        onSyncEEPROM={handleSyncEEPROM}
-        onSelectKey={(idx) => {
-          setSelectedKeyIndex(idx);
-          const k = activeLayer.keys[idx];
-          if (k) setEditingKeyBinding(k);
-        }}
-        onSelectKnob={() => setIsEditingKnob(true)}
-        onTriggerAction={handleTriggerAction}
       />
     </div>
   );
