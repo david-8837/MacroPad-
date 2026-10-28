@@ -35,6 +35,14 @@
    - [8. VIA Hardware Suite](#8-via-hardware-suite)
    - [9. Safety Isolation (Long-Press Protection)](#9-safety-isolation-long-press-protection)
    - [10. Embedded Localhost REST & Webhook Daemon](#10-embedded-localhost-rest--webhook-daemon)
+   - [11. Live OLED Hardware Telemetry (CPU, GPU, RAM, Temp)](#live-oled-telemetry)
+   - [12. Foreground Window Tracking & Auto-Profile Switching](#auto-profile-switching)
+   - [13. Windows CoreAudio & Per-App WASAPI Mixer Control](#windows-audio-control)
+   - [14. Direct OBS Studio WebSocket 5.x Client](#obs-studio-websocket)
+   - [15. Action History & Diagnostic Health Drawer](#action-history--diagnostics)
+   - [16. In-App RP2040 UF2 Firmware Flasher](#rp2040-firmware-flasher)
+   - [17. Global Command Palette (Ctrl+K)](#global-command-palette)
+   - [18. Windows Packaging (electron-builder)](#windows-packaging)
 4. [Hardware & Firmware Integration](#hardware--firmware-integration)
    - [Recommended Hardware Bill of Materials (BOM)](#recommended-hardware-bill-of-materials-bom)
    - [Firmware Options (Pico SDK C vs Arduino)](#firmware-options)
@@ -615,13 +623,34 @@ If you prefer using the Arduino IDE without compiling from the command line:
 
 ### 6. Testing & Verification
 
-Run the unified test suite across both desktop and firmware protocol layers:
+Run the unified test suite across both desktop, native interop, and firmware protocol layers:
 ```bash
 npm test
 ```
-- **17 Desktop Tests:** Action executor key resolution, serial stream line buffering, token-authenticated webhook daemon, and DNS-rebinding protection.
-- **113 Protocol Tests:** Byte-identical C struct layouts, CRC-16 frame encoding/decoding, auto-resynchronization state machine, and chunked flash config streaming.
-- **Total:** 130 automated assertions, 0 failures.
+- **113 Host Protocol & Binary Tests:** Byte-identical C struct layouts, CRC-16 frame encoding/decoding, auto-resynchronization state machine, and chunked flash config streaming.
+- **17 Webhook & REST API Tests:** Token-authenticated daemon, CORS preflight isolation, DNS-rebinding protection, and event streaming.
+- **8 RP2040 Firmware Flasher Tests:** UF2 block inspection, magic header & trailer checks, chip family validation, and truncated binary rejection.
+- **7 Global Command Palette Tests:** Multi-tier ranking algorithms, fuzzy search scoring, and out-of-order token matching.
+- **Windows CoreAudio & WASAPI Mixer Tests:** Volume scaling, per-process session volume adjustments, microphone mute, and device queries.
+- **OBS Studio WebSocket 5.x Tests:** URL parsing, SHA-256 authentication challenge hashing, error handling, and state schemas.
+- **System Telemetry & Window Tracker Tests:** Live CPU/GPU/RAM sampling, process foreground window detection, and auto-profile matching.
+- **Packaging Configuration Tests:** NSIS and portable target validation, asset extraction, and script presence.
+- **Total:** **171 automated assertions, 0 failures**.
+
+### 7. Standalone Windows Packaging
+
+Build a production standalone executable or installer using `electron-builder`:
+```bash
+# Verify electron assets and build unpacked directory for testing
+npm run pack
+
+# Build complete NSIS Windows Installer and Portable Standalone Executable
+npm run dist:win
+```
+Output artifacts are saved directly to `release/`:
+- `release/KADOWAZ-Deck-Studio-1.0.0-x64.exe` (NSIS Installer)
+- `release/KADOWAZ-Deck-Studio-1.0.0-x64.portable.exe` (Portable Executable)
+- `release/win-unpacked/` (Unpacked binary distribution)
 
 ---
 
