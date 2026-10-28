@@ -71,3 +71,4 @@ process.stdout.write(
   + `  ✓ native C# interop (audio.cs) verified\n`
   + `  ✓ all native CommonJS modules syntax-checked\n`
 );
+
