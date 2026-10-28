@@ -518,18 +518,42 @@ export const App: React.FC = () => {
     };
   }, [activeLayer, activeChannelIdx, activeProfile]);
 
-  // Telemetry ticker simulation for CPU/RAM/Track
+  // Live hardware telemetry ticker for CPU/GPU/RAM/Temp
   useEffect(() => {
-    const interval = setInterval(() => {
-      setOledState(prev => ({
-        ...prev,
-        cpuLoad: Math.floor(18 + Math.random() * 25),
-        gpuLoad: Math.floor(30 + Math.random() * 35),
-        ramUsage: 58 + Math.floor(Math.random() * 4),
-        trackProgress: (prev.trackProgress + 0.5) % 100,
-      }));
-    }, 2000);
-    return () => clearInterval(interval);
+    let simInterval: NodeJS.Timeout | null = null;
+
+    if (window.electronAPI?.onSystemMetrics) {
+      // Native Electron: live Windows performance counters and GPU metrics
+      const unsubscribe = window.electronAPI.onSystemMetrics((metrics) => {
+        setOledState(prev => ({
+          ...prev,
+          cpuLoad: metrics.cpu,
+          gpuLoad: metrics.gpu,
+          ramUsage: metrics.ram,
+          cpuTemp: metrics.temp,
+          trackProgress: (prev.trackProgress + 0.5) % 100,
+        }));
+      });
+
+      return () => {
+        unsubscribe();
+      };
+    } else {
+      // Browser Sandbox fallback: simulated telemetry
+      simInterval = setInterval(() => {
+        setOledState(prev => ({
+          ...prev,
+          cpuLoad: Math.floor(18 + Math.random() * 25),
+          gpuLoad: Math.floor(30 + Math.random() * 35),
+          ramUsage: 58 + Math.floor(Math.random() * 4),
+          trackProgress: (prev.trackProgress + 0.5) % 100,
+        }));
+      }, 2000);
+
+      return () => {
+        if (simInterval) clearInterval(simInterval);
+      };
+    }
   }, []);
 
   // Events from the Electron main process: tray menu, localhost webhook, launcher status.

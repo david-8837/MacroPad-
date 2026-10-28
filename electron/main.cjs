@@ -9,12 +9,14 @@ const {
   launchApplication,
 } = require('./appDiscovery.cjs');
 const { executeAction } = require('./actionExecutor.cjs');
+const { getMetrics } = require('./native/system.cjs');
 
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 let webhookServer = null;
 let webhookToken = '';
+let metricsTimer = null;
 const WEBHOOK_PORT = 38491;
 
 const profileMenuState = {
@@ -252,6 +254,31 @@ ipcMain.handle('get-app-icon', async (_event, exePath) => getAppIcon(exePath));
 ipcMain.handle('browse-for-app', async () => browseForApp());
 ipcMain.handle('launch-app', async (_event, appInfo) => launchApplication(appInfo));
 
+ipcMain.handle('get-system-metrics', async () => getMetrics());
+
+function startMetricsBroadcasting() {
+  if (metricsTimer) return;
+  metricsTimer = setInterval(async () => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
+      try {
+        const res = await getMetrics();
+        if (res && res.ok && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('system-metrics', res.value);
+        }
+      } catch (err) {
+        // silent recovery on next tick
+      }
+    }
+  }, 1200);
+}
+
+function stopMetricsBroadcasting() {
+  if (metricsTimer) {
+    clearInterval(metricsTimer);
+    metricsTimer = null;
+  }
+}
+
 ipcMain.on('oled-update', (_event, data) => {
   sendToRenderer({ source: 'oled', data });
 });
@@ -323,6 +350,7 @@ if (!gotSingleInstanceLock) {
     startLocalhostWebhookServer();
     createWindow();
     createTray();
+    startMetricsBroadcasting();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -333,6 +361,7 @@ if (!gotSingleInstanceLock) {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  stopMetricsBroadcasting();
   if (webhookServer) {
     webhookServer.close();
     webhookServer = null;

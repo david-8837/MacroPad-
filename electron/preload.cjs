@@ -17,4 +17,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   launchApp: (appInfo) => ipcRenderer.invoke('launch-app', appInfo),
   browseForApp: () => ipcRenderer.invoke('browse-for-app'),
   getAppIcon: (exePath) => ipcRenderer.invoke('get-app-icon', exePath),
+
+  getSystemMetrics: () => ipcRenderer.invoke('get-system-metrics'),
+  onSystemMetrics: (callback) => {
+    const listener = (_event, metrics) => callback(metrics);
+    ipcRenderer.on('system-metrics', listener);
+    return () => ipcRenderer.removeListener('system-metrics', listener);
+  },
 });
