@@ -347,3 +347,4 @@ export const FirmwareModal: React.FC<FirmwareModalProps> = ({ isOpen, onClose })
     </div>
   );
 };
+

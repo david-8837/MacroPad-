@@ -25,6 +25,7 @@ import { AudioMixerPanel } from './components/AudioMixerPanel';
 import { OBSPanel } from './components/OBSPanel';
 import { DiagnosticLogDrawer, ActionHistoryEntry } from './components/DiagnosticLogDrawer';
 import { FirmwareModal } from './components/FirmwareModal';
+import { CommandPalette } from './components/CommandPalette';
 import type { ElectronHardwareEvent } from './types/electron';
 import {
   Terminal,
@@ -227,6 +228,7 @@ export const App: React.FC = () => {
   const [actionLogs, setActionLogs] = useState<ActionHistoryEntry[]>([]);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const [isFirmwareModalOpen, setIsFirmwareModalOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   // Live OLED state
   const [oledState, setOledState] = useState<OLEDState>(() => loadOledState({
@@ -275,6 +277,18 @@ export const App: React.FC = () => {
       activeProfileId
     );
   }, [profiles, activeProfileId]);
+
+  // Global Ctrl+K / Cmd+K listener for Command Palette
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   // App Assignment Handler for Application Library & Launcher
   const handleAssignApp = (
@@ -918,6 +932,7 @@ export const App: React.FC = () => {
         activeWindowApp={activeWindowApp}
         onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
         onOpenFirmwareModal={() => setIsFirmwareModalOpen(true)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       />
 
       {/* Main Workspace Area */}
@@ -1265,6 +1280,37 @@ export const App: React.FC = () => {
       <FirmwareModal
         isOpen={isFirmwareModalOpen}
         onClose={() => setIsFirmwareModalOpen(false)}
+      />
+
+      {/* Global Command Palette (Ctrl+K) */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
+        profiles={profiles}
+        activeProfile={activeProfile}
+        onSelectProfile={handleSelectProfile}
+        onOpenProfileModal={() => setIsProfileModalOpen(true)}
+        activeLayer={activeLayer}
+        onSelectLayer={handleSelectLayer}
+        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
+        onOpenFirmwareModal={() => setIsFirmwareModalOpen(true)}
+        onExportProfiles={handleExportProfiles}
+        autoProfileSwitch={autoProfileSwitch}
+        onToggleAutoProfileSwitch={() => setAutoProfileSwitch((prev) => !prev)}
+        hardwareState={hardwareState}
+        onConnectHID={() => hardwareBridge.connectHID()}
+        onConnectSerial={() => hardwareBridge.connectSerial()}
+        onDisconnectHardware={() => hardwareBridge.disconnect()}
+        onSyncEEPROM={handleSyncEEPROM}
+        onSelectKey={(idx) => {
+          setSelectedKeyIndex(idx);
+          const k = activeLayer.keys[idx];
+          if (k) setEditingKeyBinding(k);
+        }}
+        onSelectKnob={() => setIsEditingKnob(true)}
+        onTriggerAction={handleTriggerAction}
       />
     </div>
   );

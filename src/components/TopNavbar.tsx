@@ -20,6 +20,7 @@ import {
   Power,
   Activity,
   Zap,
+  Search,
 } from 'lucide-react';
 
 interface TopNavbarProps {
@@ -46,6 +47,7 @@ interface TopNavbarProps {
   activeWindowApp?: string;
   onOpenDiagnostics?: () => void;
   onOpenFirmwareModal?: () => void;
+  onOpenCommandPalette?: () => void;
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
@@ -72,6 +74,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   activeWindowApp,
   onOpenDiagnostics,
   onOpenFirmwareModal,
+  onOpenCommandPalette,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showConnectMenu, setShowConnectMenu] = useState(false);
@@ -364,6 +367,16 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           className="p-1.5 rounded-lg border border-white/10 text-white/60 hover:text-[#00F0FF] hover:border-[#00F0FF]/40 hover:bg-[#00F0FF]/10 transition-colors"
         >
           <Activity className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Command Palette (Ctrl+K) Trigger */}
+        <button
+          onClick={onOpenCommandPalette}
+          title="Command Palette (Ctrl+K)"
+          className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-white/10 text-white/60 hover:text-white hover:border-[#00F0FF]/50 hover:bg-[#00F0FF]/10 transition-colors text-xs font-mono cursor-pointer"
+        >
+          <Search className="w-3.5 h-3.5 text-[#00F0FF]" />
+          <span className="hidden xl:inline text-[10px] text-white/40">Ctrl+K</span>
         </button>
 
         {/* Window controls */}

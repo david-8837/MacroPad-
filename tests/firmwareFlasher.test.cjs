@@ -125,3 +125,4 @@ runTests().catch((err) => {
   console.error('Firmware Flasher test failed:', err);
   process.exit(1);
 });
+
