@@ -109,7 +109,18 @@ int oled_play(oled_canvas_t *c, uint8_t mode, uint32_t ms) {
 
 /* ---- hardware ------------------------------------------------------------- */
 
-#if !defined(OLED_NO_HW) && BOARD_OLED_PRESENT
+#if !BOARD_OLED_PRESENT
+/* This model has no display. Never probe I2C, even in a host test. */
+int oled_hw_init(void) { return 0; }
+int oled_hw_present(void) { return 0; }
+#ifdef OLED_NO_HW
+void oled_host_set_present(int present) { (void)present; }
+#endif
+void oled_set_contrast(uint8_t level) { (void)level; }
+void oled_set_inverted(int inverted) { (void)inverted; }
+void oled_flush(const oled_canvas_t *c) { (void)c; }
+
+#elif !defined(OLED_NO_HW)
 
 #include "hardware/i2c.h"
 #include "pico/stdlib.h"

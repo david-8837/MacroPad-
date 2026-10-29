@@ -32,6 +32,10 @@ function runTests() {
   );
   assert.ok(hasAudioCs, 'extraResources must copy audio.cs outside ASAR for PowerShell C# compilation');
   console.log('✓ Native C# COM interop asset (audio.cs) configured in extraResources');
+  assert.ok(pkg.build.extraResources.some((r) => r.from === 'electron/firmware' && r.to === 'firmware'),
+    'built-in firmware directory must be copied outside ASAR');
+  assert.ok(fs.existsSync(path.join(__dirname, '../electron/firmware/README.md')));
+
 
   // Verify asset files exist on disk
   const audioCsPath = path.join(__dirname, '../electron/native/audio.cs');

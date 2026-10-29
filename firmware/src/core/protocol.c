@@ -50,7 +50,7 @@ bool frame_build_info(frame_out_t *out, uint16_t fw_build, uint8_t capabilities)
     p[i++] = (uint8_t)(CONFIG_FORMAT_VERSION >> 8);
     p[i++] = CFG_CHANNEL_COUNT;
     p[i++] = CFG_KEY_COUNT;
-    p[i++] = CFG_LED_COUNT;
+    p[i++] = BOARD_KEYS_ONLY ? 0 : CFG_LED_COUNT;
     p[i++] = capabilities;
     uint16_t csz = (uint16_t)sizeof(cfg_blob_t);
     p[i++] = (uint8_t)(csz & 0xFF);

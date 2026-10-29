@@ -32,7 +32,6 @@ import { DiscoveredApp } from '../types';
 
 export interface AppLauncherPanelProps {
   selectedKeyIndex: number | null;
-  isDeckLocked?: boolean;
   onAssignApp: (
     keyIndex: number,
     app: DiscoveredApp,
@@ -107,7 +106,6 @@ const SkeletonCard: React.FC = () => (
 
 export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   selectedKeyIndex,
-  isDeckLocked = false,
   onAssignApp,
   onTriggerAction,
   activeChannelIndex = 0,
@@ -263,7 +261,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   }, []);
 
   const handleAssign = useCallback(() => {
-    if (!selectedApp || isDeckLocked) return;
+    if (!selectedApp) return;
     const targetIdx = targetSwitchIndex;
     playKeyClick('heavy');
     onAssignApp(
@@ -281,7 +279,6 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
     setTimeout(() => setAssignedAppId(null), 1800);
   }, [
     selectedApp,
-    isDeckLocked,
     targetSwitchIndex,
     targetChannelIndex,
     onAssignApp,
@@ -841,17 +838,13 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
                   {/* Assign Button */}
                   <button
                     onClick={handleAssign}
-                    disabled={isDeckLocked}
-                    title={isDeckLocked ? 'Unlock deck in the sidebar before assigning an app' : undefined}
                     className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-mono font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
  assignedAppId === selectedApp.id
  ? 'bg-[#1351AA] text-[#E3E2DE]'
  : 'bg-[#EDECE8] hover:bg-[#1351AA] text-[#1351AA] hover:text-[#E3E2DE] border border-[#C7C7C7] hover:border-[#1351AA]'
  }`}
                   >
-                    {isDeckLocked ? (
-                      <span>UNLOCK DECK TO ASSIGN</span>
-                    ) : assignedAppId === selectedApp.id ? (
+                    {assignedAppId === selectedApp.id ? (
                       <>
                         <Check className="w-4 h-4 stroke-[3]" />
                         <span>ASSIGNED!</span>

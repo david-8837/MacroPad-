@@ -16,37 +16,32 @@ import {
   Power,
   Activity,
   Zap,
-  Search,
 } from 'lucide-react';
 
 interface TopNavbarProps {
-  deckName: string;
-  onTriggerOSD: () => void;
-  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros';
-  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros') => void;
+  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets';
+  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets') => void;
   hardwareState: HardwareConnectionState;
   deviceInfo: ConnectedDeviceInfo | null;
   onConnectSerial: () => void;
   onDisconnectHardware?: () => void;
   onOpenDiagnostics?: () => void;
   onOpenFirmwarePanel?: () => void;
-  onOpenCommandPalette?: () => void;
 }
 
 // The Applications page is deliberately not a tab: it is a launcher you visit to
 // assign one key, not a workspace you sit in. Reach it from Ctrl+K or from the
 // App action in the key drawer; the page carries its own way back.
 const TABS = [
-  { id: 'designer', label: 'Studio', index: '01' },
-  { id: 'tester', label: 'Tester', index: '02' },
-  { id: 'shortcuts', label: 'Shortcuts', index: '03' },
-  { id: 'lighting', label: 'Lighting', index: '04' },
-  { id: 'macros', label: 'Macros', index: '05' },
+  { id: 'designer', label: 'Keys', index: '01' },
+  { id: 'presets', label: 'Presets', index: '02' },
+  { id: 'tester', label: 'Tester', index: '03' },
+  { id: 'shortcuts', label: 'Shortcuts', index: '04' },
+  { id: 'lighting', label: 'Lighting', index: '05' },
+  { id: 'macros', label: 'Macros', index: '06' },
 ] as const;
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
-  deckName,
-  onTriggerOSD,
   activeTab,
   onChangeTab,
   hardwareState,
@@ -55,7 +50,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onDisconnectHardware,
   onOpenDiagnostics,
   onOpenFirmwarePanel,
-  onOpenCommandPalette,
 }) => {
   const [showConnectMenu, setShowConnectMenu] = useState(false);
 
@@ -73,16 +67,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               K
             </span>
             <span className="text-[13px] font-bold uppercase tracking-[-0.02em] text-[#141414] leading-none">
-              Kadowaz<span className="text-[#646464]"> / Deck</span>
+              Kadowaz<span className="text-[#646464]"> / Macropad</span>
             </span>
           </div>
-          <button
-            onClick={onTriggerOSD}
-            title="Show on-deck overlay"
-            className="hidden lg:flex items-center gap-1.5 max-w-[170px] px-2 py-1.5 border border-[#C7C7C7] hover:border-[#141414] text-[11px] font-semibold text-[#444343] transition-colors"
-          >
-            <span className="truncate">{deckName}</span>
-          </button>
         </div>
 
         {/* ── cols 4–9 · modules ─────────────────────────────────── */}
@@ -130,11 +117,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               <>
                 <button
                   onClick={() => setShowConnectMenu(!showConnectMenu)}
+                  aria-label="Connect macropad"
                   className="flex items-center gap-2 h-8 px-2 border border-[#C7C7C7] hover:border-[#141414] transition-colors"
                 >
                   <span className="mark mark--off" />
                   <Usb className="w-3 h-3 text-[#646464]" />
-                  <span className="hidden 2xl:inline font-mono text-[9px] font-bold tracking-[0.1em] text-[#444343]">OFFLINE</span>
+                  <span className="font-mono text-[9px] font-bold tracking-[0.1em] text-[#444343]">CONNECT</span>
                   <ChevronDown className="w-3 h-3 text-[#646464]" />
                 </button>
 
@@ -176,8 +164,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
           {/* tool squares */}
           {[
-            { icon: <Activity className="w-3.5 h-3.5" />, title: 'Expand Hardware Status & Diagnostics in Studio', fn: onOpenDiagnostics },
-            { icon: <Search className="w-3.5 h-3.5" />, title: 'Command palette · Ctrl+K', fn: onOpenCommandPalette },
+            { icon: <Activity className="w-3.5 h-3.5" />, title: 'Expand Hardware Status & Diagnostics', fn: onOpenDiagnostics },
           ].map((b) => (
             <button
               key={b.title}

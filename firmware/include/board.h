@@ -101,6 +101,15 @@
 #ifndef BOARD_H
 #define BOARD_H
 
+/* Keys-and-knob model: no external display or lighting hardware. The full
+ * model remains the default; serialized configuration layout stays identical. */
+#ifndef BOARD_KEYS_ONLY
+#define BOARD_KEYS_ONLY 0
+#endif
+#if BOARD_KEYS_ONLY != 0 && BOARD_KEYS_ONLY != 1
+#error "BOARD_KEYS_ONLY must be 0 or 1"
+#endif
+
 /* ---- keys: direct wiring, one pin each, active LOW ------------------------ */
 #define BOARD_KEY_COUNT 9
 
@@ -148,6 +157,9 @@
 #ifndef BOARD_LED_OUTPUT_ENABLED
 #define BOARD_LED_OUTPUT_ENABLED 0
 #endif
+#if BOARD_KEYS_ONLY && BOARD_LED_OUTPUT_ENABLED
+#error "The keys-only model cannot enable LED output"
+#endif
 #if BOARD_LED_OUTPUT_ENABLED != 0 && BOARD_LED_OUTPUT_ENABLED != 1
 #error "BOARD_LED_OUTPUT_ENABLED must be 0 or 1"
 #endif
@@ -170,7 +182,11 @@
  * Some four-pin modules have built-in pull-ups; otherwise fit external ~4.7k
  * resistors to 3V3. Firmware probes for an ACK and reports OLED capability
  * only when the physical display is responding. */
+#if !BOARD_KEYS_ONLY
 #define BOARD_OLED_PRESENT 1
+#else
+#define BOARD_OLED_PRESENT 0
+#endif
 #define BOARD_OLED_SDA_PIN 28
 #define BOARD_OLED_SCL_PIN 29
 #define BOARD_OLED_I2C_INST 0 /* i2c0 */

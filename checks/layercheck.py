@@ -24,14 +24,14 @@ async def main():
         body = await pg.evaluate("() => document.body.innerText")
         for i in range(4):
             check(f"layer {i} listed", f"LAYER {i}" in body)
-        check("layer names are short", all(n in body for n in ("EDIT", "TOOLS", "CUSTOM", "MACROS")))
         check("no legacy long layer names", "Tools & Navigation" not in body and "Custom Bank" not in body)
-        check("example tag on the shipped layer", body.count("EXAMPLE") == 1, f"{body.count('EXAMPLE')} tags")
+        check("new layers have no example tag", "EXAMPLE" not in body)
+        check("all 36 starting keys are empty", await pg.evaluate("() => JSON.parse(localStorage.getItem('kadowaz_deck')).layers.every(l => l.keys.length === 9 && l.keys.every(k => !k.tapAction && !k.holdAction && !k.doubleTapAction && !k.safetyConfirmAction))"))
 
         # ---- assigning a keycode must actually write the binding
         before = await pg.evaluate("() => JSON.stringify(JSON.parse(localStorage.getItem('kadowaz_deck')).layers[0].keys[0])")
         clicked = await pg.evaluate("""() => {
-          const b = Array.from(document.querySelectorAll('button')).find(x => (x.textContent||'').trim() === 'A');
+          const b = document.querySelector('button[title^="KC_A —"]');
           if (!b) return false; b.click(); return true; }""")
         await pg.wait_for_timeout(500)
         after = await pg.evaluate("() => JSON.stringify(JSON.parse(localStorage.getItem('kadowaz_deck')).layers[0].keys[0])")
@@ -61,7 +61,7 @@ async def main():
         await pg.wait_for_timeout(700)
         knob = await pg.evaluate("() => document.body.innerText")
         check("the knob drawer opens", opened)
-        check("the knob drawer names Layer 0's dial mode", "Layer 0: Master Volume" in knob, knob[:120].replace("\n", " | "))
+        check("the knob drawer shows Layer 0", "Layer 0" in knob, knob[:120].replace("\n", " | "))
         check("the hold copy lists all four layers",
               "Layer 0 → Layer 1 → Layer 2 → Layer 3" in knob, "hold line not updated")
         await pg.keyboard.press("Escape")

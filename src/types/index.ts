@@ -45,7 +45,7 @@ export interface ActionDefinition {
     /** Manual on-pad OLED playlist step; never sent to the PC native key injector. */
     oledStep?: 'next';
     // For media
-    mediaAction?: 'play_pause' | 'stop' | 'next' | 'prev' | 'volume_up' | 'volume_down' | 'mute';
+    mediaAction?: 'play_pause' | 'stop' | 'next' | 'prev' | 'volume_up' | 'volume_down' | 'mute' | 'brightness_up' | 'brightness_down';
     // For audio_session (WASAPI)
     processName?: string; // 'spotify.exe', 'discord.exe', 'master', 'focus'
     audioDelta?: number; // +5, -5
@@ -117,9 +117,7 @@ export interface Layer {
   accentColor: string;
   keys: KeyBinding[];
   dial: DialBinding;
-  /** True until you change something in this layer. The shipped deck fills
-   *  layer 0 with an editing set so a new install is not a blank slab; the tag
-   *  says so, and editing a key takes the tag away. */
+  /** Legacy marker kept when restoring an older saved example layer. */
   isExample?: boolean;
 }
 
@@ -130,9 +128,6 @@ export interface Layer {
 export interface Deck {
   id: string;
   name: string;
-  /** Persistent local editing guard for bindings, PC macro steps and deck uploads.
-   * Not a password, encryption, or a lock on the physical pad/global settings. */
-  isLocked?: boolean;
   layers: Layer[];
   activeLayerId: string;
 }

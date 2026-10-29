@@ -103,12 +103,12 @@ async function run() {
 
   const base = defaultConfig();
 
-  await check('the shipped four-layer example has no inert key or knob action on upload', async () => {
+  await check('the new four-layer configuration has no inert key or knob action on upload', async () => {
     const { defaultDeck } = await bundle('src/data/defaultDeck.ts');
     const { normalizeDeckLayers } = await bundle('src/utils/channelLayers.ts');
     const { unsupported } = deckToConfig(normalizeDeckLayers(defaultDeck), base);
     assert.deepStrictEqual(unsupported.filter(u => u.route === 'unavailable'), [],
-      'the initial deck must not advertise example actions with no firmware or PC route');
+      'the initial deck must not advertise with no firmware or PC route');
   });
 
   await check('Ctrl+C becomes one KEYCODE with the modifier in the high byte', () => {

@@ -20,6 +20,13 @@
   <img src="https://img.shields.io/badge/Firmware-Waveshare%20RP2040--Zero-00979D?style=flat-square" alt="Firmware target: RP2040-Zero" />
 </p>
 
+
+**Keys & Knob model:** A separate RP2040-Zero build without OLED or LED
+hardware is included for the confirmed direct-wired pin map. Both bundled UF2
+images are untested on a physical pad. See [firmware bundle notes](electron/firmware/README.md)
+for build instructions and [the hardware guide](docs/HARDWARE.md) for the key
+and encoder wiring. Do not connect OLED or LED hardware for this model.
+
 ---
 
 ## 📌 Table of Contents
@@ -143,14 +150,9 @@ The application discovery engine (`electron/appDiscovery.cjs`) discovers install
 
 ### 2. Four Independent Layers (Layer 0–3)
 
-The deck has **four independent layers**, numbered `0–3`, each with nine physical switches and three assignable knob actions. The editor ships an **example** Edit layer (eight tap keys and one PC-owned hold-to-confirm key), a Tools layer (nine shortcut keys), plus empty Custom and Macros key layers. This is an editor deck; the firmware's factory key slots are empty until a verified upload.
+The macropad has **four independent layers**, numbered `0–3`, each with nine switches and three assignable knob actions. On a fresh installation all 36 keys are empty; saved configurations from earlier versions are preserved. The knob starts with pad-native volume up/down and mute, and holding it cycles layers.
 
-| Layer | Editor default | Knob example |
-| :--- | :--- | :--- |
-| **0 — Edit** | Eight editing shortcuts, one PC safety hold | Timeline scrub and Space |
-| **1 — Tools** | Copy, Paste, Cut, Undo, Redo, Select All, Find, Save, Lock PC | Timeline scrub and Play/Pause |
-| **2 — Custom** | Nine empty switches | Zoom shortcuts |
-| **3 — Macros** | Nine empty switches; M0–M15 are opt-in PC actions, not preloaded | Tab shortcuts / Enter; not a saved M-slot |
+The **Presets** page offers ready-made key layouts for everyday editing, browsing, media and navigation, as well as Blender, Autodesk Fusion, Figma, Canva, Adobe Photoshop, Illustrator and Premiere Pro, DaVinci Resolve, Claude Code CLI, Codex CLI, Visual Studio Code, Microsoft Word, Excel and PowerPoint. Choose a preset and target layer, then save it. This replaces that layer's nine key assignments (including hold gestures), while leaving the knob and other layers unchanged. Review and upload all layers to apply them to the pad. Application presets send the listed default shortcuts to the focused app; shortcut behavior can vary with OS, version, workspace, keyboard layout and custom keymaps. Claude Code and Codex presets target their terminal interfaces, not desktop or IDE variants.
 
 - **Independent edits:** Editing a switch in one layer does not change another. UI selection changes only the editor preview, **not** the pad channel.
 - **Physical switching:** Holding the actual knob cycles the pad's four channels; firmware owns its configured hold timing. The simulated editor hold previews the next layer, and the pad's actual channel is unknown until a device event reports it. An uploaded absolute `CHANNEL` key can switch the pad as well.
@@ -161,7 +163,7 @@ The deck has **four independent layers**, numbered `0–3`, each with nine physi
 ### 3. Digital Twin & Visual Keycaps
 
 The **Digital Twin** provides a pixel-perfect, interactive representation of your physical device:
-- **Actual App Icons on Keycaps:** When a switch is configured to launch an application, the switch dish renders the real application icon extracted from Windows.
+- **Key icons:** Choose an icon or None in the switch drawer. Icons are visual labels in the app, not images on physical keys.
 - **Live Actuation Feedback:** Depressing keys in the UI or on the physical macropad lights up the key dish with real mechanical switch animations.
 - **Underglow Glow & Colors:** Configurable per-switch accent colors that shine through switch cutouts.
 
@@ -206,7 +208,7 @@ For catalogue order, exact stream bytes, wiring and offline fallbacks, see [`doc
 
 The MPAD3 quick tray offers **92 reviewed assignments**: 63 keyboard taps, 7 consumer-media keys, 4 absolute on-pad layer keys, an OLED NEXT playlist step, 16 PC-owned macro slots and a clear-slot action. It does **not** offer QMK momentary/toggle/fallthrough, reset, mouse, bare-modifier or arbitrary raw keycodes, which this firmware cannot execute. Create executable steps in Macro Studio before assigning M0–M15. A macro leaves its firmware slot empty; a physical `KEY_EVENT` executes it only while the Electron desktop app is open with USB key events enabled and the native executor available. Upload checks these prerequisites and requires explicit consent before changing a pad whose key-event setting was off. A verified flash **is not** evidence of Windows/physical-pad operation; see [`docs/FIRST_RUN_INVENTORY.md`](./docs/FIRST_RUN_INVENTORY.md).
 
-Sidebar, command palette and Digital Twin layer selectors choose an **editing preview** only. The pad's reported layer is displayed separately and remains unknown until it sends a `CHANNEL_CHANGE` event. Hold the physical knob or press an uploaded on-pad layer key to change the actual pad channel; the editor no longer sends an unacknowledged `OLED:CH` command and calls it a switch. **Lock deck** is a persisted *local editing guard*: it blocks assignments, PC macro edits and deck upload until **Unlock deck**, not physical keys or separate display/lighting settings. It is not a password or device security feature. OLED NEXT writes firmware action 13 and requires an SSD1306 detected by the target pad; it never needs a PC macro or native key injector.
+Sidebar, command palette and Digital Twin layer selectors choose an **editing preview** only. The pad's reported layer is displayed separately and remains unknown until it sends a `CHANNEL_CHANGE` event. Hold the physical knob or press an uploaded on-pad layer key to change the actual pad channel; the editor no longer sends an unacknowledged `OLED:CH` command and calls it a switch. The app keeps one local configuration; edit any of its four layers and upload to apply it. Connecting does not import the pad’s existing bindings into the editor. OLED NEXT writes firmware action 13 and requires an SSD1306 detected by the target pad; it never needs a PC macro or native key injector.
 
 ### 8. PC Shortcuts Vault
 

@@ -350,7 +350,8 @@
         {
           "name": "leds",
           "type": "u8",
-          "offset": 10
+          "offset": 10,
+          "note": "9 on the full model; 0 on the keys-and-knob model. Config keeps nine lighting slots for wire compatibility; LED_OUTPUT reports whether physical data output is enabled."
         },
         {
           "name": "capabilities",

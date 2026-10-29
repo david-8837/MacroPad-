@@ -39,11 +39,14 @@
 static scan_state_t s_scan;
 static gesture_engine_t s_gesture;
 static gesture_queue_t s_queue;
+#if !BOARD_KEYS_ONLY
 static led_engine_t s_led;
 static led_frame_t s_frame;
 static oled_canvas_t s_oled;
+#endif
 
 static uint32_t s_next_scan_ms;
+#if !BOARD_KEYS_ONLY
 static uint32_t s_next_led_ms;
 static uint32_t s_next_oled_ms;
 static uint32_t s_next_oled_probe_ms;
@@ -53,6 +56,7 @@ static uint8_t s_last_oled_mode = 0xFF;
 static uint8_t s_last_channel;
 static uint8_t s_applied_contrast, s_applied_inverted;
 static bool s_oled_settings_applied;
+#endif
 
 extern gesture_engine_t *dispatch_engine(void);
 extern void dispatch_set_engine(gesture_engine_t *e);
@@ -108,6 +112,7 @@ static const gesture_callbacks_t s_gesture_cb = {
 /* Ramps down after CFG_IDLE_DIM_MS of no input, ramps back up instantly on any
  * gesture. The instant wake-up matters: a pad that takes 3 seconds to become
  * visible feels broken at 2am. */
+#if !BOARD_KEYS_ONLY
 static uint8_t idle_brightness(uint32_t now_ms) {
     if (CFG_IDLE_DIM_MS == 0) return 255; /* feature disabled */
     uint32_t idle = now_ms - s_last_activity_ms;
@@ -119,6 +124,8 @@ static uint8_t idle_brightness(uint32_t now_ms) {
     uint32_t span = 255u - CFG_IDLE_BRIGHTNESS;
     return (uint8_t)(255u - (span * over) / CFG_IDLE_FADE_MS);
 }
+
+#endif
 
 int main(void) {
     /* 133 MHz is the RP2040 maximum and the SDK default. Set explicitly anyway:
@@ -150,11 +157,13 @@ int main(void) {
     scan_hw_init();
     scan_hw_init_encoder();
     scan_init(&s_scan);
+#if !BOARD_KEYS_ONLY
     led_hw_init();
     /* The OLED is part of this pad, not an optional PC-only preview. A missing
      * module does not brick the keyboard: it is retried and CAP_OLED stays off
      * until the SSD1306 actually ACKs at 0x3C. */
     (void)oled_hw_init();
+#endif
     hid_dev_init();
     action_set_backend(&s_backend);
 
@@ -163,28 +172,34 @@ int main(void) {
     events_enable(cfg->global.usb_report_events != 0);
     gesture_init(&s_gesture, &cfg->global);
     gesture_queue_init(&s_queue);
+#if !BOARD_KEYS_ONLY
     led_engine_init(&s_led);
+#endif
     dispatch_set_engine(&s_gesture);
     dispatch_init();
     usb_proto_init();
     usb_proto_set_build(FW_BUILD);
+#if !BOARD_KEYS_ONLY
     oled_playlist_set_listener(usb_proto_oled_mode_changed);
     /* Not a touchscreen: show the saved boot screen; rotate via the saved
      * playlist/timer, a bound OLED_NEXT gesture, or host SET_OLED_MODE. */
+#endif
     uint32_t now = (uint32_t)(time_us_64() / 1000u);
+#if !BOARD_KEYS_ONLY
     oled_playlist_init(cfg->global.oled_boot_mode, now);
+#endif
 
     s_next_scan_ms = now;
+#if !BOARD_KEYS_ONLY
     s_next_led_ms = now;
     s_next_oled_ms = now;
     s_next_oled_probe_ms = now + 2000u;
     s_last_channel = channel_active();
     s_last_activity_ms = now;
+#endif
 
     (void)had_config; /* reported to the host via CMD_GET_INFO diagnostics */
 
-    /* First frame immediately so the pad is lit before USB enumerates. A dark
-     * pad for the 1-2 s of enumeration reads as "it's broken". */
     for (;;) {
         now = (uint32_t)(time_us_64() / 1000u);
 
@@ -208,10 +223,17 @@ int main(void) {
             uint32_t before = s_queue.count;
             gesture_process_cb(&s_gesture, &in, now, &s_queue, &s_gesture_cb);
             int handled = dispatch_run(&s_queue, now);
+#if !BOARD_KEYS_ONLY
             if (handled || s_queue.count != before) s_last_activity_ms = now;
-            if (s_scan.stable) s_last_activity_ms = now; /* keys held count too */
+            if (s_scan.stable) s_last_activity_ms = now;
+#else
+            (void)before;
+            (void)handled;
+            dispatch_clear_hit_mask();
+#endif
         }
 
+#if !BOARD_KEYS_ONLY
         /* ---- LED frame ---- */
         if ((int32_t)(now - s_next_led_ms) >= 0) {
             s_next_led_ms += (1000u / CFG_LED_FRAME_HZ);
@@ -271,11 +293,14 @@ int main(void) {
             }
         }
 
+#endif
+
         /* ---- USB ---- */
         hid_dev_task();
         usb_proto_pump(now);
         events_enable(config_get()->global.usb_report_events != 0);
 
+#if !BOARD_KEYS_ONLY
         if (oled_hw_present() && (int32_t)(now - s_next_oled_ms) >= 0) {
             const oled_anim_t *anim = oled_anim_for(mode);
             /* Complete frames alone are visible. The layer overlay temporarily
@@ -294,6 +319,7 @@ int main(void) {
             }
             oled_flush(&s_oled);
         }
+#endif
     }
     return 0;
 }

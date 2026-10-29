@@ -793,7 +793,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
       {/* FOOTER SAVE BAR */}
       <div className="p-3 border-t border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between shrink-0">
         <div className="text-[10px] font-mono text-[#646464]">
-          Configuring <span className="text-[#141414] font-bold">{activeKeyMeta.badge}</span> on {channelNames[activeChannel] || 'Active Layer'}
+          Configuring <span className="text-[#141414] font-bold">{activeKeyMeta.badge}</span> on {`Layer ${activeChannel}`}
         </div>
         <div className="flex items-center gap-2">
           <button

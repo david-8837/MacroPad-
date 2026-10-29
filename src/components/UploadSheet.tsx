@@ -157,7 +157,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
    * the sent configuration before this sheet reports success.
    */
   const handleStartFlash = async () => {
-    if (deck.isLocked || oledUnavailable || isFlashing) return;
+    if (oledUnavailable || isFlashing) return;
     setIsFlashing(true);
     setResult(null);
     setProgress(null);
@@ -272,12 +272,13 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
           <div className="bg-[#FFFFFF] border border-[#E3E2DE] p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
               <div className="text-[10px] font-mono text-[#1351AA] uppercase tracking-wider font-semibold">
-                TARGET DECK
+                YOUR MACROPAD
               </div>
-              <div className="text-lg font-black text-[#141414]">{deck.name}</div>
+              <div className="text-lg font-black text-[#141414]">Macropad configuration</div>
               <div className="text-xs text-[#646464] font-mono mt-0.5">
-                {deck.layers.length} Independent Layers • 9 Switches • 1 Continuous Rotary Encoder
+                {deck.layers.length} layers · 9 keys · 1 knob
               </div>
+              <p className="text-xs text-[#646464] mt-1">Upload replaces key and knob assignments on all four pad layers with this PC’s saved configuration. Connecting does not load existing pad bindings into the editor.</p>
             </div>
 
             {/* The real mapping, not a category heuristic that counts macros as hotkeys. */}
@@ -319,10 +320,6 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
  }`}
                 >
                   <div className="text-[10px] text-[#1351AA] font-bold">LAYER {idx}</div>
-                  <div className="text-xs font-bold truncate text-[#141414]">{layer.name}</div>
-                  <div className="text-[10px] text-[#646464] mt-1">
-                    Dial: {layer.dial?.activeModeName || 'Volume'}
-                  </div>
                 </button>
               ))}
             </div>
@@ -331,8 +328,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
                 preview, never the interactive simulator or an upload trigger. */}
             <div className="bg-[#FFFFFF] border border-[#E3E2DE] p-3.5 space-y-2">
               <div className="text-[11px] font-mono text-[#444343] flex flex-wrap items-center justify-between gap-1">
-                <span>9 Physical Switches + Rotary Knob on {currentLayer.name}:</span>
-                <span className="text-[#1351AA] text-[10px]">Layer {selectedLayerIdx} · {currentLayer.dial?.activeModeName}</span>
+                <span>9 Physical Switches + Rotary Knob on Layer {selectedLayerIdx}:</span>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_230px] gap-2 items-stretch">
@@ -448,11 +444,6 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
             )}
           </div>
 
-          {deck.isLocked && (
-            <p role="status" className="p-3.5 border border-[#1351AA] bg-[#EDECE8] font-mono text-[11px] text-[#141414]">
-              DECK LOCKED · Unlock in the sidebar before uploading bindings. This is a local editing guard, not a device security lock.
-            </p>
-          )}
           {oledUnavailable && <p role="status" className="p-3.5 border border-[#1351AA] bg-[#EDECE8] font-mono text-[11px] text-[#141414]">
             OLED NEXT needs a detected SSD1306 panel. This pad reports no OLED; check its wiring before uploading this binding.
           </p>}
@@ -475,7 +466,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
                   type="checkbox"
                   checked={enablePcEvents}
                   onChange={e => setEnablePcEvents(e.target.checked)}
-                  disabled={deck.isLocked || !canUpload || !deviceInfo?.hasEvents || isFlashing}
+                  disabled={!canUpload || !deviceInfo?.hasEvents || isFlashing}
                   className="mt-0.5 accent-[#1351AA]"
                 />
                 <span>If the pad's current USB key-event setting is off, enable it as part of this verified upload. Otherwise, refuse the upload instead of silently leaving PC actions inert.</span>
@@ -576,7 +567,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
           <button
             type="button"
             onClick={() => { void handleStartFlash(); }}
-            disabled={deck.isLocked || !canUpload || Boolean(oledUnavailable) || (pcOnly.length > 0 && (!deviceInfo?.hasEvents || !nativeAvailable || missingMacros.length > 0)) || isFlashing || Boolean(result?.ok)}
+            disabled={!canUpload || Boolean(oledUnavailable) || (pcOnly.length > 0 && (!deviceInfo?.hasEvents || !nativeAvailable || missingMacros.length > 0)) || isFlashing || Boolean(result?.ok)}
             className="flex items-center justify-center gap-2 px-5 py-3 bg-[#1351AA] text-[#FFFFFF] border border-[#1351AA] font-black font-mono text-[11px] tracking-wide hover:bg-[#0E4290] active:scale-[0.99] transition-colors disabled:bg-[#EDECE8] disabled:text-[#646464] disabled:border-[#C7C7C7] disabled:cursor-not-allowed"
           >
             <Zap className="w-4 h-4 fill-current" />

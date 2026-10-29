@@ -66,11 +66,19 @@ export interface ElectronAPI {
 
   // RP2040 Firmware Flashing
   getFirmwareStatus?: () => Promise<FirmwareStatus>;
-  getBuiltinFirmware?: () => Promise<{ available: boolean; filePath?: string; fileName?: string; version?: string; inspection?: { ok: boolean; value?: Uf2Inspection }; error?: string }>;
-  flashBuiltinFirmware?: () => Promise<{ ok: boolean; value?: Uf2Inspection & { flashed: boolean; note?: string }; error?: string }>;
-  browseFirmwareUf2?: () => Promise<({ filePath: string; ok: boolean; value?: Uf2Inspection; error?: string }) | null>;
-  flashFirmwareUf2?: (filePath: string) => Promise<{ ok: boolean; value?: Uf2Inspection & { flashed: boolean; note?: string }; error?: string }>;
+  listBuiltinFirmware?: () => Promise<FirmwareOption[]>;
+  flashBuiltinFirmware?: (id: string, acknowledgedUntested: boolean) => Promise<{ ok: boolean; value?: Uf2Inspection & { flashed: boolean; note?: string }; error?: string }>;
   onFirmwareFlashProgress?: (callback: (progress: FlashProgress) => void) => () => void;
+}
+
+export interface FirmwareOption {
+  id: string;
+  name: string;
+  description: string;
+  available: boolean;
+  untested: boolean;
+  inspection?: Uf2Inspection;
+  error?: string;
 }
 
 export interface FirmwareStatus {

@@ -19,10 +19,14 @@
 CC      ?= gcc
 BUILD   := build-host
 LED_BENCH ?= 0
+KEYS_ONLY ?= 0
 CFLAGS  := -std=gnu11 -g -O1 -Wall -Wextra -Wno-unused-parameter -Wshadow \
            -Ifirmware/include -Iinclude -Itests -Ifirmware/tests \
            -DSCAN_NO_HW -DLEDS_NO_HW -DSTORAGE_NO_HW -DHID_DEV_NO_HW \
            -DUSB_PROTO_NO_HW -DOLED_NO_HW
+ifeq ($(KEYS_ONLY),1)
+CFLAGS += -DBOARD_KEYS_ONLY=1
+endif
 ifeq ($(LED_BENCH),1)
 CFLAGS += -DBOARD_LED_OUTPUT_ENABLED=1
 endif
@@ -181,3 +185,20 @@ clean:
 # definition, crc for validation) but not the test cases themselves.
 
 -include $(OBJ:.o=.d) $(TEST_OBJ:.o=.d)
+
+# Separate object tree for the actual keys-only protocol configuration.
+.PHONY: test-keys-only
+test-keys-only:
+	@$(MAKE) -f Makefile.host BUILD=build-host-keys KEYS_ONLY=1 keys-only-check
+
+.PHONY: keys-only-check
+keys-only-check: $(OBJ) $(BUILD)/tests/test_keys_only.o
+	$(CC) $(CFLAGS) $^ -o $(BUILD)/test_keys_only
+	./$(BUILD)/test_keys_only
+	$(CC) -std=gnu11 -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
+	  -DBOARD_KEYS_ONLY=1 -Itests/stubs -Iinclude src/lighting/leds.c \
+	  src/drivers/oled.c tests/test_keys_only_hw.c -Wl,--gc-sections -o $(BUILD)/test_keys_only_hw
+	./$(BUILD)/test_keys_only_hw
+	@if $(CC) $(CFLAGS) -DBOARD_LED_OUTPUT_ENABLED=1 -c tests/test_keys_only_hw.c -o $(BUILD)/invalid.o > /dev/null 2>&1; then \
+	  echo "ERROR: keys-only build accepted LED output"; rm -f $(BUILD)/invalid.o; exit 1; \
+	else echo "keys-only build rejects LED output"; fi

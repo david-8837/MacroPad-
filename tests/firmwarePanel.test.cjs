@@ -1,0 +1,25 @@
+// Guard the built-in-only selection and flash path in the firmware panel.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8');
+const panel = fs.readFileSync(path.join(__dirname, '../src/components/FirmwarePanel.tsx'), 'utf8');
+const main = fs.readFileSync(path.join(__dirname, '../electron/main.cjs'), 'utf8');
+const preload = fs.readFileSync(path.join(__dirname, '../electron/preload.cjs'), 'utf8');
+assert.match(panel, /name: 'Full Deck'/);
+assert.match(panel, /name: 'Keys & Knob'/);
+assert.match(panel, /type="radio"/);
+assert.match(panel, /selected\?\.available/);
+assert.match(panel, /flashBuiltinFirmware\(selected\.id, acknowledgedUntested\)/);
+assert.match(panel, /status\?\.inBootloader/);
+assert.match(panel, /Untested firmware/);
+assert.match(panel, /selected\.untested && !acknowledgedUntested/);
+assert.doesNotMatch(panel, /browseFirmwareUf2|flashFirmwareUf2|Browse \.uf2/);
+assert.doesNotMatch(panel, /Windows app required for BOOTSEL|> BOOTSEL Drive|Unavailable in browser/);
+assert.match(panel, /Connect the pad in BOOTSEL mode/);
+const opening = app.slice(app.indexOf('  const openFirmwarePanel ='), app.indexOf('  return (', app.indexOf('  const openFirmwarePanel =')));
+assert.doesNotMatch(opening, /block: 'start'|\[isFirmwareExpanded\]/, 'tapping the disclosure must not jump the sidebar');
+assert.match(panel, /px-3 py-2 space-y-2/, 'firmware controls should remain compact');
+assert.match(main, /app\.isPackaged \? path\.join\(process\.resourcesPath, 'firmware'\)/);
+assert.doesNotMatch(preload, /browseFirmwareUf2|flashFirmwareUf2/);
+console.log('firmwarePanel: built-in choice, availability and BOOTSEL gating verified');

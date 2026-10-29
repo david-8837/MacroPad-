@@ -33,7 +33,7 @@ function binding(index: number, label: string, sublabel: string, action: ActionD
     keyIndex: index,
     label: label.slice(0, 14),
     sublabel: sublabel.slice(0, 14),
-    iconName: 'Square',
+    iconName: '',
     accentColor: '#1351AA',
     tapAction: action,
     holdAction: null,

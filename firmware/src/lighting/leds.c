@@ -275,7 +275,15 @@ uint32_t led_pack_pio_word(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 /* ---- hardware ----------------------------------------------------------- */
-#ifndef LEDS_NO_HW
+#if BOARD_KEYS_ONLY
+/* No LED strip on this model: do not configure or drive GP10. */
+void led_hw_init(void) {}
+void led_hw_show(const led_frame_t *f) { (void)f; }
+void led_hw_blank(void) {}
+#ifdef LEDS_NO_HW
+const led_frame_t *led_host_last_frame(void) { return NULL; }
+#endif
+#elif !defined(LEDS_NO_HW)
 #if BOARD_LED_OUTPUT_ENABLED
 
 static PIO s_pio;

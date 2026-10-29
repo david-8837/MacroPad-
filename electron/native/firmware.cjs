@@ -20,7 +20,7 @@ const { logLine, ok, fail } = require('./util.cjs');
 
 const UF2_MAGIC0 = 0x0a324655; // "UF2\n"
 const UF2_MAGIC1 = 0x9e5d5157;
-const UF2_MAGIC_END = 0x0ab16958;
+const UF2_MAGIC_END = 0x0ab16f30;
 const UF2_FLAG_FAMILY = 0x00002000;
 const RP2040_FAMILY = 0xe48bff56;
 const RP2350_ARM_FAMILY = 0xe48bff59;
@@ -245,8 +245,9 @@ async function flash(uf2Path, onProgress) {
       let written = 0;
       for (let off = 0; off < buf.length; off += BLOCK_SIZE) {
         const slice = buf.slice(off, off + BLOCK_SIZE);
-        fs.writeSync(fd, slice, 0, slice.length);
-        written += slice.length;
+        const count = fs.writeSync(fd, slice, 0, slice.length);
+        if (count !== slice.length) throw new Error('Incomplete UF2 block write');
+        written += count;
         if (onProgress) {
           onProgress({
             stage: 'copying',
@@ -259,14 +260,9 @@ async function flash(uf2Path, onProgress) {
       fs.closeSync(fd);
     }
   } catch (e) {
-    // The drive vanishing mid-write is the SUCCESS case: the board reboots the
-    // instant it has enough of the image, taking the volume with it.
-    if (/EBUSY|ENODEV|ENOENT|EPERM|EIO|EBADF/i.test(String(e.code || e.message))) {
-      logLine('firmware', 'drive vanished during copy — that is the reboot', String(e.code || e.message));
-      if (onProgress) onProgress({ stage: 'rebooting', percent: 100 });
-      return ok({ flashed: true, ...inspected.value, note: 'The pad rebooted while the file was still being copied, which is the normal way this ends.' });
-    }
-    return fail(`Copying to the pad failed: ${e.message}`);
+    // A disconnect or I/O error can also mean an incomplete transfer. Never
+    // report it as a successful flash without confirmation.
+    return fail(`Could not confirm the firmware transfer: ${e.message}. Reconnect the pad and verify it boots; retry in BOOTSEL if needed.`);
   }
 
   if (onProgress) onProgress({ stage: 'rebooting', percent: 100 });
@@ -295,32 +291,43 @@ function status() {
   };
 }
 
-const BUILTIN_FIRMWARE_CANDIDATES = [
-  path.join(__dirname, '..', '..', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
-  path.join(__dirname, '..', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
-  path.join(process.resourcesPath || '', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
-];
+// Fixed filenames prevent the renderer from selecting an arbitrary local file.
+// Packaged images live outside ASAR so the bootloader can be written normally.
+const FIRMWARE_VARIANTS = Object.freeze([
+  { id: 'full', name: 'Full Deck', untested: true, description: 'Display support · LED output varies by build.', fileName: 'full-deck.uf2' },
+  { id: 'essential', name: 'Keys & Knob', untested: true, description: 'No display or LEDs.', fileName: 'keys-and-knob.uf2' },
+]);
 
-function getBuiltinFirmware() {
-  for (const candidate of BUILTIN_FIRMWARE_CANDIDATES) {
-    if (fs.existsSync(candidate)) {
-      const inspected = inspectUf2(candidate);
-      if (inspected.ok) {
-        return {
-          available: true,
-          filePath: candidate,
-          fileName: path.basename(candidate),
-          version: '1.0.0',
-          inspection: inspected,
-        };
-      }
+function firmwareDirectory() {
+  return path.join(__dirname, '..', 'firmware');
+}
+
+function listBuiltinFirmware(directory = firmwareDirectory()) {
+  return FIRMWARE_VARIANTS.map(({ fileName, ...variant }) => {
+    const filePath = path.join(directory, fileName);
+    if (!fs.existsSync(filePath)) {
+      return { ...variant, available: false, error: 'Firmware image not included yet.' };
     }
-  }
-  return { available: false, error: 'Built-in firmware binary not found' };
+    const inspected = inspectUf2(filePath);
+    if (!inspected.ok) {
+      return { ...variant, available: false, error: `Firmware image is invalid: ${inspected.error}` };
+    }
+    return { ...variant, available: true, inspection: inspected.value };
+  });
+}
+
+async function flashBuiltinFirmware(id, acknowledgedUntested, onProgress, directory = firmwareDirectory()) {
+  const variant = FIRMWARE_VARIANTS.find((item) => item.id === id);
+  if (!variant) return fail('Unknown firmware option.');
+  const item = listBuiltinFirmware(directory).find((entry) => entry.id === id);
+  if (!item.available) return fail(item.error);
+  if (item.untested && acknowledgedUntested !== true) return fail('Confirm the untested firmware warning before flashing.');
+  // flash() checks the file and detects the BOOTSEL drive again before copying.
+  return flash(path.join(directory, variant.fileName), onProgress);
 }
 
 module.exports = {
-  inspectUf2, findBootloaderDrive, flash, status, guessVersion, getBuiltinFirmware,
+  inspectUf2, findBootloaderDrive, flash, status, guessVersion,
+  listBuiltinFirmware, flashBuiltinFirmware,
   RP2040_FAMILY, BLOCK_SIZE, PAYLOAD_PER_BLOCK,
 };
-

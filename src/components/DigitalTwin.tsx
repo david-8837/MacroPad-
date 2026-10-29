@@ -16,7 +16,6 @@ interface DigitalTwinProps {
   layerNames?: string[];
   oledState: OLEDState;
   deckName: string;
-  isDeckLocked?: boolean;
   selectedKeyIndex: number | null;
   onSelectKey: (keyIndex: number) => void;
   onOpenDrawer?: (keyIndex?: number) => void;
@@ -36,10 +35,9 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
   layer,
   channelIndex,
   padChannelIndex = null,
-  layerNames = ['EDIT', 'TOOLS', 'CUSTOM', 'MACROS'],
+  layerNames = ['Layer 0', 'Layer 1', 'Layer 2', 'Layer 3'],
   oledState,
   deckName,
-  isDeckLocked = false,
   selectedKeyIndex,
   onSelectKey,
   onOpenDrawer,
@@ -123,7 +121,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
               <div className="flex-1 min-w-0">
                 <OLEDDisplay
                   state={oledState}
-                  activeLayerName={layer.name}
+                  activeLayerName={`Layer ${currentChannelIdx}`}
                   deckName={deckName}
                   channelIndex={currentChannelIdx}
                   layerCount={layerNames.length}
@@ -187,10 +185,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
                         : 'text-[#646464] hover:bg-[#EDECE8] hover:text-[#141414]'
                     }`}
                   >
-                    <span className="font-mono text-[10px] font-bold tracking-[0.1em]">
-                      {`0${ch}`}
-                    </span>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.14em] opacity-80 truncate max-w-full px-1">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.06em] whitespace-nowrap px-1">
                       {label}
                     </span>
                   </button>
@@ -200,7 +195,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
 
             <div className="px-3 py-2 border-t border-[#C7C7C7]">
               <p className="text-[10px] text-[#444343] truncate">
-                {layer.dial.availableModes[currentChannelIdx] || `Layer ${currentChannelIdx}`}
+                {`Layer ${currentChannelIdx}`}
               </p>
               <p className="mt-1 font-mono text-[9px] text-[#646464] leading-relaxed">
                 Editor preview only · pad {connectionStatus === 'usb_connected'
@@ -221,8 +216,6 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
                 key={c.index}
                 type="button"
                 onClick={c.onClick}
-                disabled={isDeckLocked && c.index !== '03'}
-                title={isDeckLocked && c.index !== '03' ? 'Unlock deck in the sidebar to edit key/knob bindings' : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 border-b border-[#E3E2DE] last:border-b-0 text-left disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-300 group ${
                   c.open ? 'bg-[#141414] text-[#E3E2DE]' : 'text-[#141414] hover:bg-[#EDECE8]'
                 }`}
@@ -264,9 +257,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
       </div>
 
       <p className="mt-5 w-full text-[10px] font-mono uppercase tracking-[0.12em] text-[#646464] border-t border-[#C7C7C7] pt-3">
-        {isDeckLocked
-          ? 'Deck locked: simulated actions still run; unlock in sidebar to rebind or upload'
-          : 'Tap a switch to actuate · long-press for alternate · open a drawer to rebind'}
+        Tap a switch to actuate · long-press for alternate · open a drawer to rebind
       </p>
     </div>
   );

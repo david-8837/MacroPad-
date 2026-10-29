@@ -65,7 +65,7 @@ async function runTests() {
   wrongFamilyBuf.writeUInt32LE(0, 20); // seqNo
   wrongFamilyBuf.writeUInt32LE(1, 24); // blockCount
   wrongFamilyBuf.writeUInt32LE(0xdeadbeef, 28); // unknown familyId
-  wrongFamilyBuf.writeUInt32LE(0x0ab16958, 508); // magicEnd
+  wrongFamilyBuf.writeUInt32LE(0x0ab16f30, 508); // magicEnd
   fs.writeFileSync(wrongFamilyPath, wrongFamilyBuf);
   const wrongFamilyRes = firmware.inspectUf2(wrongFamilyPath);
   assert.strictEqual(wrongFamilyRes.ok, false);
@@ -104,7 +104,7 @@ async function runTests() {
       validBuf.writeUInt32LE(0x20042000, off + 32); // initial SP in RP2040 SRAM
       validBuf.writeUInt32LE(0x10000121, off + 36); // Thumb entry inside the image
     }
-    validBuf.writeUInt32LE(0x0ab16958, off + 508); // magicEnd
+    validBuf.writeUInt32LE(0x0ab16f30, off + 508); // magicEnd
   }
   fs.writeFileSync(validPath, validBuf);
 
@@ -117,6 +117,13 @@ async function runTests() {
   assert.strictEqual(validRes.value.version, '2.1.0');
   assert.strictEqual(validRes.value.targetAddress, '0x10000000');
   console.log('✓ inspectUf2() accepts a structurally plausible RP2040 UF2 (not a hardware boot test)');
+
+  // UF2 specification uses 0x0AB16F30, not the formerly accepted typo.
+  const badTrailer = Buffer.from(validBuf);
+  badTrailer.writeUInt32LE(0x0ab16958, 508);
+  const badTrailerPath = path.join(tempDir, 'bad-trailer.uf2');
+  fs.writeFileSync(badTrailerPath, badTrailer);
+  assert.match(firmware.inspectUf2(badTrailerPath).error, /trailer/);
 
   const bannerOnly = Buffer.from(validBuf);
   bannerOnly.fill(0, 32, 32 + 256);
@@ -134,11 +141,41 @@ async function runTests() {
   assert.match(firmware.inspectUf2(path.join(tempDir, 'gap.uf2')).error, /contiguous/);
   console.log('✓ skipped/overlapping flash blocks are refused');
 
-  // There is deliberately no official built-in image until a real release
-  // build has been produced and tested on an RP2040. A placeholder is unsafe.
-  const builtin = firmware.getBuiltinFirmware();
-  assert.strictEqual(builtin.available, false, 'No untested bundled UF2 may appear available');
-  console.log('✓ getBuiltinFirmware() does not offer an untested placeholder');
+  // Test the catalog in an isolated directory: the fixture is NOT real firmware.
+  const catalogDir = path.join(tempDir, 'catalog');
+  fs.mkdirSync(catalogDir);
+  let choices = firmware.listBuiltinFirmware(catalogDir);
+  assert.deepStrictEqual(choices.map((c) => c.id), ['full', 'essential']);
+  assert.ok(choices.every((c) => !c.available));
+  assert.match((await firmware.flashBuiltinFirmware('full', true, null, catalogDir)).error, /not included/);
+  assert.match((await firmware.flashBuiltinFirmware('../other.uf2', true, null, catalogDir)).error, /Unknown/);
+
+  fs.writeFileSync(path.join(catalogDir, 'full-deck.uf2'), validBuf);
+  choices = firmware.listBuiltinFirmware(catalogDir);
+  assert.strictEqual(choices[0].available, true);
+  assert.strictEqual(choices[0].inspection.family, 'RP2040');
+  assert.strictEqual(choices[1].available, false, 'other variant remains independent');
+  assert.match((await firmware.flashBuiltinFirmware('full', false, null, catalogDir)).error, /untested firmware warning/);
+  assert.match((await firmware.flashBuiltinFirmware('full', 'true', null, catalogDir)).error, /untested firmware warning/);
+  fs.writeFileSync(path.join(catalogDir, 'keys-and-knob.uf2'), bannerOnly);
+  choices = firmware.listBuiltinFirmware(catalogDir);
+  assert.strictEqual(choices[1].available, false);
+  assert.match(choices[1].error, /invalid/);
+  assert.match((await firmware.flashBuiltinFirmware('essential', true, null, catalogDir)).error, /invalid/);
+  // Replace an image after listing: flashing must revalidate, not trust the UI.
+  fs.writeFileSync(path.join(catalogDir, 'full-deck.uf2'), bannerOnly);
+  assert.match((await firmware.flashBuiltinFirmware('full', true, null, catalogDir)).error, /invalid/);
+  console.log('✓ catalog keeps variants separate and refuses missing, invalid, changed and unknown images');
+
+  // The actual bundled image must pass the same standard UF2 validation.
+  const bundled = firmware.listBuiltinFirmware();
+  assert.strictEqual(bundled[0].available, true);
+  assert.strictEqual(bundled[0].untested, true);
+  assert.strictEqual(bundled[0].inspection.family, 'RP2040');
+  assert.strictEqual(bundled[1].available, true);
+  assert.strictEqual(bundled[1].untested, true);
+  assert.strictEqual(bundled[1].inspection.family, 'RP2040');
+  console.log('✓ both bundled images pass structural inspection and are labelled untested');
 
   // Clean up
   try {

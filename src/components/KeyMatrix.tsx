@@ -226,11 +226,7 @@ export const KeyMatrix: React.FC<KeyMatrixProps> = ({
                     isDown ? 'text-[#E3E2DE]' : isSelected ? 'text-[#1351AA]' : 'text-[#141414]'
                   }`}
                 >
-                  {k.tapAction?.category === 'app_launch' && k.tapAction.payload?.iconDataUrl ? (
-                    <img src={k.tapAction.payload.iconDataUrl} alt={k.label} className="w-6 h-6 object-contain" />
-                  ) : (
-                    renderIcon(k.iconName, 'w-5 h-5')
-                  )}
+                  {k.iconName && renderIcon(k.iconName, 'w-5 h-5')}
                 </span>
 
                 <span className="w-full text-center relative z-10 leading-none">

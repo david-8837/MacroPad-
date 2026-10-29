@@ -252,7 +252,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   const [comboMode, setComboMode] = useState<'append' | 'chord'>('append');
   const [isRecording, setIsRecording] = useState(false);
   const [recordedKeys, setRecordedKeys] = useState<string[]>(
-    editedKey.tapAction?.payload?.keys || ['Ctrl', 'C']
+    editedKey.tapAction?.payload?.keys || []
   );
   const [textSnippet, setTextSnippet] = useState(
     editedKey.tapAction?.payload?.command || ''
@@ -286,7 +286,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   // Sync state if active keyBinding changes from outside (e.g. clicking another key on 3x3 macropad)
   useEffect(() => {
     setEditedKey({ ...keyBinding });
-    setRecordedKeys(keyBinding.tapAction?.payload?.keys || [keyBinding.label || 'Space']);
+    setRecordedKeys(keyBinding.tapAction?.payload?.keys || []);
     setTextSnippet(keyBinding.tapAction?.payload?.command || '');
     if (keyBinding.tapAction?.category === 'app_launch') {
       setActiveTab('app');
@@ -295,7 +295,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
       setAppFocusExisting(Boolean(keyBinding.tapAction.payload?.focusExisting));
       setAppLaunchMinimized(Boolean(keyBinding.tapAction.payload?.launchMinimized));
     }
-  }, [keyBinding.keyIndex]);
+  }, [keyBinding]);
 
   // Load apps if not loaded
   useEffect(() => {
@@ -349,7 +349,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     }
     const updated: KeyBinding = {
       ...editedKey,
-      label: newKeys.length > 0 ? (editedKey.label && !editedKey.label.includes('+') && editedKey.label !== 'Space' ? editedKey.label : smartLabel) : 'Empty',
+      label: newKeys.length > 0 ? (editedKey.tapAction && editedKey.label && !editedKey.label.includes('+') && editedKey.label !== 'Space' ? editedKey.label : smartLabel) : 'Empty',
       sublabel: comboString || 'Unassigned',
       tapAction: newKeys.length > 0 ? {
         id: `act-${Date.now()}`,
@@ -368,7 +368,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
         return;
       }
 
@@ -671,6 +671,19 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-[#E3E2DE] bg-[#FFFFFF] shrink-0">
+        <label htmlFor="key-icon" className="text-[10px] font-bold uppercase tracking-wider text-[#444343]">Key icon</label>
+        <select id="key-icon" value={editedKey.iconName || ''} onChange={event => {
+          const updated = { ...editedKey, iconName: event.target.value };
+          setEditedKey(updated); onSave(updated);
+        }} className="border border-[#C7C7C7] bg-white px-2 py-1 text-xs text-[#141414]">
+          {editedKey.iconName && !['Copy','Clipboard','Scissors','RotateCcw','RotateCw','Save','Search','Play','Pause','SkipForward','SkipBack','Volume2','VolumeX','Globe','Home','ArrowLeft','ArrowRight','Keyboard','Star','Heart','Film','Code','Music','Sparkles','Square'].includes(editedKey.iconName) && <option value={editedKey.iconName}>{editedKey.iconName} (saved)</option>}
+          <option value="">None</option>
+          {['Copy','Clipboard','Scissors','RotateCcw','RotateCw','Save','Search','Play','Pause','SkipForward','SkipBack','Volume2','VolumeX','Globe','Home','ArrowLeft','ArrowRight','Keyboard','Star','Heart','Film','Code','Music','Sparkles','Square'].map(name => <option key={name} value={name}>{name}</option>)}
+        </select>
+        <span className="text-[10px] text-[#646464]">Shown in the app only, not on the physical keys.</span>
       </div>
 
       {/* FEATURE NAVIGATION TABS: scroll rather than clipping at compact widths. */}

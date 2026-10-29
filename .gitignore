@@ -29,8 +29,11 @@ release
 firmware/build/
 firmware/build-host/
 firmware/build-host-bench/
+firmware/build-host-keys/
 pico-sdk/
 *.uf2
+!electron/firmware/full-deck.uf2
+!electron/firmware/keys-and-knob.uf2
 *.elf
 *.hex
 __pycache__/

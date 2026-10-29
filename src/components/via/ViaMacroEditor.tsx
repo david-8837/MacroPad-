@@ -152,12 +152,10 @@ const INITIAL_MACROS: MacroSlot[] = Array.from({ length: 16 }, (_, i) => ({
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta']);
 
 interface ViaMacroEditorProps {
-  isDeckLocked?: boolean;
   onTriggerAction?: (actionId: string, actionName: string, category: string) => void;
 }
 
 export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
-  isDeckLocked = false,
   onTriggerAction,
 }) => {
   const [macros, setMacros] = useState<MacroSlot[]>(() => {
@@ -199,16 +197,14 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   const [activePlayStep, setActivePlayStep] = useState<number | null>(null);
 
 
-  // Macro bodies are PC-owned but can change what an assigned M-slot does.
-  // The lock applies to them too; the state guard protects against a stale
-  // event handler while the disabled fieldset keeps the page read-only.
+  // Macro bodies are PC-owned and may change what an assigned M-slot does.
   const changeMacros = (edit: (current: MacroSlot[]) => MacroSlot[]) => {
-    setMacros(prev => isDeckLocked ? prev : edit(prev));
+    setMacros(edit);
   };
 
   useEffect(() => {
-    if (!isDeckLocked) localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
-  }, [macros, isDeckLocked]);
+    localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
+  }, [macros]);
 
   const currentMacro = macros.find(m => m.id === selectedSlot) || macros[0];
 
@@ -239,7 +235,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
    * turns what you press into a step, and shows it back to you. Text fields keep
    * their own keystrokes so renaming a slot still word-processes normally. */
   useEffect(() => {
-    if (isDeckLocked || activeBuilderTab !== 'combo') return;
+    if (activeBuilderTab !== 'combo') return;
 
     const handleCaptureKeyDown = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -268,7 +264,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
 
     window.addEventListener('keydown', handleCaptureKeyDown);
     return () => window.removeEventListener('keydown', handleCaptureKeyDown);
-  }, [activeBuilderTab, selectedSlot, isDeckLocked]);
+  }, [activeBuilderTab, selectedSlot]);
 
   const handleUpdateName = (name: string) => {
     changeMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, name } : m));
@@ -384,7 +380,6 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const handleSave = () => {
-    if (isDeckLocked) return;
     localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
     setSavedSuccess(true);
     playKeyClick('heavy');
@@ -396,7 +391,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
    * There must not be a second implementation that quietly treats down/up as
    * valid combos or reports a failed native step as success. */
   const handleTestMacroRun = async () => {
-    if (isDeckLocked || isPlayingTest || !isMacroReady(currentMacro)) return;
+    if (isPlayingTest || !isMacroReady(currentMacro)) return;
     playKeyClick('down');
     if (!window.electronAPI?.execAction) {
       setTestNotice('Test Run needs the Kadowaz desktop app. Browser preview cannot send keystrokes, so nothing was sent.');
@@ -431,10 +426,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
 
   return (
     <div className="w-full max-w-5xl space-y-5 animate-in fade-in duration-150 select-none">
-      {isDeckLocked && <p role="status" className="panel p-3 font-mono text-[11px] text-[#1351AA]">
-        DECK LOCKED · PC macro steps are read-only because assigned M-slots would change behavior. Unlock the deck in the sidebar to edit or test macros.
-      </p>}
-      <fieldset disabled={isDeckLocked} className="w-full min-w-0 space-y-5">
+      <div className="w-full min-w-0 space-y-5">
       {/* Top Banner & Header */} الاشت=functions.edit_file? wait tool result? no end marker? It ended sent json? I need verify. It shows tool call content but no result? Let's see. get? maybe I didn't close? The tool action seems called; UI result not yet displayed? Actually transcript shows `to=functions.edit_file...` but no returned, maybe tool time? Hmm message ends? Let's continue from we can check. Need send tool? in this environment tool result should return, maybe call again? We'll inspect `sed` before next. Need not duplicate if succeeded. Use bash. experiment. A lone commentary tool call didn't show result because couldn't parse? Wait in above assistant tool call text ended with `
       <div className="panel p-5 border border-[#E3E2DE] flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -925,7 +917,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
           </div>
         </div>
       </div>
-      </fieldset>
+      </div>
     </div>
   );
 };

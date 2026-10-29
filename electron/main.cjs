@@ -24,7 +24,7 @@ let lastMediaJson = '';
 const WEBHOOK_PORT = 38491;
 
 // One deck per install now — the tray just reports which deck is open.
-const deckState = { id: 'deck-main', name: 'Studio Deck' };
+const deckState = { id: 'deck-main', name: 'Macropad' };
 
 function sendToRenderer(payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -277,37 +277,14 @@ ipcMain.handle('diag:selftest', async () => {
 
 // In-App RP2040 UF2 Firmware Flashing Handlers
 ipcMain.handle('firmware:status', async () => firmware.status());
-ipcMain.handle('firmware:inspect', async (_event, filePath) => firmware.inspectUf2(filePath));
-ipcMain.handle('firmware:builtin', async () => firmware.getBuiltinFirmware());
-ipcMain.handle('firmware:flashBuiltin', async () => {
-  const builtin = firmware.getBuiltinFirmware();
-  if (!builtin || !builtin.filePath) {
-    return { ok: false, error: 'Official project firmware binary not found in project.' };
-  }
-  return firmware.flash(builtin.filePath, (progress) => {
+const bundledFirmwareDirectory = () => app.isPackaged ? path.join(process.resourcesPath, 'firmware') : undefined;
+ipcMain.handle('firmware:list', async () => firmware.listBuiltinFirmware(bundledFirmwareDirectory()));
+ipcMain.handle('firmware:flashBuiltin', async (_event, id, acknowledgedUntested) => {
+  return firmware.flashBuiltinFirmware(id, acknowledgedUntested, (progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('firmware-flash-progress', progress);
     }
-  });
-});
-ipcMain.handle('firmware:browse', async () => {
-  if (!mainWindow) return null;
-  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    title: 'Select RP2040 Firmware Image (.uf2)',
-    filters: [{ name: 'UF2 Firmware Image', extensions: ['uf2'] }],
-    properties: ['openFile'],
-  });
-  if (canceled || !filePaths.length) return null;
-  const filePath = filePaths[0];
-  const inspected = firmware.inspectUf2(filePath);
-  return { filePath, ...inspected };
-});
-ipcMain.handle('firmware:flash', async (_event, filePath) => {
-  return firmware.flash(filePath, (progress) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('firmware-flash-progress', progress);
-    }
-  });
+  }, bundledFirmwareDirectory());
 });
 
 function startMetricsBroadcasting() {
