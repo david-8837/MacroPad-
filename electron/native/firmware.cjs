@@ -294,8 +294,8 @@ function status() {
 // Fixed filenames prevent the renderer from selecting an arbitrary local file.
 // Packaged images live outside ASAR so the bootloader can be written normally.
 const FIRMWARE_VARIANTS = Object.freeze([
-  { id: 'full', name: 'Full Deck', untested: true, description: 'Display support · LED output varies by build.', fileName: 'full-deck.uf2' },
-  { id: 'essential', name: 'Keys & Knob', untested: true, description: 'No display or LEDs.', fileName: 'keys-and-knob.uf2' },
+  { id: 'full', name: 'Full Deck', untested: true, description: 'Supplied image · key-hold support unverified.', fileName: 'full-deck.uf2' },
+  { id: 'essential', name: 'Keys & Knob', untested: true, description: 'No display or LEDs · supports held keys.', fileName: 'keys-and-knob.uf2' },
 ]);
 
 function firmwareDirectory() {

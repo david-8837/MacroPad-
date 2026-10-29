@@ -221,6 +221,7 @@ int main(void) {
             in.enc_sw_down = scan_read_encoder_sw_down();
 
             uint32_t before = s_queue.count;
+            dispatch_keyboard_sample(in.key_down_mask, hid_dev_mounted(), hid_dev_connection_epoch());
             gesture_process_cb(&s_gesture, &in, now, &s_queue, &s_gesture_cb);
             int handled = dispatch_run(&s_queue, now);
 #if !BOARD_KEYS_ONLY

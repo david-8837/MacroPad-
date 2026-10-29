@@ -62,6 +62,9 @@ void hid_dev_task(void);
  * Offline presses are intentionally discarded rather than replayed on remount;
  * mount/resume queues neutral reports on both HID interfaces. */
 bool hid_dev_mounted(void);
+/* Changes on every mount, unmount, suspend and resume, even when two happen
+ * between scan ticks. */
+uint32_t hid_dev_connection_epoch(void);
 
 /* Reboot into the RP2040's USB bootloader (BOOTSEL mass storage). Does not
  * return. */

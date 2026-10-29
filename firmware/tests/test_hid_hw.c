@@ -234,6 +234,29 @@ static void test_channel_switch_action_through_busy_usb(void) {
     assert(ep[KBD].accepted_n == 3 && ep[CONSUMER].accepted_n == 3);
 }
 
+/* Physical key-down must remain a single held HID state even through retries;
+ * a second switch and release must not release the first switch. */
+static void test_physical_keyboard_through_busy_usb(void) {
+    fresh(); settle_mount();
+    action_set_backend(&ACTION_BACKEND); action_reset_state();
+    action_t a = {.type = ACTION_TYPE_KEYCODE, .code = HID_A};
+    action_t b = {.type = ACTION_TYPE_KEYCODE, .code = HID_B};
+    ep[KBD].ready = false;
+    action_physical_keyboard(0, &a, true);
+    action_physical_keyboard(1, &b, true);
+    action_physical_keyboard(1, NULL, false);
+    action_physical_keyboard(0, NULL, false);
+    for (unsigned i = 0; i < 10; i++) hid_dev_task();
+    assert(ep[KBD].accepted_n == 1);
+    ep[KBD].ready = true;
+    hid_dev_task(); assert(accepted_key(1) == HID_A); complete(KBD);
+    hid_dev_task(); assert(accepted_key(2) == HID_A && ep[KBD].current[4] == HID_B); complete(KBD);
+    hid_dev_task(); assert(accepted_key(3) == HID_A && ep[KBD].current[4] == 0); complete(KBD);
+    hid_dev_task(); assert(accepted_key(4) == 0); complete(KBD);
+    for (unsigned i = 0; i < 10; i++) hid_dev_task();
+    assert(ep[KBD].accepted_n == 5);
+}
+
 static void test_rejected_submission_and_failed_transfer(void) {
     fresh(); settle_mount();
     mpad_kbd_report_t down = key(0, 5), up = {0};
@@ -405,6 +428,7 @@ int main(void) {
     test_busy_independent_down_up();
     test_release_all_media_only_through_busy_usb();
     test_channel_switch_action_through_busy_usb();
+    test_physical_keyboard_through_busy_usb();
     test_rejected_submission_and_failed_transfer();
     test_overflow_preserves_release_and_inflight_head();
     test_disconnect_and_suspend_cancel_stale_downs();

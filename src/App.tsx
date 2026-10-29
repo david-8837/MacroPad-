@@ -1335,6 +1335,7 @@ export const App: React.FC = () => {
               setIsEditingKnob(false);
             }}
             onReviewUpload={() => setIsUploadSheetOpen(true)}
+            onTestAction={(action) => handleTriggerAction(action.id, action.name, action.category, action.payload)}
           />
         )}
 

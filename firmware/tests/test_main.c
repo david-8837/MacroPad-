@@ -37,6 +37,7 @@ int main(void) {
     run_suite("scan", scan_tests);
     run_suite("config/storage", config_tests);
     run_suite("actions", actions_tests);
+    run_suite("keyboard hold", keyboard_hold_tests);
     run_suite("leds", leds_tests);
     run_suite("oled", oled_tests);
     run_suite("oled playlist", oled_playlist_tests);

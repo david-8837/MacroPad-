@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { KeyBinding, ActionDefinition, DiscoveredApp } from '../types';
 import { playKeyClick } from '../utils/soundEffects';
 import { 
@@ -34,6 +34,9 @@ interface KeyConfigDrawerProps {
   onSave: (updated: KeyBinding) => void;
   onClose: () => void;
   onTestAction: (action: ActionDefinition) => void;
+  /** Preset editor keeps keyboard navigation available until Record is selected. */
+  captureOnlyWhenRecording?: boolean;
+  hideCloseButton?: boolean;
 }
 
 export interface DrawerKeyDef {
@@ -239,10 +242,12 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   onSave,
   onClose,
   onTestAction,
+  captureOnlyWhenRecording = false,
+  hideCloseButton = false,
 }) => {
   const [editedKey, setEditedKey] = useState<KeyBinding>({ ...keyBinding });
-  const [activeTab, setActiveTab] = useState<'keyboard' | 'recorder' | 'text' | 'safety' | 'app'>(
-    keyBinding.tapAction?.category === 'app_launch' ? 'app' : 'keyboard'
+  const [activeTab, setActiveTab] = useState<'keyboard' | 'recorder' | 'text' | 'safety' | 'app' | 'media'>(
+    keyBinding.tapAction?.category === 'app_launch' ? 'app' : keyBinding.tapAction?.category === 'media' ? 'media' : 'keyboard'
   );
   const [keyboardLayout, setKeyboardLayout] = useState<'full' | 'tkl' | '60'>('full');
   
@@ -254,6 +259,8 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   const [recordedKeys, setRecordedKeys] = useState<string[]>(
     editedKey.tapAction?.payload?.keys || []
   );
+  const recordedKeysRef = useRef(recordedKeys);
+  const updateRecordedKeys = (keys: string[]) => { recordedKeysRef.current = keys; setRecordedKeys(keys); };
   const [textSnippet, setTextSnippet] = useState(
     editedKey.tapAction?.payload?.command || ''
   );
@@ -286,7 +293,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   // Sync state if active keyBinding changes from outside (e.g. clicking another key on 3x3 macropad)
   useEffect(() => {
     setEditedKey({ ...keyBinding });
-    setRecordedKeys(keyBinding.tapAction?.payload?.keys || []);
+    updateRecordedKeys(keyBinding.tapAction?.payload?.keys || []);
     setTextSnippet(keyBinding.tapAction?.payload?.command || '');
     if (keyBinding.tapAction?.category === 'app_launch') {
       setActiveTab('app');
@@ -364,7 +371,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
   // Live Physical Keyboard Typing Listener
   useEffect(() => {
-    if (!isRecording && activeTab !== 'keyboard') return;
+    if (!isRecording && (captureOnlyWhenRecording || activeTab !== 'keyboard')) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -378,12 +385,12 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
       // Backspace: in append mode, remove the last key from the combo
       if (e.key === 'Backspace') {
-        setRecordedKeys(prev => {
-          if (prev.length === 0) return prev;
-          const next = prev.slice(0, -1);
+        const previous = recordedKeysRef.current;
+        if (previous.length) {
+          const next = previous.slice(0, -1);
+          updateRecordedKeys(next);
           commitUpdatedKeys(next);
-          return next;
-        });
+        }
         return;
       }
 
@@ -426,78 +433,50 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
       if (detectedKeys.length === 0) return;
 
-      setRecordedKeys(prev => {
-        let next: string[];
-        if (comboMode === 'chord') {
-          // Chord mode: replace combo with current simultaneous chord
-          next = detectedKeys;
-        } else {
-          // Append mode: accumulate keys sequentially without removing previous keys!
-          next = [...prev];
-          for (const k of detectedKeys) {
-            if (!next.includes(k)) {
-              next.push(k);
-            }
-          }
-        }
-        commitUpdatedKeys(next);
-        return next;
-      });
+      const next = comboMode === 'chord' ? detectedKeys : [...recordedKeysRef.current];
+      if (comboMode !== 'chord') for (const k of detectedKeys) if (!next.includes(k)) next.push(k);
+      updateRecordedKeys(next);
+      commitUpdatedKeys(next);
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [isRecording, activeTab, editedKey, comboMode, recordedKeys.length]);
+  }, [isRecording, activeTab, editedKey, comboMode, recordedKeys.length, captureOnlyWhenRecording]);
 
   // Handle clicking on virtual keyboard key
   const handleVirtualKeyClick = (keyName: string) => {
     if (!keyName) return;
     playKeyClick('down');
     
-    setRecordedKeys(prev => {
-      let next: string[];
-      if (comboMode === 'chord') {
-        next = [keyName];
-      } else {
-        // In append mode: toggle clicked key (add if not present, remove if already present)
-        next = prev.includes(keyName) 
-          ? prev.filter(k => k !== keyName) 
-          : [...prev, keyName];
-      }
-      
-      commitUpdatedKeys(next);
-      return next;
-    });
+    const previous = recordedKeysRef.current;
+    const next = comboMode === 'chord' ? [keyName] : previous.includes(keyName) ? previous.filter(k => k !== keyName) : [...previous, keyName];
+    updateRecordedKeys(next);
+    commitUpdatedKeys(next);
   };
 
   // Remove individual key badge from combo
   const removeKeyFromCombo = (indexToRemove: number) => {
     playKeyClick('up');
-    setRecordedKeys(prev => {
-      const next = prev.filter((_, i) => i !== indexToRemove);
-      commitUpdatedKeys(next);
-      return next;
-    });
+    const next = recordedKeysRef.current.filter((_, i) => i !== indexToRemove);
+    updateRecordedKeys(next);
+    commitUpdatedKeys(next);
   };
 
   // Toggle quick modifier (Ctrl, Shift, Alt, Win)
   const toggleModifier = (mod: 'Ctrl' | 'Shift' | 'Alt' | 'Win') => {
     playKeyClick('down');
-    setRecordedKeys(prev => {
-      const next = prev.includes(mod) 
-        ? prev.filter(k => k !== mod) 
-        : [mod, ...prev]; // modifiers at front
-      commitUpdatedKeys(next);
-      return next;
-    });
+    const previous = recordedKeysRef.current;
+    const next = previous.includes(mod) ? previous.filter(k => k !== mod) : [mod, ...previous];
+    updateRecordedKeys(next);
+    commitUpdatedKeys(next);
   };
 
   // Apply full preset shortcut combo
   const applyPreset = (presetKeys: string[], defaultLabel: string, defaultName: string) => {
     playKeyClick('down');
-    setRecordedKeys(presetKeys);
+    updateRecordedKeys(presetKeys);
     const updated: KeyBinding = {
       ...editedKey,
       label: defaultLabel,
@@ -515,7 +494,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
   const clearShortcut = () => {
     playKeyClick('up');
-    setRecordedKeys([]);
+    updateRecordedKeys([]);
     const updated: KeyBinding = {
       ...editedKey,
       label: 'Empty',
@@ -747,10 +726,22 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           <Sparkles className="w-3.5 h-3.5" />
           5. Open App
         </button>
+        <button onClick={() => { setActiveTab('media'); setIsRecording(false); }} className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${activeTab === 'media' ? 'border-[#1351AA] text-[#1351AA] font-bold' : 'border-transparent text-[#646464] hover:text-[#141414]'}`}>
+          <Play className="w-3.5 h-3.5" /> 6. Media
+        </button>
       </div>
 
       {/* DRAWER BODY */}
       <div className="flex-1 p-3.5 overflow-y-auto space-y-3">
+
+        {activeTab === 'media' && <div className="space-y-3"><p className="text-xs text-[#444343]">Choose a media key for this switch. Support depends on your computer.</p><div className="grid grid-cols-2 gap-2">{([
+          ['play_pause', 'Play / pause', 'Play'], ['stop', 'Stop', 'Square'], ['prev', 'Previous', 'SkipBack'], ['next', 'Next', 'SkipForward'],
+          ['volume_down', 'Volume down', 'Volume2'], ['volume_up', 'Volume up', 'Volume2'], ['mute', 'Mute', 'VolumeX'],
+          ['brightness_down', 'Brightness down', 'Square'], ['brightness_up', 'Brightness up', 'Square'],
+        ] as const).map(([mediaAction, label, iconName]) => <button key={mediaAction} type="button" aria-pressed={editedKey.tapAction?.category === 'media' && editedKey.tapAction.payload.mediaAction === mediaAction} onClick={() => {
+          const updated: KeyBinding = { ...editedKey, label, sublabel: 'Media key', iconName, tapAction: { id: `media-${mediaAction}`, category: 'media', name: label, payload: { mediaAction } } };
+          setEditedKey(updated); onSave(updated);
+        }} className={`text-left text-xs p-2 border ${editedKey.tapAction?.category === 'media' && editedKey.tapAction.payload.mediaAction === mediaAction ? 'border-[#1351AA] bg-[#F4F8FF]' : 'border-[#C7C7C7] hover:bg-[#EDECE8]'}`}>{label}</button>)}</div></div>}
 
         {/* TAB 1: FULL SIZE KEYBOARD & MULTI-KEY COMBO BUILDER */}
         {activeTab === 'keyboard' && (
@@ -1083,7 +1074,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setRecordedKeys([]);
+                      updateRecordedKeys([]);
                       setIsRecording(true);
                     }}
                     className="px-3.5 py-1.5 bg-[#EDECE8] hover:bg-[#EDECE8] text-[#141414] text-xs font-bold font-mono flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"

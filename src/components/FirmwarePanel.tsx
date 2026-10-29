@@ -7,8 +7,8 @@ interface FirmwarePanelProps {
 }
 
 const previewOptions: FirmwareOption[] = [
-  { id: 'full', name: 'Full Deck', untested: true, description: 'Display support · LED output varies by build.', available: false, error: 'Open the desktop app to check availability.' },
-  { id: 'essential', name: 'Keys & Knob', untested: true, description: 'No display or LEDs.', available: false, error: 'Open the desktop app to check availability.' },
+  { id: 'full', name: 'Full Deck', untested: true, description: 'Supplied image · key-hold support unverified.', available: false, error: 'Open the desktop app to check availability.' },
+  { id: 'essential', name: 'Keys & Knob', untested: true, description: 'No display or LEDs · supports held keys.', available: false, error: 'Open the desktop app to check availability.' },
 ];
 
 /** Full UF2 workflow inside the sidebar disclosure. Opening it never launches an app modal. */

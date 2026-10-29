@@ -60,6 +60,7 @@ TEST_SRC := \
   tests/test_scan.c \
   tests/test_config.c \
   tests/test_actions.c \
+  tests/test_keyboard_hold.c \
   tests/test_ascii_cmd.c \
   tests/test_leds.c \
   tests/test_protocol.c \

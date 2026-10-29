@@ -170,6 +170,8 @@ static bool s_kbd_inflight, s_consumer_inflight;
 static mpad_kbd_report_t s_last_kbd;
 static uint16_t s_last_consumer;
 static bool s_mounted;
+/* Monotonic connection generation: catches suspend+resume between scans. */
+static uint32_t s_connection_epoch;
 
 static void kbd_append(const mpad_kbd_report_t *report) {
     s_kbd_pending[(s_kbd_head + s_kbd_count) % KBD_PENDING_CAP] = *report;
@@ -288,19 +290,23 @@ const uint16_t *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
 }
 
 void tud_mount_cb(void) {
+    s_connection_epoch++;
     delivery_reset(true);
     s_mounted = true;
 }
 void tud_umount_cb(void) {
+    s_connection_epoch++;
     s_mounted = false;
     delivery_reset(false);
 }
 void tud_suspend_cb(bool remote_wakeup_en) {
+    s_connection_epoch++;
     (void)remote_wakeup_en;
     s_mounted = false;
     delivery_reset(false);
 }
 void tud_resume_cb(void) {
+    s_connection_epoch++;
     delivery_reset(true);
     s_mounted = true;
 }
@@ -394,6 +400,7 @@ void hid_dev_init(void) {
 }
 
 bool hid_dev_mounted(void) { return s_mounted && tud_mounted(); }
+uint32_t hid_dev_connection_epoch(void) { return s_connection_epoch; }
 
 void hid_dev_task(void) {
     tud_task(); /* completion/failure callbacks may free each interface's head */
@@ -450,6 +457,7 @@ static int s_kbd_n, s_consumer_n;
 
 void hid_dev_init(void) { s_kbd_n = s_consumer_n = 0; }
 bool hid_dev_mounted(void) { return true; }
+uint32_t hid_dev_connection_epoch(void) { return 0; }
 void hid_dev_task(void) {}
 
 void hid_dev_keyboard(const mpad_kbd_report_t *report) {

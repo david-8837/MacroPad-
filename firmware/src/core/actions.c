@@ -28,6 +28,10 @@ static uint8_t s_latched_mods;
 static uint8_t s_latched_key;
 static bool s_sticky_active;
 
+/* One keyboard state per physical switch. Reports are composed together so
+ * releasing one switch never releases a different held key or modifier. */
+static struct { uint8_t mods, usage; bool down; } s_physical[CFG_KEY_COUNT];
+
 /* Hold-down state, so a release knows what to undo. */
 static struct {
     uint8_t mods;
@@ -65,9 +69,48 @@ bool action_is_set(const action_t *a) { return a && a->type != ACTION_TYPE_NONE;
 /* ---- HID helpers -------------------------------------------------------- */
 static void send_keyboard(uint8_t mods, const uint8_t keys[6]) {
     if (!s_backend.hid_send_keyboard) return;
-    /* Fold the latched sticky modifier into every report. Without this the latch
-     * would be invisible to the host, which is the whole point of it. */
-    s_backend.hid_send_keyboard((uint8_t)(mods | s_latched_mods), keys);
+    uint8_t out[6] = {0};
+    uint8_t n = 0;
+    bool overflow = false;
+    mods |= s_latched_mods;
+    for (int i = 0; i < CFG_KEY_COUNT + 6; i++) {
+        uint8_t key;
+        if (i < CFG_KEY_COUNT) {
+            if (!s_physical[i].down) continue;
+            mods |= s_physical[i].mods;
+            key = s_physical[i].usage;
+        } else key = keys[i - CFG_KEY_COUNT];
+        if (!key) continue;
+        bool found = false;
+        for (int j = 0; j < n; j++) if (out[j] == key) found = true;
+        if (found) continue;
+        if (n == 6) overflow = true;
+        else out[n++] = key;
+    }
+    /* Boot-protocol keyboards have six slots; ErrorRollOver is the HID-defined
+     * way to report more than six distinct usages without a stuck key. */
+    if (overflow) memset(out, 1, sizeof(out));
+    s_backend.hid_send_keyboard(mods, out);
+}
+
+bool action_physical_keyboard_supported(const action_t *a) {
+    return a && (a->type == ACTION_TYPE_KEYCODE || a->type == ACTION_TYPE_MODS) &&
+           a->flags == ACTION_FLAG_NONE;
+}
+
+void action_physical_keyboard(uint8_t index, const action_t *a, bool down) {
+    if (index >= CFG_KEY_COUNT) return;
+    if (down) {
+        if (!action_physical_keyboard_supported(a) || s_physical[index].down) return;
+        s_physical[index].down = true;
+        s_physical[index].mods = a->type == ACTION_TYPE_KEYCODE ? (uint8_t)(a->code >> 8) : (uint8_t)a->code;
+        s_physical[index].usage = a->type == ACTION_TYPE_KEYCODE ? (uint8_t)a->code : 0;
+    } else {
+        if (!s_physical[index].down) return;
+        memset(&s_physical[index], 0, sizeof(s_physical[index]));
+    }
+    const uint8_t empty[6] = {0};
+    send_keyboard(0, empty);
 }
 
 static void send_consumer(uint16_t usage) {
@@ -162,6 +205,7 @@ void action_reset_state(void) {
      * cases, and useful at boot before the host has enumerated — sending a
      * report to an unmounted device is harmless but pointless. */
     memset(&s_held, 0, sizeof(s_held));
+    memset(s_physical, 0, sizeof(s_physical));
     s_latched_mods = 0;
     s_latched_key = 0;
     s_sticky_active = false;
@@ -171,6 +215,7 @@ void action_release_all(void) {
     uint8_t empty[6] = {0};
     bool need_clear = s_held.keyboard_down || s_sticky_active || s_latched_mods || s_latched_key;
     bool need_consumer_clear = s_held.consumer_down;
+    for (int i = 0; i < CFG_KEY_COUNT; i++) if (s_physical[i].down) need_clear = true;
 
     /* Clear every latch FIRST. send_keyboard() ORs s_latched_mods into the
      * report it sends, so releasing before clearing would put the modifier back
@@ -180,6 +225,7 @@ void action_release_all(void) {
     s_latched_key = 0;
     s_sticky_active = false;
     memset(&s_held, 0, sizeof(s_held));
+    memset(s_physical, 0, sizeof(s_physical));
 
     /* Then one all-clear report. Only one: several in a row are wasted USB
      * traffic and make the report log hard to read. */

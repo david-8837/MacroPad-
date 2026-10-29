@@ -21,6 +21,20 @@ const { build } = require('esbuild');
       'claude-code': ['Coding', 'Transcript', ['Ctrl', 'O']], codex: ['Coding', 'Copy response', ['Ctrl', 'O']],
       vscode: ['Coding', 'Terminal', ['Ctrl', '`']], word: ['Office', 'Heading 1', ['Ctrl', 'Alt', '1']],
       excel: ['Office', 'AutoSum', ['Alt', '=']], powerpoint: ['Office', 'New slide', ['Ctrl', 'M']],
+      gimp: ['Design', 'Paintbrush', ['P']], inkscape: ['Design', 'Pen', ['B']],
+      krita: ['Design', 'Eraser mode', ['E']], 'after-effects': ['Video', 'Trim in point', ['Alt', '[']],
+      audacity: ['Audio', 'Record', ['R']], intellij: ['Coding', 'Find action', ['Ctrl', 'Shift', 'A']],
+      'google-docs': ['Office', 'Center', ['Ctrl', 'Shift', 'E']],
+      'google-sheets': ['Office', 'Fill range', ['Ctrl', 'Enter']],
+      'google-slides': ['Office', 'Ungroup', ['Ctrl', 'Alt', 'Shift', 'G']],
+      'minecraft-java': ['Games', 'Hotbar 9', ['9']], fortnite: ['Games', 'Map', ['M']],
+      valorant: ['Games', 'Ultimate', ['X']], 'counter-strike-2': ['Games', 'Buy menu', ['B']],
+      'league-of-legends': ['Games', 'Scoreboard toggle', ['O']], 'dota-2': ['Games', 'Level Q', ['Ctrl', 'Q']],
+      roblox: ['Games', 'Hotbar 9', ['9']],
+      'elden-ring': ['Games', 'Switch spell', ['ArrowUp']], 'cyberpunk-2077': ['Games', 'Cyberware', ['E']],
+      'witcher-3': ['Games', 'Quick save', ['F5']], skyrim: ['Games', 'Quick save', ['F5']],
+      'baldurs-gate-3': ['Games', 'Journal', ['L']], 'stardew-valley': ['Games', 'Next toolbar', ['Tab']],
+      terraria: ['Games', 'Quick heal', ['H']],
     };
     assert.equal(new Set(LAYER_PRESETS.map(p => p.id)).size, LAYER_PRESETS.length, 'preset IDs are unique');
     for (const [id, [group, label, keys]] of Object.entries(expected)) {
@@ -29,6 +43,11 @@ const { build } = require('esbuild');
       assert.equal(preset.group, group);
       assert.deepEqual(preset.keys.find(k => k.label === label)?.action.payload.keys, keys, `${id} ${label}`);
     }
+    for (const id of ['minecraft-java', 'roblox']) {
+      const preset = LAYER_PRESETS.find(p => p.id === id);
+      assert.deepEqual(preset.keys.map(k => k.action.payload.keys), Array.from({ length: 9 }, (_, i) => [String(i + 1)]));
+    }
+    assert(LAYER_PRESETS.filter(p => p.group === 'Games').every(p => p.note && p.keys.every(k => k.action.category === 'hotkey')));
     assert.match(LAYER_PRESETS.find(p => p.id === 'claude-code').note, /CLI.*terminal/i);
     assert.match(LAYER_PRESETS.find(p => p.id === 'codex').note, /CLI.*terminal/i);
     assert.equal(defaultDeck.layers.length, 4);
