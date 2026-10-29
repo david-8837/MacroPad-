@@ -47,6 +47,7 @@ export const OSDFlyout: React.FC<OSDFlyoutProps> = ({
           </span>
         </div>
 
+        <p className="font-mono text-[9px] text-[#646464] mb-2">Editor preview · pad channel unchanged</p>
         {/* 3x3 Mini Preview Grid */}
         <div className="grid grid-cols-3 gap-1.5 mb-2">
           {layer.keys.map(k => (

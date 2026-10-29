@@ -23,10 +23,8 @@ import {
   Sparkles
 } from 'lucide-react';
 
-/* A reference sheet, not a binding tool. It shows what Windows and the common
- * apps answer to so you can copy a combo or memorise it. Assigning a shortcut to
- * a switch happens in the VIA Quick Keycode Tray, which is the only place a key
- * gets a job. */
+/* A reference sheet, not a binding tool. Copy a combo, then assign it from
+ * the switch drawer. The MPAD3 quick tray offers a reviewed single-key subset. */
 export const ShortcutsPanel: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -91,7 +89,7 @@ export const ShortcutsPanel: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-[#646464] mt-0.5">
-              Reference list of Windows, browser, editing and developer shortcuts. Copy one or remember it — keys are assigned in the VIA Quick Keycode Tray.
+              Reference list of Windows, browser, editing and developer shortcuts. Copy a combo, then assign it in the switch drawer; the MPAD3 quick tray offers reviewed tap keys.
             </p>
           </div>
         </div>

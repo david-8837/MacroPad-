@@ -1,11 +1,12 @@
-// VIA Keycode Definitions and Categories (QMK / VIA v2 & v3 compatible)
+// VIA-inspired quick assignments. This pad runs custom MPAD3 firmware, not QMK:
+// only actions that map to a real on-pad behavior (or explicit PC macro) live here.
 
 export interface ViaKeycodeItem {
   code: string;
   label: string;
   sublabel?: string;
   tooltip: string;
-  category: 'basic' | 'media' | 'macro' | 'layers' | 'special';
+  category: 'basic' | 'media' | 'macro' | 'layers' | 'oled' | 'special';
 }
 
 export const VIA_BASIC_KEYS: ViaKeycodeItem[] = [
@@ -49,16 +50,13 @@ export const VIA_BASIC_KEYS: ViaKeycodeItem[] = [
   { code: 'KC_9', label: '9', sublabel: '(', tooltip: 'Digit 9 and Parenthesis', category: 'basic' },
   { code: 'KC_0', label: '0', sublabel: ')', tooltip: 'Digit 0 and Close Parenthesis', category: 'basic' },
 
-  // Control & Modifiers
+  // Standard tap keys. Bare modifiers are NOT listed: the firmware's one-slot
+  // TAP sends a modifier pulse, not a QMK-style held Ctrl/Shift key.
   { code: 'KC_ESC', label: 'Esc', tooltip: 'Escape', category: 'basic' },
   { code: 'KC_ENT', label: 'Enter', tooltip: 'Return / Enter', category: 'basic' },
   { code: 'KC_SPC', label: 'Space', tooltip: 'Spacebar', category: 'basic' },
   { code: 'KC_BSPC', label: 'Backspace', tooltip: 'Backspace', category: 'basic' },
   { code: 'KC_TAB', label: 'Tab', tooltip: 'Tabulator', category: 'basic' },
-  { code: 'KC_LCTL', label: 'Ctrl', tooltip: 'Left Control', category: 'basic' },
-  { code: 'KC_LSFT', label: 'Shift', tooltip: 'Left Shift', category: 'basic' },
-  { code: 'KC_LALT', label: 'Alt', tooltip: 'Left Alt', category: 'basic' },
-  { code: 'KC_LGUI', label: 'Win', tooltip: 'Left GUI / Windows key', category: 'basic' },
   { code: 'KC_CAPS', label: 'Caps', tooltip: 'Caps Lock', category: 'basic' },
 
   // Navigation
@@ -88,52 +86,40 @@ export const VIA_BASIC_KEYS: ViaKeycodeItem[] = [
 ];
 
 export const VIA_MEDIA_KEYS: ViaKeycodeItem[] = [
-  { code: 'KC_MPLY', label: 'Play/Pause', tooltip: 'Toggle Media Play/Pause', category: 'media' },
-  { code: 'KC_MNXT', label: 'Next Track', tooltip: 'Next Audio Track', category: 'media' },
-  { code: 'KC_MPRV', label: 'Prev Track', tooltip: 'Previous Audio Track', category: 'media' },
-  { code: 'KC_MSTP', label: 'Stop', tooltip: 'Stop Media Playback', category: 'media' },
-  { code: 'KC_VOLU', label: 'Vol +', tooltip: 'Volume Up', category: 'media' },
-  { code: 'KC_VOLD', label: 'Vol -', tooltip: 'Volume Down', category: 'media' },
-  { code: 'KC_MUTE', label: 'Mute', tooltip: 'Mute Audio Output', category: 'media' },
-  { code: 'KC_CALC', label: 'Calc', tooltip: 'Launch Calculator', category: 'media' },
-  { code: 'KC_MYCM', label: 'My PC', tooltip: 'Open File Explorer / This PC', category: 'media' },
-  { code: 'KC_MAIL', label: 'Email', tooltip: 'Open Default Mail Client', category: 'media' },
-  { code: 'KC_BRIU', label: 'Bright +', tooltip: 'Increase Display Brightness', category: 'media' },
-  { code: 'KC_BRID', label: 'Bright -', tooltip: 'Decrease Display Brightness', category: 'media' },
+  { code: 'KC_MPLY', label: 'Play/Pause', tooltip: 'On-pad consumer HID: play/pause', category: 'media' },
+  { code: 'KC_MNXT', label: 'Next Track', tooltip: 'On-pad consumer HID: next track', category: 'media' },
+  { code: 'KC_MPRV', label: 'Prev Track', tooltip: 'On-pad consumer HID: previous track', category: 'media' },
+  { code: 'KC_MSTP', label: 'Stop', tooltip: 'On-pad consumer HID: stop', category: 'media' },
+  { code: 'KC_VOLU', label: 'Vol +', tooltip: 'On-pad consumer HID: volume up', category: 'media' },
+  { code: 'KC_VOLD', label: 'Vol -', tooltip: 'On-pad consumer HID: volume down', category: 'media' },
+  { code: 'KC_MUTE', label: 'Mute', tooltip: 'On-pad consumer HID: mute', category: 'media' },
 ];
 
 export const VIA_MACRO_KEYS: ViaKeycodeItem[] = Array.from({ length: 16 }, (_, i) => ({
   code: `M${i}`,
   label: `M${i}`,
-  tooltip: `Execute Programmable Macro Slot ${i}`,
+  tooltip: `PC only: run saved M${i} in the desktop app with pad USB key events enabled`,
   category: 'macro',
 }));
 
-export const VIA_LAYER_KEYS: ViaKeycodeItem[] = [
-  { code: 'MO(1)', label: 'MO(1)', tooltip: 'Momentary switch to Layer 1 (Active while held)', category: 'layers' },
-  { code: 'MO(2)', label: 'MO(2)', tooltip: 'Momentary switch to Layer 2 (Active while held)', category: 'layers' },
-  { code: 'MO(3)', label: 'MO(3)', tooltip: 'Momentary switch to Layer 3 (Active while held)', category: 'layers' },
-  { code: 'TG(1)', label: 'TG(1)', tooltip: 'Toggle Layer 1 on/off', category: 'layers' },
-  { code: 'TG(2)', label: 'TG(2)', tooltip: 'Toggle Layer 2 on/off', category: 'layers' },
-  { code: 'TG(3)', label: 'TG(3)', tooltip: 'Toggle Layer 3 on/off', category: 'layers' },
-  { code: 'TO(0)', label: 'TO(0)', tooltip: 'Switch to Layer 0 and turn off all other layers', category: 'layers' },
-  { code: 'TO(1)', label: 'TO(1)', tooltip: 'Switch to Layer 1 and turn off all other layers', category: 'layers' },
-  { code: 'TO(2)', label: 'TO(2)', tooltip: 'Switch to Layer 2 and turn off all other layers', category: 'layers' },
-  { code: 'TT(1)', label: 'TT(1)', tooltip: 'Tap to toggle Layer 1, hold to activate momentarily', category: 'layers' },
-  { code: 'DF(0)', label: 'DF(0)', tooltip: 'Set default base layer to 0', category: 'layers' },
-  { code: 'DF(1)', label: 'DF(1)', tooltip: 'Set default base layer to 1', category: 'layers' },
+/* These are MPAD3 CHANNEL actions, NOT QMK MO/TG/TO/DF semantics. The pad
+ * changes channel on a key tap after a verified upload; a UI preview click does
+ * not remotely switch the pad. */
+export const VIA_LAYER_KEYS: ViaKeycodeItem[] = Array.from({ length: 4 }, (_, ch) => ({
+  code: `CH(${ch})`,
+  label: `Layer ${ch}`,
+  tooltip: `On-pad switch to Layer ${ch} after upload (not momentary, not an editor click)`,
+  category: 'layers',
+}));
+
+/* A manual, on-pad playlist step. Firmware dispatches ACTION_TYPE_OLED_NEXT
+ * on press; it does not require the desktop app or USB key-event streaming. */
+export const VIA_OLED_KEYS: ViaKeycodeItem[] = [
+  { code: 'OLED_NEXT', label: 'OLED Next', tooltip: 'On-pad: advance to the next enabled OLED screen after upload', category: 'oled' },
 ];
 
+/* Clearing a binding really uploads an empty slot; transparent fallthrough,
+ * bootloader/reset and mouse keys are NOT implemented by this firmware tray. */
 export const VIA_SPECIAL_KEYS: ViaKeycodeItem[] = [
-  { code: 'RESET', label: 'RESET', tooltip: 'Trigger DFU / Bootloader Mode', category: 'special' },
-  { code: 'EE_CLR', label: 'EE_CLR', tooltip: 'Clear Microcontroller EEPROM to Defaults', category: 'special' },
-  { code: 'KC_NO', label: 'NONE', tooltip: 'No Action (Transparent/Disabled)', category: 'special' },
-  { code: 'KC_TRNS', label: 'TRANS', tooltip: 'Transparent (Fall through to lower layer)', category: 'special' },
-  { code: 'LCTL_T(KC_Z)', label: 'Ctrl/Z', tooltip: 'Tap for Z, Hold for Left Ctrl', category: 'special' },
-  { code: 'LSFT_T(KC_SPC)', label: 'Sft/Spc', tooltip: 'Tap for Space, Hold for Left Shift', category: 'special' },
-  { code: 'MS_BTN1', label: 'Left Click', tooltip: 'Mouse Left Click', category: 'special' },
-  { code: 'MS_BTN2', label: 'Right Click', tooltip: 'Mouse Right Click', category: 'special' },
-  { code: 'MS_BTN3', label: 'Middle Click', tooltip: 'Mouse Middle Click', category: 'special' },
-  { code: 'MS_WH_U', label: 'Wheel Up', tooltip: 'Mouse Wheel Scroll Up', category: 'special' },
-  { code: 'MS_WH_D', label: 'Wheel Dn', tooltip: 'Mouse Wheel Scroll Down', category: 'special' },
+  { code: 'KC_NO', label: 'Clear', tooltip: 'Remove this binding (no action on pad or PC)', category: 'special' },
 ];

@@ -102,7 +102,43 @@ static void test_long_press_fires_hold_at_threshold_not_on_release(void) {
     release(0, 1500);
     ASSERT(pop(&g));
     ASSERT_EQ(g.kind, GESTURE_HOLD_RELEASE);
+    ASSERT_EQ(g.steps, 500); /* full press duration, not the 300 ms hold trigger */
     ASSERT_EQ(count_kind(GESTURE_TAP), 0); /* a hold must never also report a tap */
+}
+
+static void test_hold_release_duration_is_saturated_and_wrap_safe(void) {
+    g_current = __func__;
+    reset();
+    press(0, 100);
+    tick(400);
+    gesture_t g;
+    ASSERT(pop(&g));
+    ASSERT_EQ(g.kind, GESTURE_HOLD);
+    release(0, 1300);
+    ASSERT(pop(&g));
+    ASSERT_EQ(g.kind, GESTURE_HOLD_RELEASE);
+    ASSERT_EQ(g.steps, 1200); /* too short for a 1500 ms safety action */
+
+    reset();
+    press(0, 2000);
+    tick(2300);
+    ASSERT(pop(&g));
+    release(0, 40000);
+    ASSERT(pop(&g));
+    ASSERT_EQ(g.steps, 32767); /* wire field is signed 16-bit */
+
+    reset();
+    cfg_global_t cfg = defaults_global();
+    cfg.hold_ms = 1000;
+    gesture_apply_config(&E, &cfg);
+    E.tap_max_ms = 500;
+    press(1, 10);
+    release(1, 1210); /* HOLD and RELEASE generated in the same tick */
+    ASSERT(pop(&g));
+    ASSERT_EQ(g.kind, GESTURE_HOLD);
+    ASSERT(pop(&g));
+    ASSERT_EQ(g.kind, GESTURE_HOLD_RELEASE);
+    ASSERT_EQ(g.steps, 1200);
 }
 
 static void test_hold_does_not_also_emit_tap_when_hold_ms_below_tap_max(void) {
@@ -407,6 +443,9 @@ static void test_time_wraparound_does_not_stick_a_key(void) {
     ASSERT(pop(&g));
     ASSERT_EQ(g.kind, GESTURE_HOLD); /* elapsed via unsigned subtraction */
     release(8, 400);
+    ASSERT(pop(&g));
+    ASSERT_EQ(g.kind, GESTURE_HOLD_RELEASE);
+    ASSERT_EQ(g.steps, 501); /* measured across the 32-bit clock wrap */
 }
 
 /* ---- registration ------------------------------------------------------- */
@@ -414,6 +453,8 @@ const test_case_t gesture_tests[] = {
     {"short_press_is_a_tap", test_short_press_is_a_tap},
     {"long_press_fires_hold_at_threshold_not_on_release",
      test_long_press_fires_hold_at_threshold_not_on_release},
+    {"hold_release_duration_is_saturated_and_wrap_safe",
+     test_hold_release_duration_is_saturated_and_wrap_safe},
     {"hold_does_not_also_emit_tap_when_hold_ms_below_tap_max",
      test_hold_does_not_also_emit_tap_when_hold_ms_below_tap_max},
     {"double_tap_needs_second_press_inside_window", test_double_tap_needs_second_press_inside_window},

@@ -131,23 +131,27 @@ typedef struct __attribute__((packed)) {
     uint8_t knob_batch;
     uint8_t hold_repeat_ms;
     uint8_t boot_channel;     /* channel selected at power-on */
-    uint8_t led_invert_output; /* mirror of the board define, runtime-settable */
+    uint8_t led_invert_output; /* stored legacy field; hardware driver ignores it */
     uint8_t usb_report_events; /* 1 = stream key/gesture events to the host */
 
-    /* OLED rotation. The panel has no touchscreen, so these two bytes are the
-     * whole interaction model: how long a screen stays up, and which screens are
-     * in the rotation. Both fit in the three bytes of padding this struct
-     * already had, so the config wire format and CONFIG_FORMAT_VERSION do not
-     * change and old saved configs stay valid. */
-    uint8_t oled_auto_cycle_s; /* 0 = do not auto-advance; 3..255 = seconds   */
-    uint16_t oled_playlist;    /* bit i = screen i in rotation; 0 = all of them */
-} cfg_global_t; /* 16 bytes */
+    /* Required physical OLED. The first three bytes were already in v2's
+     * global struct; four more bytes in v3 persist boot display settings.
+     * storage_init() migrates valid v2 sectors without losing bindings. */
+    uint8_t oled_auto_cycle_s; /* 0 = off; 3..255 = seconds per screen */
+    uint16_t oled_playlist;    /* bit i = screen i; 0 = all screens */
+    uint8_t oled_boot_mode;    /* catalogue index 0..11 on power-up */
+    uint8_t oled_contrast;     /* SSD1306 contrast register 0..255 */
+    uint8_t oled_inverted;     /* SSD1306 0xA7 when 1; normal when 0 */
+    uint8_t _oled_pad;        /* reserved, must be zero */
+} cfg_global_t; /* 20 bytes */
 
-_Static_assert(sizeof(cfg_global_t) == 16, "cfg_global_t must stay 16 bytes on the wire");
-/* The two OLED fields took the old `_pad[3]`, so the size did not move. Pin the
- * offsets anyway: the host codec and the generated TS both hard-code them. */
+_Static_assert(sizeof(cfg_global_t) == 20, "cfg_global_t must stay 20 bytes on the wire");
 _Static_assert(offsetof(cfg_global_t, oled_auto_cycle_s) == 13, "oled_auto_cycle_s offset moved");
 _Static_assert(offsetof(cfg_global_t, oled_playlist) == 14, "oled_playlist offset moved");
+_Static_assert(offsetof(cfg_global_t, oled_boot_mode) == 16, "oled_boot_mode offset moved");
+_Static_assert(offsetof(cfg_global_t, oled_contrast) == 17, "oled_contrast offset moved");
+_Static_assert(offsetof(cfg_global_t, oled_inverted) == 18, "oled_inverted offset moved");
+_Static_assert(offsetof(cfg_global_t, _oled_pad) == 19, "oled pad offset moved");
 
 /* The whole blob. Header first so a reader can reject an incompatible file
  * before touching the payload. */
@@ -160,7 +164,7 @@ typedef struct __attribute__((packed)) {
     uint32_t crc32;    /* over every byte above this field */
 } cfg_blob_t;
 
-_Static_assert(sizeof(cfg_blob_t) == 8 + 16 + (CFG_CHANNEL_COUNT * 560) + 4, "cfg_blob_t layout changed");
+_Static_assert(sizeof(cfg_blob_t) == 8 + 20 + (CFG_CHANNEL_COUNT * 560) + 4, "cfg_blob_t layout changed");
 _Static_assert(CFG_CHANNEL_COUNT == 4, "four layers, numbered 0-3");
 
 /* Offset of the CRC inside the blob — the host needs it too. */

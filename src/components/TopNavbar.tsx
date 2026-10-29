@@ -13,7 +13,6 @@ import {
   Plus,
   Usb,
   Cpu,
-  RefreshCw,
   Power,
   Activity,
   Zap,
@@ -27,13 +26,10 @@ interface TopNavbarProps {
   onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros') => void;
   hardwareState: HardwareConnectionState;
   deviceInfo: ConnectedDeviceInfo | null;
-  onConnectHID: () => void;
   onConnectSerial: () => void;
   onDisconnectHardware?: () => void;
-  onSyncEEPROM: () => void;
-  onOpenUploadModal?: () => void;
   onOpenDiagnostics?: () => void;
-  onOpenFirmwareModal?: () => void;
+  onOpenFirmwarePanel?: () => void;
   onOpenCommandPalette?: () => void;
 }
 
@@ -55,13 +51,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onChangeTab,
   hardwareState,
   deviceInfo,
-  onConnectHID,
   onConnectSerial,
   onDisconnectHardware,
-  onSyncEEPROM,
-  onOpenUploadModal,
   onOpenDiagnostics,
-  onOpenFirmwareModal,
+  onOpenFirmwarePanel,
   onOpenCommandPalette,
 }) => {
   const [showConnectMenu, setShowConnectMenu] = useState(false);
@@ -123,15 +116,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               <div className="flex items-center gap-2 h-8 px-2 border border-[#C7C7C7] bg-[#FFFFFF]">
                 <span className="mark mark--on" />
                 <span className="font-mono text-[9px] font-bold tracking-[0.1em] text-[#141414]">
-                  {deviceInfo?.name ? deviceInfo.name.slice(0, 14).toUpperCase() : 'CONNECTED'}
+                  {deviceInfo?.protocolReady ? 'MPAD3 READY' : 'SERIAL OPEN'}
                 </span>
-                <button
-                  onClick={onSyncEEPROM}
-                  title="Sync keymap to EEPROM"
-                  className="w-5 h-5 flex items-center justify-center text-[#646464] hover:text-[#1351AA] transition-colors"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                </button>
                 <button
                   onClick={onDisconnectHardware}
                   title="Disconnect"
@@ -157,17 +143,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                     <div className="px-3 py-2 border-b border-[#C7C7C7]">
                       <span className="eyebrow">Connect device</span>
                     </div>
-                    <button
-                      onClick={() => { setShowConnectMenu(false); onConnectHID(); }}
-                      className="w-full text-left px-3 py-2.5 border-b border-[#E3E2DE] hover:bg-[#EDECE8] transition-colors"
-                    >
-                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#141414]">
-                        <Usb className="w-3 h-3 text-[#1351AA]" /> WebHID Macropad
-                      </span>
-                      <span className="block mt-0.5 font-mono text-[9px] text-[#646464]">
-                        QMK / raw HID · endpoint 0xFF60
-                      </span>
-                    </button>
+                    <div className="px-3 py-2 text-[9px] font-mono text-[#646464] border-b border-[#E3E2DE]">
+                      HID keystrokes work through the OS. Use USB serial for configuration and pad events.
+                    </div>
                     <button
                       onClick={() => { setShowConnectMenu(false); onConnectSerial(); }}
                       className="w-full text-left px-3 py-2.5 border-b border-[#E3E2DE] hover:bg-[#EDECE8] transition-colors"
@@ -180,14 +158,14 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                       </span>
                     </button>
                     <button
-                      onClick={() => { setShowConnectMenu(false); onOpenFirmwareModal?.(); }}
+                      onClick={() => { setShowConnectMenu(false); onOpenFirmwarePanel?.(); }}
                       className="w-full text-left px-3 py-2.5 hover:bg-[#EDECE8] transition-colors"
                     >
                       <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#141414]">
-                        <Zap className="w-3 h-3 text-[#1351AA]" /> Flash firmware
+                        <Zap className="w-3 h-3 text-[#1351AA]" /> Firmware &amp; bootloader
                       </span>
                       <span className="block mt-0.5 font-mono text-[9px] text-[#646464]">
-                        RP2040 BOOTSEL · .uf2
+                        Expand left sidebar · RP2040 .uf2
                       </span>
                     </button>
                   </div>
@@ -198,7 +176,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
           {/* tool squares */}
           {[
-            { icon: <Activity className="w-3.5 h-3.5" />, title: 'Diagnostics & history', fn: onOpenDiagnostics },
+            { icon: <Activity className="w-3.5 h-3.5" />, title: 'Expand Hardware Status & Diagnostics in Studio', fn: onOpenDiagnostics },
             { icon: <Search className="w-3.5 h-3.5" />, title: 'Command palette · Ctrl+K', fn: onOpenCommandPalette },
           ].map((b) => (
             <button
@@ -210,11 +188,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               {b.icon}
             </button>
           ))}
-
-          <button onClick={onOpenUploadModal} className="btn h-8">
-            <Zap className="w-3.5 h-3.5" />
-            Upload
-          </button>
 
           {/* window controls */}
           <div className="flex items-center ml-1 border-l border-[#C7C7C7] pl-2 gap-0.5">

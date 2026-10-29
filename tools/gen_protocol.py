@@ -53,6 +53,9 @@ def ts_for(field: dict) -> str:
     # declaring Uint8Array would make every UI write encode/decode boilerplate.
     if t == "bytes" and field.get("name") == "text":
         return "string"
+    # The wire has 27 consecutive RGB bytes; the JS codec exposes nine triples.
+    if t == "bytes" and field.get("name") == "perKey":
+        return "Array<[number, number, number]>"
     return TS_TYPE.get(t, "number")
 
 
@@ -78,7 +81,18 @@ def emit_ts(spec: dict) -> str:
     w(f"export const CHANNELS = {meta['channels']};")
     w(f"export const KEYS = {meta['keys']};")
     w(f"export const LEDS = {meta['leds']};")
+    w(f"export const LED_TEST_HOLD_MS = {meta['ledTestHoldMs']};")
     w(f"export const TEXT_MAX = {meta['textMax']};")
+    w(f"export const OLED_MODE_COUNT = {meta['oledModes']};")
+    w("export const OLED_STREAM = {")
+    for key, field in [("FRAME_BYTES", "oledFrameBytes"),
+                       ("CHUNK_BYTES", "oledStreamChunkBytes"),
+                       ("CHUNK_COUNT", None),
+                       ("HEADER_BYTES", "oledStreamHeaderBytes"),
+                       ("STAGING_TIMEOUT_MS", "oledStageTimeoutMs"),
+                       ("TTL_MS", "oledStreamTtlMs")]:
+        w(f"  {key}: {meta[field] if field else 2},")
+    w("} as const;")
     w("")
 
     # Enums -> SCREAMING_SNAKE const objects plus a union type, so a UI can both
@@ -119,7 +133,7 @@ def emit_ts(spec: dict) -> str:
     w("/** What a configurator UI holds in memory. Same shape as Channel, but with")
     w(" *  the array lengths spelled out so a UI cannot build a 7-key page. */")
     w("export interface ChannelConfig {")
-    w("  keys: [Action, Action, Action, Action, Action, Action, Action, Action, Action];")
+    w(f"  keys: [{', '.join(['Action'] * int(meta['keys']))}];")
     w("  knobCw: Action;")
     w("  knobCcw: Action;")
     w("  knobTap: Action;")
@@ -129,7 +143,7 @@ def emit_ts(spec: dict) -> str:
     w("")
     w("export interface DeviceConfig {")
     w("  global: Global;")
-    w("  channels: [ChannelConfig, ChannelConfig, ChannelConfig];")
+    w(f"  channels: [{', '.join(['ChannelConfig'] * int(meta['channels']))}];")
     w("}")
     w("")
     w("export interface Info {")
@@ -184,8 +198,9 @@ def emit_md(spec: dict) -> str:
     w("```")
     w("offset  size  field")
     w("──────  ────  ─────────────────────────────────────────────")
+    frame_type_size = {"u8": 1, "u16": 2, "i16": 2, "u32": 4, "i32": 4}
     for field in f["fields"]:
-        length = field.get("length", 1)
+        length = field.get("length", frame_type_size.get(field["type"], "?"))
         note = f"   {field['note']}" if field.get("note") else ""
         w(f"{str(field['offset']):<7} {str(length):<5} {field['name']}{note}")
     w("```")
@@ -228,6 +243,13 @@ def emit_md(spec: dict) -> str:
         if c.get("note"):
             w(f"- **{c['name']}** (`{code}`) — {c['note']}")
     w("")
+
+    if spec.get("oledTransport"):
+        w("## Volatile OLED runtime transport")
+        w("")
+        for para in spec["oledTransport"]:
+            w(para)
+            w("")
 
     w("## Structures")
     w("")
@@ -348,19 +370,21 @@ def emit_md(spec: dict) -> str:
 
     w("## Typical exchange")
     w("")
+    chunks = (spec['structs']['config']['size'] + meta['chunkSize'] - 1) // meta['chunkSize']
+    last = chunks - 1
     w("```")
     w("host                          device")
     w("  PING            ──────────▶")
     w("                  ◀──────────  PONG")
     w("  GET_INFO        ──────────▶")
-    w("                  ◀──────────  INFO   (4 channels, 9 keys, 9 LEDs, 2268-byte config)")
+    w(f"                  ◀──────────  INFO   ({meta['channels']} channels, {meta['keys']} keys, {meta['leds']} LEDs, {spec['structs']['config']['size']}-byte config)")
     w("  GET_CONFIG 0    ──────────▶")
-    w("                  ◀──────────  CONFIG_CHUNK (0/7)")
+    w(f"                  ◀──────────  CONFIG_CHUNK (0/{chunks})")
     w("       ⋮               ⋮              ⋮")
-    w("  GET_CONFIG 6    ──────────▶")
-    w("                  ◀──────────  CONFIG_CHUNK (6/7, short)")
+    w(f"  GET_CONFIG {last}    ──────────▶")
+    w(f"                  ◀──────────  CONFIG_CHUNK ({last}/{chunks}, short)")
     w("")
-    w("  SET_CONFIG 0..6 ──────────▶   (streamed; applied to RAM when chunk 6 lands)")
+    w(f"  SET_CONFIG 0..{last} ──────────▶   (streamed; applied to RAM when chunk {last} lands)")
     w("                  ◀──────────  SET_ACK / ERROR")
     w("  COMMIT          ──────────▶   (~50 ms: erase + program one 4 KiB sector)")
     w("                  ◀──────────  COMMIT_ACK")
@@ -369,8 +393,8 @@ def emit_md(spec: dict) -> str:
     w("```")
     w("")
     w("Note that `SET_CONFIG` alone changes what the pad does but not what survives a "
-      "power cycle. `COMMIT` is separate on purpose: a UI that streams seven chunks "
-      "should trigger **one** flash erase, not seven, and a user who previews a "
+      f"power cycle. `COMMIT` is separate on purpose: a UI that streams {chunks} chunks "
+      f"should trigger **one** flash erase, not {chunks}, and a user who previews a "
       "binding and hates it should be able to walk away without it being written.")
     w("")
     return "\n".join(L) + "\n"
@@ -380,15 +404,25 @@ def main() -> int:
     if not SPEC.exists():
         print(f"spec not found: {SPEC}", file=sys.stderr)
         return 1
+    if any(arg != "--check" for arg in sys.argv[1:]):
+        print("usage: python3 tools/gen_protocol.py [--check]", file=sys.stderr)
+        return 2
     spec = json.loads(SPEC.read_text())
+    generated = {OUT_TS: emit_ts(spec), OUT_MD: emit_md(spec)}
 
-    OUT_TS.parent.mkdir(parents=True, exist_ok=True)
-    OUT_MD.parent.mkdir(parents=True, exist_ok=True)
-    OUT_TS.write_text(emit_ts(spec))
-    OUT_MD.write_text(emit_md(spec))
+    if "--check" in sys.argv[1:]:
+        stale = [p for p, content in generated.items() if not p.exists() or p.read_text() != content]
+        if stale:
+            for p in stale:
+                print(f"stale generated protocol file: {p.relative_to(ROOT)}", file=sys.stderr)
+            return 1
+        print("generated protocol types and documentation match the spec")
+        return 0
 
-    print(f"wrote {OUT_TS.relative_to(ROOT)}")
-    print(f"wrote {OUT_MD.relative_to(ROOT)}")
+    for path, content in generated.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        print(f"wrote {path.relative_to(ROOT)}")
     return 0
 
 

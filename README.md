@@ -1,5 +1,7 @@
 # KADOWAZ DECK STUDIO
 
+> **Hardware validation required.** No boot-verified RP2040 UF2 is bundled. The required SSD1306 128×32 display on GP28/GP29 (0x3C) has fake-I²C, compiled-firmware and fake-CDC tests, **not** an assembled-pad test. Saved config **v3** migrates CRC-valid v2 A/B sectors and **Save Display to Pad** verifies ACK–COMMIT–readback without replacing bindings/lighting. Wire protocol **v3** carries checked live OLED frames and a compile-time LED-output capability. The intended cuttable strip and 5 V supply/current budget are **not selected**: the default image gates physical LED data OFF after init; saving lighting settings does not light pixels or certify power. Custom labels/measurements are stored on the PC, not in flash, and can appear as volatile OLED pixels while connected. A separate default-LED-off RP2040-Zero UF2 has passed ARM cross-build, structural and flash-budget checks, but has not been booted; flashing and assembled-pad bench validation remain release gates.
+
 <p align="center">
   <img src="./b90a1e3c-36e8-45d6-8fec-2b4e8802a836.png" alt="KADOWAZ Deck Studio Banner" width="720" style="border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.6);" />
 </p>
@@ -15,7 +17,7 @@
   <img src="https://img.shields.io/badge/Vite-5.4.9-646CFF?style=flat-square&logo=vite" alt="Vite" />
   <img src="https://img.shields.io/badge/TypeScript-5.6.3-3178C6?style=flat-square&logo=typescript" alt="TypeScript" />
   <img src="https://img.shields.io/badge/TailwindCSS-3.4.14-38B2AC?style=flat-square&logo=tailwind-css" alt="Tailwind" />
-  <img src="https://img.shields.io/badge/Firmware-RP2040%20%2F%20ATmega32U4-00979D?style=flat-square&logo=arduino" alt="Firmware" />
+  <img src="https://img.shields.io/badge/Firmware-Waveshare%20RP2040--Zero-00979D?style=flat-square" alt="Firmware target: RP2040-Zero" />
 </p>
 
 ---
@@ -94,29 +96,29 @@ The software uses a dual-engine architecture:
 │                    ▼                                        ▼               │
 │      ┌───────────────────────────┐            ┌──────────────────────────┐  │
 │      │  Electron Main Process    │            │  hardwareBridge.ts       │  │
-│      │  • Multi-Source Discovery │            │  • WebHID API            │  │
+│      │  • Native Action Runner   │            │  • MPAD3 binary events   │  │
 │      │  • Native Icon Extractor  │            │  • WebSerial CDC Stream  │  │
-│      │  • Safe Process Spawner   │            │  • EEPROM Packet Sync    │  │
+│      │  • Safe Process Spawner   │            │  • Flash config + verify │  │
 │      │  • Webhook REST (38491)   │            └─────────────┬────────────┘  │
 │      └─────────────┬─────────────┘                          │               │
 └────────────────────┼────────────────────────────────────────┼───────────────┘
-                     │ OS Shell / Process Spawn               │ USB CDC / HID
+                     │ OS Shell / Process Spawn               │ USB CDC (HID → OS)
                      ▼                                        ▼
           ┌─────────────────────┐                 ┌───────────────────────┐
           │  Windows OS / Apps  │                 │  Micro Pad Hardware   │
-          │  (Code, Chrome,     │                 │  (3x3 Matrix, Knob,   │
+          │  (Code, Chrome,     │                 │  (9 direct keys, knob,│
           │   Spotify, Discord) │                 │   SSD1306 OLED)       │
           └─────────────────────┘                 └───────────────────────┘
 ```
 
 1. **Hardware Layer (Physical Macropad):**
    - Scans the 3x3 mechanical switch matrix and rotary encoder detents with hardware debouncing.
-   - Emits compact ASCII CDC protocol messages (e.g. `KEY:0:DOWN`, `KEY:0:UP`, `ENC:CW`, `ENC:CCW`, `ENC:DOWN`).
-   - Receives text packets to render live telemetry on the 128x32/64 OLED display.
+   - Emits binary MPAD3 key/encoder events over CDC, and standard keyboard/consumer HID reports directly to the OS. Drives a **required 128×32 SSD1306 OLED** over I²C0 (GP28 SDA, GP29 SCL, address 0x3C), with local artwork and offline screens. No physical-board result has been verified.
+   - No known-good firmware UF2 is bundled. Build and verify for the actual board before flashing.
 
 2. **Desktop Companion Layer (Electron + React):**
    - Handles the complex logic the microcontroller memory cannot perform: process launching, window focusing, file picking, active profile switching, and app discovery.
-   - Listens to physical keystrokes over WebHID / WebSerial, maps them to the active layer, and triggers the configured action.
+   - Reads MPAD3 pad events over WebSerial (CDC). Standard HID keyboard reports do not include raw pad-key indices; the app no longer offers a misleading WebHID connection. Device/host ownership of actions still needs validation on physical hardware.
 
 ---
 
@@ -139,28 +141,20 @@ The application discovery engine (`electron/appDiscovery.cjs`) discovers install
 
 ---
 
-### 2. Three Independent Layers (Layer 1, Layer 2, Layer 3)
+### 2. Four Independent Layers (Layer 0–3)
 
-The Micro Pad supports **three fully independent hardware layers** (`Layer 1`, `Layer 2`, `Layer 3`), each maintaining 9 independent programmable switches:
+The deck has **four independent layers**, numbered `0–3`, each with nine physical switches and three assignable knob actions. The editor ships an **example** Edit layer (eight tap keys and one PC-owned hold-to-confirm key), a Tools layer (nine shortcut keys), plus empty Custom and Macros key layers. This is an editor deck; the firmware's factory key slots are empty until a verified upload.
 
-| Layer | Default Role | Rotary Encoder Mode | Switch Setup Example |
-| :--- | :--- | :--- | :--- |
-| **Layer 1** | Primary Desktop / Productivity | Master Volume Control | VS Code, Chrome, Terminal, Slack |
-| **Layer 2** | Media Production / Editing | Timeline Scrubbing | Cut, Ripple Delete, Blade, Render |
-| **Layer 3** | Audio Session & Streaming | Focused App Audio (Discord/Spotify) | Mute Mic, Toggle Stream, Deafen |
+| Layer | Editor default | Knob example |
+| :--- | :--- | :--- |
+| **0 — Edit** | Eight editing shortcuts, one PC safety hold | Timeline scrub and Space |
+| **1 — Tools** | Copy, Paste, Cut, Undo, Redo, Select All, Find, Save, Lock PC | Timeline scrub and Play/Pause |
+| **2 — Custom** | Nine empty switches | Zoom shortcuts |
+| **3 — Macros** | Nine empty switches; M0–M15 are opt-in PC actions, not preloaded | Tab shortcuts / Enter; not a saved M-slot |
 
-- **Complete Isolation:** Changing a switch or knob action in Layer 1 never modifies Layer 2 or Layer 3.
-- **Dedicated Knob Hold for Layer Switching:** Pressing and holding the rotary knob ($\ge 800\text{ ms}$) is strictly dedicated to cycling through the 3 layers (**Layer 1 → Layer 2 → Layer 3**). It cannot be accidentally overwritten with arbitrary macros.
-- **Total Customizable Action Capacity:**
-
-| Input Control | Per Layer | Total Across 3 Layers | Description |
-| :--- | :---: | :---: | :--- |
-| **Mechanical Switches (#1 – #9)** | 9 keys | **27 keys** | Hotkeys, macros, safety holds, or app launchers |
-| **Knob Tap (Push / Click)** | 1 action | **3 actions** | Momentary push macro (Mute, Play/Pause, Enter) |
-| **Knob Scroll CW (Turn Right)** | 1 action | **3 actions** | Clockwise rotation macro (Vol Up, Zoom In, Scrub) |
-| **Knob Scroll CCW (Turn Left)** | 1 action | **3 actions** | Counter-CW rotation macro (Vol Down, Zoom Out) |
-| **Knob Hold ($\ge 800\text{ ms}$)** | *Dedicated* | **Layer Cycle** | Strictly reserved to cycle Layer 1 → Layer 2 → Layer 3 |
-| **Total Customizable Actions** | **12 / layer** | **36 distinct actions** | 100% independent per layer |
+- **Independent edits:** Editing a switch in one layer does not change another. UI selection changes only the editor preview, **not** the pad channel.
+- **Physical switching:** Holding the actual knob cycles the pad's four channels; firmware owns its configured hold timing. The simulated editor hold previews the next layer, and the pad's actual channel is unknown until a device event reports it. An uploaded absolute `CHANNEL` key can switch the pad as well.
+- **Capacity:** 36 key slots plus four each of knob press, CW and CCW (48 assignable slots total), with knob hold reserved for channel cycling. Not every action type can run autonomously: PC-only actions require a compatible serial event stream and desktop app. A safety hold is PC-owned, never silently downgraded to a normal tap.
 
 ---
 
@@ -198,51 +192,23 @@ The rotary knob supports bi-directional rotation and an integrated push button:
 
 ### 6. OLED Display Control (SSD1306)
 
-Control the 128x32 / 128x64 I2C OLED display directly from software:
-- **Operating Modes:**
-  - `channel`: Minimalist industrial Layer Stepper Track with high-contrast inverted active layer badge (`[01]`, `[02]`, `[03]`).
-  - `kadowaz`: Industrial branding and version indicator.
-  - `system`: Live PC telemetry (CPU load %, GPU load %, RAM %, CPU temperature).
-  - `media`: Now-playing track title, artist name, and progress bar.
-  - `visualizer`: Stereo L/R audio VU peak meter.
+The **required SSD1306 128×32 at 0x3C** connects to RP2040-Zero **GP28 SDA / GP29 SCL** on I²C0 with 3.3 V power and 3.3 V pull-ups. Firmware draws seven baked animation loops (`loader`, `creature`, `wave`, `starfield`, `rain`, `radar`, `pulse`) plus local Deck Status, System, Media, Layer Indicator and Uptime/Clock fallbacks. It temporarily overlays the current **0–3** layer when a channel changes. It keeps working without a PC.
 
-#### Layer-Switch Stepper Display (Dual Hardware & Software Parity)
+With a verified **protocol-v3** OLED stream, the app sends complete, CRC-checked 512-byte PC-rendered canvases to runtime modes at most five times per second: measured telemetry/media (or truthful unavailable placeholders), PC wall time, and custom Deck Status labels. The pad reports physical mode changes from its key/knob/timer to the app without an echo loop. If USB frames stop, the pad displays its own offline fallback within about 1.4 s; baked loops never depend on the PC. Live pixels and custom text are **not saved to pad flash**. A browser may throttle a suspended tab, causing the expected local fallback.
 
-Whenever you switch layers (by pressing and holding the rotary knob for $\ge 800\text{ ms}$, or switching in the desktop software), the OLED screen immediately displays a sleek, high-contrast segmented track with an inverted rounded badge indicating the active layer:
+A UI mode choice uses a confirmed `SET_OLED_MODE` binary request; a bound OLED NEXT gesture or saved rotation timer can change the screen autonomously. **Save Display to Pad** persists only boot mode, SSD1306 contrast, inversion, playlist and dwell via full-config ACK–COMMIT–matching readback, preserving bindings/lighting. Without a compatible flash/panel the edits remain **PC-only**. A CRC-valid v2 flash slot is migrated to config v3 without erasing the source on a failed write. These are **source-tested behaviors**, not an assembled-pad claim; no boot-verified UF2 is bundled.
 
-```
-Layer 01 Active:
-┌────────────────────────────────────────────────────────┐
-│   ██████                                               │
-│   █ 01 █ ────────   ──────────   ──────────            │
-│   ██████                                               │
-└────────────────────────────────────────────────────────┘
-
-Layer 02 Active:
-┌────────────────────────────────────────────────────────┐
-│                ██████                                  │
-│   ──────────   █ 02 █ ──────────   ──────────          │
-│                ██████                                  │
-└────────────────────────────────────────────────────────┘
-
-Layer 03 Active:
-┌────────────────────────────────────────────────────────┐
-│                                 ██████                 │
-│   ──────────   ──────────   ────█ 03 █ ────            │
-│                                 ██████                 │
-└────────────────────────────────────────────────────────┘
-```
-
-- **Visual Design:**
-  - **Inverted Active Badge:** Solid white rounded pill with deep black monospace numbers (`01`, `02`, `03`).
-  - **Dashed Stepper Line:** 3.5 px thick horizontal track running across the display, visually showing the current layer position relative to the 3 layers.
-  - **Temporary Pop-Up Overlay:** When you switch layers while using System Metrics or Equalizer modes, the Layer Stepper smoothly pops over the screen for 2.6 seconds before reverting back.
-  - **Persistent Mode:** You can also lock the OLED screen permanently into `Layer Indicator` mode via the Display Config Drawer.
-- **Direct Serial Transmission:** Software pushes display updates via serial protocol commands (`OLED:CH:<1-3>` or `OLED:<text>`).
+For catalogue order, exact stream bytes, wiring and offline fallbacks, see [`docs/OLED_MODES.md`](./docs/OLED_MODES.md), [`docs/PROTOCOL.md`](./docs/PROTOCOL.md) and [`docs/HARDWARE.md`](./docs/HARDWARE.md).
 
 ---
 
-### 7. PC Shortcuts Vault
+### 7. Key assignments, PC macros and editor layers
+
+The MPAD3 quick tray offers **92 reviewed assignments**: 63 keyboard taps, 7 consumer-media keys, 4 absolute on-pad layer keys, an OLED NEXT playlist step, 16 PC-owned macro slots and a clear-slot action. It does **not** offer QMK momentary/toggle/fallthrough, reset, mouse, bare-modifier or arbitrary raw keycodes, which this firmware cannot execute. Create executable steps in Macro Studio before assigning M0–M15. A macro leaves its firmware slot empty; a physical `KEY_EVENT` executes it only while the Electron desktop app is open with USB key events enabled and the native executor available. Upload checks these prerequisites and requires explicit consent before changing a pad whose key-event setting was off. A verified flash **is not** evidence of Windows/physical-pad operation; see [`docs/FIRST_RUN_INVENTORY.md`](./docs/FIRST_RUN_INVENTORY.md).
+
+Sidebar, command palette and Digital Twin layer selectors choose an **editing preview** only. The pad's reported layer is displayed separately and remains unknown until it sends a `CHANNEL_CHANGE` event. Hold the physical knob or press an uploaded on-pad layer key to change the actual pad channel; the editor no longer sends an unacknowledged `OLED:CH` command and calls it a switch. **Lock deck** is a persisted *local editing guard*: it blocks assignments, PC macro edits and deck upload until **Unlock deck**, not physical keys or separate display/lighting settings. It is not a password or device security feature. OLED NEXT writes firmware action 13 and requires an SSD1306 detected by the target pad; it never needs a PC macro or native key injector.
+
+### 8. PC Shortcuts Vault
 
 A built-in curated vault of shortcuts categorized by application:
 - **Creative & Editing:** DaVinci Resolve, Adobe Premiere Pro, Blender 3D, Adobe Photoshop, Figma, Canva.
@@ -252,17 +218,17 @@ A built-in curated vault of shortcuts categorized by application:
 
 ---
 
-### 8. VIA Hardware Suite
+### 9. VIA Hardware Suite
 
-Complete compatibility for custom keyboard enthusiasts:
-- **Key Matrix Tester:** Live 3x3 interactive switch tester with actuation count and debounce state tracking.
-- **Lighting Studio:** Control RGB underglow brightness, saturation, hue, and animation effects.
-- **Macro Editor:** Multi-step macro engine supporting up to 16 macros (`M0` to `M15`).
-- **Keycode Remapper:** Direct raw hex keycode assignment compatible with QMK / VIA standards.
+A VIA-inspired editor for **custom MPAD3 firmware, not QMK**:
+- **Key Tester:** OS keyboard-event visualizer (fresh keydowns vs auto-repeat), not a physical-pad scan/USB latency or contact-chatter measurement.
+- **Lighting Studio:** Preview and save supported effects; physical LED data remains default-off pending the separate electrical gate.
+- **Macro Editor:** Up to 16 saved **PC-only** macros (`M0`–`M15`) with explicit event/native-shell requirements.
+- **Quick Assignments:** Curated keyboard, media, absolute-channel and on-pad OLED NEXT actions; arbitrary raw QMK/hex codes are not accepted.
 
 ---
 
-### 9. Safety Isolation (Long-Press Protection)
+### 10. Safety Isolation (Long-Press Protection)
 
 Destructive commands (such as stopping a recording, closing active apps, or resetting channels) can be flagged with **Destructive Safety**:
 - Normal taps are ignored.
@@ -271,7 +237,7 @@ Destructive commands (such as stopping a recording, closing active apps, or rese
 
 ---
 
-### 10. Embedded Localhost REST & Webhook Daemon
+### 11. Embedded Localhost REST & Webhook Daemon
 
 KADOWAZ Deck Studio runs an embedded HTTP server on port `38491` (`127.0.0.1:38491`):
 - **Status Endpoint (`GET /api/v1/status`):**
@@ -279,7 +245,7 @@ KADOWAZ Deck Studio runs an embedded HTTP server on port `38491` (`127.0.0.1:384
   { "status": "online", "app": "KADOWAZ Deck Studio", "port": 38491 }
   ```
 - **Webhook Input (`POST /api/v1/action`):**
-  Accepts external JSON automation payloads from Elgato Stream Deck plugins, Bitfocus Companion, Touch Portal, or cURL scripts to trigger profiles or layer switches remotely.
+  Accepts authenticated JSON automation payloads from local tools. The `layer` field selects an **editor preview** layer only; it does not remotely switch the pad or a profile.
 
 ---
 
@@ -290,140 +256,66 @@ KADOWAZ Deck Studio runs an embedded HTTP server on port `38491` (`127.0.0.1:384
 Here is the recommended component list to build your custom Micro Pad hardware:
 
 #### 1. RP2040-Zero
-*Keep this.* Your main controller. It handles the nine mechanical keys, rotary encoder quadrature decoding, WS2812B RGB effects, and three independent layers over USB CDC/HID serial communication.
+The Waveshare RP2040-Zero handles nine direct-wired keys, the EC11 encoder, nine planned addressable LED positions (strip not yet selected), four channels (layers), the required I²C OLED and composite HID + USB CDC.
 
 #### 2. MX-Style Through-Hole Mechanical Switches × 9
 Best for hand soldering because the electrical contact pins are large and easy to access. Solder the switches directly to the PCB or perfboard; hot-swap sockets are not strictly necessary.
 
-#### 3. WS2812B-Compatible 5050 Addressable RGB LEDs × 9
-Choose a strip or larger 5050 LED package rather than tiny 2020 LEDs. The larger solder pads are much easier to solder by hand, and each LED can still display its own independent color and animation effect.
-> **Assembly Tip:** If using LED strip sections, cut at the marked copper cut points and mount each LED directly beneath its corresponding key switch. Check that the strip's physical dimensions fit your key switch spacing.
+#### 3. Cuttable addressable LED strip — nine independent RGB pixels planned
+**No specific strip has been purchased/verified.** Its IC, independent-pixel cut points, voltage, colour order, waveform, maximum current, package fit and 5 V supply are unresolved. The Normand SK6812MINI-E Rev.02 is a *reference for existing PIO timing tests*, not a selected part or proof that an arbitrary cuttable strip will work. Normal firmware keeps GP10 LOW **after initialization**, does not start LED PIO/DMA, and refuses physical Preview/`LED_TEST` (`ERROR/LED_DISABLED`). The app still lets you edit and save lighting presets. A deliberate `-DMPAD_BENCH_LED_OUTPUT=ON` build allows output only for a current-limited bench check; it has **no automatic current cap**. A data gate cannot switch off strip power or guarantee darkness at boot/reset or after a pixel latched a previous frame. See the [hardware and power guide](./docs/HARDWARE.md) before connecting LED 5 V.
 
 #### 4. EC11 Rotary Encoder with Push Switch × 1
 Gives you stepped left rotation (CCW), right rotation (CW), and push button press.
 - **Rotary Macros:** Tap the knob to trigger the assigned layer's knob press action.
-- **Dedicated Layer Switching:** Press and hold the knob ($\ge 800\text{ ms}$) to cycle through the 3 layers (**Layer 1 → Layer 2 → Layer 3**).
+- **Default layer switching:** The physical knob hold defaults to `CHANNEL_NEXT` across layers **0–3**; firmware's default hold threshold is 500 ms and is preserved by deck upload. A PC macro is not a supported replacement for the pad-owned hold switch.
 
 #### 5. 0.91-inch I2C OLED Display Module (4-Pin, 128×32, SSD1306) × 1
 Compact monochrome display mounted horizontally on the top bezel above the key switches next to the rotary knob.
-- **Pinout (4 Pins):** `GND`, `VCC` (3.3 V / 5 V compatible), `SCL` (I2C Clock), `SDA` (I2C Data).
-- **Default I2C Address:** `0x3C`.
-- **Role:** Renders the minimalist Layer Stepper track with inverted active badge (`[01]`, `[02]`, `[03]`), real-time PC telemetry (CPU/GPU load & temp), 12-band stereo audio VU equalizer, and media track progress.
+- **Pinout (4 Pins):** GND → GND/header 2, VCC → **3V3/header 3**, SDA → **GP28/header 5**, SCL → **GP29/header 4**; use 3.3 V pull-ups, **never 5 V on the I²C lines**.
+- **I²C address:** `0x3C` (SSD1306 128×32; verify module controller/address before soldering).
+- **Role:** Baked animations and truthful offline screens; with a verified v3 device and responding module, runtime PC telemetry, custom labels and media pixels stream without writing display content to flash.
 - **Form Factor:** The slim 0.91-inch 128×32 aspect ratio fits the top chassis window perfectly without protruding over the mechanical keycaps.
 
 #### Supporting Components & Circuit Protection
 
 | Component | Quantity | Why & Circuit Rationale |
 | :--- | :---: | :--- |
-| **1N4148 diodes** | 9 | Key matrix isolation and anti-ghosting (*Required for 3x3 Matrix / Method B; 0 diodes needed if using Direct GPIO / Method A*) |
-| **SN74AHCT125 buffer** | 1 | Reliable 3.3 V to 5 V logic level translation for the WS2812B LED data line |
-| **330 Ω resistor** | 1 | LED data-line current and voltage ringing protection |
-| **470–1000 µF capacitor, 6.3 V or higher** | 1 | Smooths the LED 5 V power rail against inrush current draw |
-| **100 nF ceramic capacitor** | 1 | Local high-frequency bypass capacitor near logic ICs |
+| **Key-matrix diodes** | 0 | This firmware uses one GPIO per switch, not a 3×3 matrix. |
+| **74AHCT1G125 non-inverting buffer** | 1 planned | GP10 → A, Y → 330 Ω → LED0 DIN; `/OE` to GND; VCC on a **verified** 5 V LED rail with shared GND. Confirm strip level, package pinout and power-sequencing. |
+| **Buffer input pull-down / physical enable** | To design | Prevent floating `A` during MCU boot/reset; candidate ~10 kΩ to GND must be measured. A hardware LED-power switch is needed if guaranteed-dark/zero-idle is required. |
+| **330 Ω resistor** | 1 | Between buffer Y and first LED DIN. |
+| **10–47 µF capacitor, appropriately rated** | 1 | Across LED 5 V/GND at the first pixel; confirm supply and part ratings. |
+| **100 nF ceramic capacitor** | 1 | Across buffer VCC/GND close to the chip. |
 | **Perfboard or custom PCB** | 1 | Rigid structural base plate for switch and wiring mounting |
 | **USB-C data cable** | 1 | High-speed PC connection for USB CDC/HID communication |
 | **Hookup wire, solder and heat-shrink** | As needed | Assembly, wiring runs, and electrical insulation |
 
 ---
 
-### Firmware Options
+### Supported Firmware
 
-The project includes two firmware implementations depending on your development workflow:
-
-1. **Native RP2040 Pico SDK C Firmware (`firmware/`)** *(Recommended for Production)*:
-   - Built specifically for the **Waveshare RP2040-Zero**.
-   - **Hardware PIO + DMA WS2812 Driver:** Bit timing is executed by dedicated RP2040 hardware state machines; LED colors never glitch or drop frames during USB data transfer.
-   - **Standalone HID Keyboard & Media Dial:** Enumerates as a true USB Composite device (Keyboard + Consumer Control + CDC). Works seamlessly on Windows, macOS, and Linux without the desktop app running.
-   - **On-Chip Flash Persistence:** Full 1,708-byte layout saved in onboard flash; your bindings and lighting persist through reboots.
-   - **Gesture Engine:** Immediate hold triggering, double-tap detection, and rotational cancellation (turning the knob cancels hold to prevent accidental layer switches).
-   - **Comprehensive Documentation:**
-     - [`docs/HARDWARE.md`](./docs/HARDWARE.md) — Exact 23-pin header pinout, wiring schematics, and level-shifter guide.
-     - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — Modular architecture and state engine design.
-     - [`docs/PROTOCOL.md`](./docs/PROTOCOL.md) — Wire protocol and CRC-16 specification.
-
-2. **Arduino IDE Firmware (`firmware/kadowaz_macropad/`)**:
-   - Single-file Arduino `.ino` sketch for quick hobbyist editing and testing across RP2040, Arduino Pro Micro (ATmega32U4), or ESP32-S3 boards.
+The **supported firmware for the RP2040-Zero and v3 desktop app** is Pico SDK C (`firmware/`). It provides composite USB keyboard/consumer HID + CDC, default-gated LED data (with a separate bench-only PIO/DMA opt-in), the SSD1306 driver, four channels and CRC-checked A/B flash storage (format v3, 2,272-byte config). A historical Arduino `.ino` sketch is still in the tree, but it uses an **incompatible 3×3 matrix/pin map and text protocol**, not this wiring or v3 Save; do not flash it on the selected hardware. Use [`docs/HARDWARE.md`](./docs/HARDWARE.md) for a soldering plan and [`docs/PROTOCOL.md`](./docs/PROTOCOL.md) for wire bytes; do not flash a placeholder image.
 
 ---
 
-### Hardware Pinout & Wiring Configurations
+### Hardware Pinout & Wiring
 
-Depending on your chosen firmware, two wiring topologies are supported:
+This firmware uses **direct GPIO to GND** for each key (internal pull-up), not a switch matrix. With the USB-C connector pointing up and the component side facing you, check the pin numbers against the board silkscreen before soldering:
 
-#### Method A: Direct GPIO Wiring (Recommended for Native Pico SDK C Firmware)
-Connect each switch directly between its own dedicated GPIO pin and **GND**. The RP2040's internal pull-ups (`PULL_UP`) handle debouncing and sensing. **Zero diodes required!**
+| Function | RP2040-Zero GPIO | Main header pin |
+| :--- | :--- | ---: |
+| Switches K0–K6 | GP0–GP6 | 23–17 |
+| Switches K7, K8 | GP11, GP12 | 12, 11 |
+| Encoder A, B, switch | GP7, GP8, GP9 | 16, 15, 14 |
+| LED chain data | GP10 | 13 |
+| Required OLED I²C0 SDA, SCL | **GP28, GP29** | **5, 4** |
+| Required OLED VCC, GND | **3V3, GND** | **3, 2** |
 
-| Component | RP2040 Pin | Details |
-| :--- | :--- | :--- |
-| **Key Switches 0 to 6** | `GP0`, `GP1`, `GP2`, `GP3`, `GP4`, `GP5`, `GP6` | Direct switch connection to `GND` (internal pull-up) |
-| **Key Switches 7 & 8** | `GP11`, `GP12` | Direct switch connection to `GND` (internal pull-up) |
-| **WS2812B RGB Data** | `GP7` | PIO0 State Machine 0 via 74AHCT125 level shifter to 5V |
-| **Encoder Pin A (Phase A)** | `GP8` | Quadrature encoder input with glitch filter |
-| **Encoder Pin B (Phase B)** | `GP9` | Quadrature encoder input with glitch filter |
-| **Encoder Push Switch** | `GP10` | Tactile push switch to `GND` (active-low) |
-| **I2C OLED SDA** | `GP14` | I2C1 Data (Address `0x3C`, 4.7kΩ pull-up to 3.3V) |
-| **I2C OLED SCL** | `GP15` | I2C1 Clock (Address `0x3C`, 4.7kΩ pull-up to 3.3V) |
+Pull SDA/SCL up to **3.3 V**, not 5 V. GP4/GP5 are **keys**, not OLED pins; GP14/GP15 are unused spares, not the selected OLED bus. See [`docs/HARDWARE.md`](./docs/HARDWARE.md) for LED level shifting, power limits and connector orientation.
 
-*Full schematic, board layout, and bypass capacitor locations are detailed in [`docs/HARDWARE.md`](./docs/HARDWARE.md).*
+### USB CDC / MPAD3 Protocol
 
-#### Method B: 3×3 Matrix Wiring (Arduino IDE Sketch `kadowaz_macropad.ino`)
-Scans switches in a 3×3 grid using 3 row outputs and 3 column inputs. **Requires 9× 1N4148 diodes** (one in series with each switch, cathode facing row) to prevent ghosting during multi-key combos.
-
-| Component | Pin (Arduino Reference) | Details |
-| :--- | :--- | :--- |
-| **Matrix Rows (3)** | Pins `2`, `3`, `4` | Scanned as digital outputs (`LOW` active) |
-| **Matrix Columns (3)** | Pins `5`, `6`, `7` | Digital inputs with `INPUT_PULLUP` |
-| **Encoder Pin A** | Pin `8` | Phase A quadrature input |
-| **Encoder Pin B** | Pin `9` | Phase B quadrature input |
-| **Encoder Push Switch** | Pin `10` | Tactile push switch (`INPUT_PULLUP`) |
-| **I2C OLED SDA** | Pin `4` (RP2040 GP4) | I2C Data (Address `0x3C`) |
-| **I2C OLED SCL** | Pin `5` (RP2040 GP5) | I2C Clock (Address `0x3C`) |
-| **WS2812B RGB Data** | Pin `1` (RP2040 GP1) | Serial NeoPixel data rail |
-
----
-
-### Serial Protocol Specification (115200 Baud)
-
-| Direction | Command Message | Meaning |
-| :--- | :--- | :--- |
-| **MCU → PC** | `KEY:<0-8>:DOWN` | Switch index (0 to 8) pressed |
-| **MCU → PC** | `KEY:<0-8>:UP` | Switch index (0 to 8) released |
-| **MCU → PC** | `ENC:CW` | Rotary knob rotated clockwise 1 detent |
-| **MCU → PC** | `ENC:CCW` | Rotary knob rotated counter-clockwise 1 detent |
-| **MCU → PC** | `ENC:DOWN` / `ENC:UP` | Rotary knob push button pressed / released |
-| **MCU → PC** | `LAYER:<1-3>` / `CHANNEL:<1-3>` | Emitted when rotary knob hold ($\ge 800\text{ ms}$) switches the layer on the hardware |
-| **MCU → PC** | `ENC:HOLD_SWITCH` | Confirmation that hardware knob hold triggered a layer switch |
-| **PC → MCU** | `OLED:LAYER:<1-3>` / `OLED:CH:<1-3>` | Renders the inverted active layer badge (`[01]`, `[02]`, `[03]`) and stepper track |
-| **PC → MCU** | `OLED:<text>` | Updates text displayed on the OLED screen |
-
-#### OLED Layer Stepper Firmware Implementation (`firmware/kadowaz_macropad/kadowaz_macropad.ino`)
-
-The firmware implements high-speed direct hardware rendering using `Adafruit_SSD1306` and `Adafruit_GFX`:
-
-```cpp
-void drawChannelScreen(uint8_t channel) {
-  display.clearDisplay();
-  const int lineY = 14;   // Center vertical baseline
-  const int lineH = 3;    // Dash thickness
-  const int badgeY = 8;
-  const int badgeH = 16;
-  const int badgeW = 28;
-  const int badgeR = 3;   // Rounded corner radius
-
-  if (channel == 2) {
-    // Layer 02 Active: Dash on left, inverted badge in center, two dashes on right
-    display.fillRect(24, lineY, 20, lineH, SSD1306_WHITE);
-    display.fillRoundRect(50, badgeY, badgeW, badgeH, badgeR, SSD1306_WHITE);
-    display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
-    display.setTextSize(1);
-    display.setCursor(58, badgeY + 4);
-    display.print(F("02"));
-    display.fillRect(84, lineY, 18, lineH, SSD1306_WHITE);
-    display.fillRect(108, lineY, 14, lineH, SSD1306_WHITE);
-  }
-  display.display();
-}
-```
+The supported firmware sends **binary MPAD3 v3 frames** for key/encoder events, configuration and live OLED canvases; `PING` + `GET_INFO` verify the protocol, config-v3 size (2,272 bytes), flash and actual SSD1306 detection. Full config transfers use indexed CRC-checked chunks; a successful host Save requires final `SET_ACK`, flash `COMMIT_ACK` and matching readback. `GET_OLED_STATE`/`OLED_MODE_EVENT` sync the active physical screen; `SET_OLED_MODE` confirms UI selection. Two `OLED_FRAME` chunks carry a full 512-byte runtime canvas with a shared CRC-32 and final ACK, never writing flash. The pad expires it after 1.2 s and shows its local fallback. `OLED:NEXT`, `OLED:MODE:<0..11>` and `OLED:CH:<0..3>` text diagnostics still share CDC, but the app prefers the confirmed binary mode command. `OLED:AUTO` / `OLED:PL` are RAM-only diagnostics; Display Save persists them. `OLED:<text>` is **not implemented** as an ASCII command; the app instead sends rendered pixels containing custom labels. See [`docs/PROTOCOL.md`](./docs/PROTOCOL.md) and [`docs/OLED_MODES.md`](./docs/OLED_MODES.md).
 
 ---
 
@@ -449,8 +341,8 @@ desktop-app/
 │   ├── Makefile.host           # Host-runner test makefile for C unit tests
 │   ├── include/                # Firmware headers (board.h, gesture.h, leds.h, magic.h, etc.)
 │   ├── src/                    # Firmware C sources (core, drivers, lighting, storage, usb)
-│   ├── tests/                  # 946 C firmware unit test assertions
-│   └── kadowaz_macropad/       # Arduino IDE compatibility sketch (.ino)
+│   ├── tests/                  # Gated + bench host-compiled firmware tests (no actual board)
+│   └── kadowaz_macropad/       # Historical incompatible matrix/Arduino sketch (do not flash here)
 │
 ├── host/
 │   ├── protocol/
@@ -458,7 +350,7 @@ desktop-app/
 │   │   ├── mpad3-protocol.mjs  # Browser & Node JavaScript framing & CRC-16 codec
 │   │   └── generated/          # Generated TypeScript definitions
 │   └── tests/
-│       └── run.mjs             # 113 automated wire protocol & struct tests
+│       └── run.mjs             # 127 automated wire protocol & struct checks
 │
 ├── scripts/
 │   ├── setup.sh                # Automated toolchain installer and firmware builder
@@ -500,7 +392,7 @@ desktop-app/
 │   │
 │   ├── utils/
 │   │   ├── channelLayers.ts        # Layer normalization & layer isolation helpers
-│   │   ├── hardwareBridge.ts       # WebHID & WebSerial communication manager
+│   │   ├── hardwareBridge.ts       # WebSerial CDC/MPAD3 bridge; HID goes to OS
 │   │   └── soundEffects.ts         # Audio synthesizers for detent clicks and key presses
 │   │
 │   ├── App.tsx                     # Main application orchestrator & state manager
@@ -548,11 +440,11 @@ npm run build
 
 ### 5. Firmware Build & Flashing (RP2040-Zero)
 
-You can choose either the **Native Pico SDK C Firmware** (best performance, standalone HID, glitch-free LEDs) or the **Arduino IDE Sketch** (easiest for quick customization).
+Use **only the Pico SDK C firmware** for this wiring and desktop protocol. The old Arduino sketch is incompatible. LED output is disabled in normal builds; do not connect the strip merely because a UF2 was produced.
 
 ---
 
-#### 🌟 Option A: Native Pico SDK C Firmware (Recommended)
+#### Pico SDK C Firmware (supported path)
 
 Building and flashing the native firmware is a simple step-by-step process:
 
@@ -564,7 +456,7 @@ You need `cmake` and the ARM cross-compiler (`gcc-arm-none-eabi`) to build the `
 - **Linux (Debian / Ubuntu / WSL):**
   Run the automated script included in this repository:
   ```bash
-  ./scripts/setup.sh
+  bash scripts/setup.sh
   ```
 - **macOS:**
   ```bash
@@ -599,29 +491,15 @@ You don't need any special flashing software or programmers! The RP2040 has a bu
 1. Open File Explorer and navigate to `firmware/build/mpad3.uf2`.
 2. **Drag and drop** (or copy & paste) `mpad3.uf2` directly onto the **`RPI-RP2`** drive.
 3. The `RPI-RP2` drive will automatically disconnect and vanish as soon as the file copies.
-4. **Done!** The RP2040-Zero reboots instantly into KADOWAZ Macropad mode, turns on the OLED display, and lights up the RGB LEDs.
+4. **Verify before use:** A BOOTSEL copy is not evidence that a firmware build boots. With LED 5 V disconnected, check re-enumeration, MPAD3 v3 probing, keys, SSD1306 at 0x3C and **absence of `CAP_LED_OUTPUT`** in a normal build. Only test LED output later on a current-limited bench after selecting the strip and supply. Source-level tests do not replace this bench check.
 
 > 💡 **Troubleshooting Tip:** If the `RPI-RP2` drive does not appear, verify that your USB-C cable is a **data sync cable**. Some cheap USB cables only have power wires and cannot transmit data.
 
 ---
 
-#### ⚡ Option B: Arduino IDE Alternative (Beginner Friendly)
+#### Arduino sketches are not a supported flashing path
 
-If you prefer using the Arduino IDE without compiling from the command line:
-
-1. Download and open [Arduino IDE](https://www.arduino.cc/en/software).
-2. Go to **File → Preferences** and add this URL to **Additional Boards Manager URLs**:
-   ```
-   https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-   ```
-3. Open **Tools → Board → Boards Manager**, search for **`rp2040`**, and install **Raspberry Pi Pico/RP2040** by Earle F. Philhower.
-4. Install the required libraries in **Sketch → Include Library → Manage Libraries...**:
-   - `Adafruit SSD1306`
-   - `Adafruit GFX Library`
-   - `Adafruit NeoPixel`
-5. Open [`firmware/kadowaz_macropad/kadowaz_macropad.ino`](./firmware/kadowaz_macropad/kadowaz_macropad.ino).
-6. Under **Tools → Board**, select **Waveshare RP2040-Zero** (or *Generic RP2040*).
-7. Connect your board via USB, choose the active COM port under **Tools → Port**, and click **Upload** (the `➔` arrow button).
+The historical `firmware/kadowaz_macropad/kadowaz_macropad.ino` uses a different key matrix, pin map and legacy text serial commands. It is **not compatible** with the selected direct-wired RP2040-Zero + GP28/GP29 OLED or the v3 desktop Save path. Use the Pico SDK C build above; do not follow the old Arduino wiring instructions for this pad.
 
 ### 6. Testing & Verification
 

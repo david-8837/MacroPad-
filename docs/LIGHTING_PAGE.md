@@ -1,7 +1,20 @@
-# The Lighting page — what it is, what the hardware can do
+# Lighting page — original audit and current safety state
 
-An audit of `src/components/via/ViaLightingPanel.tsx` (171 lines, 7.1 KB), the
-`04 LIGHTING` nav tab, and the gap between the two. No files were changed.
+> **Current state (protocol v3):** The strip and 5 V LED budget are not chosen.
+> Physical LED data is gated OFF in the default firmware, while the screen
+> preview and saving settings still work. `Preview on pad` needs the explicit
+> bench build's `CAP_LED_OUTPUT`; it is disabled otherwise. `LED_TEST` is
+> bench-only, requires an ACK and auto-expires after 300 ms. The misleading
+> `Clear pad LEDs` button was removed. The cited Normand SK6812MINI-E is a
+> timing **reference**, not a purchased part or USB-current approval.
+> See [`HARDWARE.md`](./HARDWARE.md#led-power--this-is-the-one-to-get-right).
+>
+> Sections 1–6 below record the **historical pre-rebuild audit**, not the
+> present behavior. "Resolved" records the later app transport work.
+
+An audit of the former `src/components/via/ViaLightingPanel.tsx` (171 lines,
+7.1 KB), the `04 LIGHTING` tab, and the gap between the two. The original audit
+made no code changes.
 
 ---
 
@@ -41,10 +54,16 @@ Three further problems in the file:
 
 This is the part that is real, tested, and currently unreachable from the app.
 
-**Electrical.** 9 × SK6812MINI-E, one per key, single-wire chain `GP10 → 330R →
-LED0 → … → LED8`, GRB order, driven by a PIO state machine fed by DMA
-(`firmware/src/lighting/ws2812minie.pio`, `leds.c`). Full white across nine LEDs is
-~540 mA, which is why the factory default brightness is **90/255**, not 255.
+**Electrical (reference design, not selected strip).** Intended 5 V chain:
+nine *independently addressable* RGB pixels, one per key,
+`GP10 → 74AHCT1G125 A/Y (non-inverting, /OE to GND) → 330 Ω → LED0 DIN →
+LED0 DOUT → … → LED8`. The **bench-only** PIO/DMA path
+(`firmware/src/lighting/ws2812minie.pio`, `leds.c`) packs 24 MSB-first GRB
+bits and simulates the **reference** Normand SK6812MINI-E Rev.02 timing. The
+purchased cuttable strip, 5 V source and current budget are still unknown.
+**Default firmware does not clock LED data.** The 540 mA full-white figure
+assumes 20 mA per colour across nine pixels and is only an illustration, not
+an approved current limit. See `docs/HARDWARE.md` before powering a chain.
 
 **Eight modes** (`firmware/include/actions.h:166`), selected per channel:
 
@@ -187,20 +206,22 @@ document did not anticipate: **the transport problem had two halves.**
 2. **The app could not write lighting.** `src/utils/mpad3Link.ts` now speaks the
    frame protocol over the serial port the app already opens, using
    `host/protocol/mpad3-protocol.mjs` (the module the Node suite verifies against
-   the compiled C) rather than a copy of the wire format. `PREVIEW_LIGHTING` while
-   adjusting, `SET_LIGHTING` on save with the ACK status checked, `GET_LIGHTING` to
-   read the pad back, `LED_TEST` to clear a wiring pattern. A pad that does not
-   answer a PING is reported as `NO PROTOCOL DEVICE` and no write claims to have
-   happened.
+   the compiled C) rather than a copy of the wire format. Bench-only
+   `PREVIEW_LIGHTING` is sent only from an explicit Preview click while
+   `CAP_LED_OUTPUT` is present; `SET_LIGHTING` on Save checks ACK, commits and
+   verifies readback even when output is gated. `GET_LIGHTING` reads it back.
+   Raw `LED_TEST` is no longer a UI "clear" action: the transport waits for ACK
+   and the firmware bounds it to 300 ms. A pad that does not answer a compatible
+   PING/INFO is `NO PROTOCOL DEVICE` and no write claims to have happened.
 3. **The engine is shared.** `src/lighting/engine.ts` is a port of
    `led_compute_frame` / `hsv_to_rgb` / `led_gamma_scale` and the gamma table;
    `tests/ledEngine.test.cjs` builds the C for the host, dumps 21 scenarios from
    `firmware/tests/dump_leds.c` and asserts the TypeScript matches all 207 pixels.
    It caught a real 2/255 error in the port (integer vs float sextant division in
    `hsv_to_rgb`).
-4. **The deck twin is lit by it.** Each keycap carries a flat 3 px bar in the
-   colour the engine computes for the current channel, so the virtual pad shows the
-   animation the real one will.
+4. **The deck twin uses the engine.** Each keycap carries a flat 3 px bar in the
+   colour computed for the selected channel, but this is a **simulation**, not a
+   claim that the unselected physical strip is illuminated.
 
 What the page shows now: the eight firmware modes (nothing invented, nothing
 missing), brightness and speed on the device's own scales, base RGB with numeric
@@ -209,10 +230,11 @@ can poke to see Reactive flare. The lie is gone: there is no `alert()`, and the
 result line distinguishes "editor only" from "the pad acknowledged this write".
 
 Closed since: **the deck has four layers and the device now has four channels.**
-`CFG_CHANNEL_COUNT` went 3 → 4, so `cfg_blob_t` is 2268 bytes and
-`CONFIG_FORMAT_VERSION` is 2 (a version-1 config is rejected by length and
-re-seeded, never read with the wrong channel stride). One lighting config per
-layer, no clamping, and `hsv_to_rgb` spreads the tint across
+`CFG_CHANNEL_COUNT` went 3 → 4 in v2 (2268 bytes); v3 adds OLED settings
+(2272 bytes). A CRC-valid v2 A/B slot is now migrated into the other flash
+sector without dropping bindings or lighting; a version-1 config is still
+rejected by length and re-seeded rather than read with the wrong channel stride.
+One lighting config per layer, no clamping, and `hsv_to_rgb` spreads the tint across
 `CFG_CHANNEL_COUNT` rather than a literal 3 — the LED parity test caught that
 literal when the C changed and the TypeScript did not.
 

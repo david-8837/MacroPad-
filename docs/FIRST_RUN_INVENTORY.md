@@ -43,7 +43,7 @@ tag, because at that point the layer is yours.
 
 **So 18 of the 36 key slots are pre-assigned.** Worth knowing: the *pad itself* ships with **all nine key slots empty** (`firmware/src/storage/config_defaults.c`). The app therefore arrives knowing more bindings than the device does — if you never open the app, nothing is assigned on the hardware. Layer 0 is tagged as an example for exactly this reason.
 
-Assignment is real now: a key you set from the VIA Quick Keycode Tray or the key
+Assignment is real now: a key you set from MPAD3 Quick Assignments or the key
 drawer is written into `kadowaz_deck` and survives a reload. (It used to only flip
 the deck's lock flag and write a log line — see the note at the end of this file.)
 
@@ -52,11 +52,11 @@ the deck's lock flag and write a log line — see the note at the end of this fi
 | Layer | Turn left / right | Press |
 | --- | --- | --- |
 | 0 | Scrub backward / forward (`Left`/`Right`) | Play / Pause (`Space`) |
-| 1 | Volume down / up (audio session, ±5 %) | Mute |
+| 1 | Scrub backward / forward (`Left`/`Right`) | Play / Pause |
 | 2 | Zoom out / in (`Ctrl+Minus` / `Ctrl+Equal`) | Reset zoom (`Ctrl+0`) |
-| 3 | Previous / next macro (`Ctrl+Shift+Tab` / `Ctrl+Tab`) | Run macro (`Enter`) |
+| 3 | Previous / next tab shortcuts (`Ctrl+Shift+Tab` / `Ctrl+Tab`) | Enter; these defaults do **not** run M0–M15 |
 
-Knob long-press switches layer, hold threshold 800 ms, sensitivity 5–7 per layer, exponential acceleration.
+Physical knob long-press switches the pad's channel. Clicking a layer or simulating a hold in the editor only changes the preview; until the pad sends a channel-change event its active channel is **unknown** to the app. Hold threshold is 800 ms in the app deck (pad timing is read independently from its config), sensitivity 5–7 per layer, exponential acceleration.
 
 ---
 
@@ -68,9 +68,9 @@ Blender 24 · DaVinci Resolve 20 · Figma 18 · Canva 18 · Autodesk Fusion 16 �
 
 The page is read-only since this task: each card copies its combo, nothing is assigned from here.
 
-### VIA Quick Keycode Tray — 118 codes
+### MPAD3 Quick Assignments — 92 reviewed routes
 
-67 basic · 12 media · 16 macro (`M0`–`M15`) · 12 layer · 11 special, plus the custom raw-keycode entry.
+63 basic tap keys · 7 consumer-media keys · 16 PC macro slots (`M0`–`M15`) · 4 absolute on-pad channel actions (`CH(0)`–`CH(3)`) · 1 on-pad OLED NEXT playlist step · 1 clear-slot action. This firmware is **not QMK**: unsupported MO/TG/TO/TT/DF, reset, EEPROM clear, mouse, mod-tap, transparent, bare modifiers and arbitrary raw-code entry are not offered. An undefined/unsupported M-slot is disabled; defined M-slots require this **desktop app**, saved macro steps and USB serial key events, and upload an empty firmware action so the PC can run them on a physical `KEY_EVENT`. If events were disabled in the pad config, upload refuses unless the user explicitly enables them in the upload bottom sheet. A browser preview cannot execute PC-only actions. OLED NEXT uploads firmware type 13 and is refused before writing if the pad reports no responding SSD1306. A locally locked deck cannot be edited or uploaded until the sidebar Unlock action.
 
 ### Macro presets — 49 sequences in 6 categories
 

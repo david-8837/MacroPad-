@@ -46,17 +46,17 @@ export interface DrawerKeyDef {
 // 15u ALPHANUMERIC CLUSTER
 export const DRAWER_MAIN_ROW_0: DrawerKeyDef[] = [
   { code: 'Escape', label: 'Esc', width: 1 },
-  { code: 'spacer-0.5', label: '', width: 0.5 },
+  { code: 'spacer-0.5-a', label: '', width: 0.5 },
   { code: 'F1', label: 'F1', width: 1 },
   { code: 'F2', label: 'F2', width: 1 },
   { code: 'F3', label: 'F3', width: 1 },
   { code: 'F4', label: 'F4', width: 1 },
-  { code: 'spacer-0.5', label: '', width: 0.5 },
+  { code: 'spacer-0.5-b', label: '', width: 0.5 },
   { code: 'F5', label: 'F5', width: 1 },
   { code: 'F6', label: 'F6', width: 1 },
   { code: 'F7', label: 'F7', width: 1 },
   { code: 'F8', label: 'F8', width: 1 },
-  { code: 'spacer-0.5', label: '', width: 0.5 },
+  { code: 'spacer-0.5-c', label: '', width: 0.5 },
   { code: 'F9', label: 'F9', width: 1 },
   { code: 'F10', label: 'F10', width: 1 },
   { code: 'F11', label: 'F11', width: 1 },
@@ -585,7 +585,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden animate-in slide-in-from-right duration-200">
       
       {/* DRAWER TOP BAR: Switch Navigator & Direct Switch Selector */}
-      <div className="px-4 py-2.5 border-b border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between gap-3">
+      <div className="px-4 py-2.5 border-b border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between gap-3 max-[1463px]:flex-wrap">
         <div className="flex items-center gap-2.5">
           {/* Key Index Badge */}
           <div
@@ -611,7 +611,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         </div>
 
         {/* Quick Switch Switcher Pills (1 to 9) */}
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {onSelectKeyIndex && (
             <div className="hidden sm:flex items-center gap-0.5 bg-[#EDECE8] p-0.5 border border-[#E3E2DE]">
               {Array.from({ length: totalKeys }).map((_, idx) => (
@@ -673,8 +673,8 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         </div>
       </div>
 
-      {/* FEATURE NAVIGATION TABS */}
-      <div className="flex px-3 border-b border-[#E3E2DE] bg-[#FFFFFF] text-xs font-mono shrink-0">
+      {/* FEATURE NAVIGATION TABS: scroll rather than clipping at compact widths. */}
+      <div className="flex overflow-x-auto px-3 border-b border-[#E3E2DE] bg-[#FFFFFF] text-xs font-mono shrink-0 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
         <button
           onClick={() => { setActiveTab('keyboard'); setIsRecording(false); }}
           className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
@@ -908,9 +908,10 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               </div>
             </div>
 
-            {/* VISUAL KEYBOARD CONTAINER (Zero horizontal scrolling, perfect fit) */}
-            <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE] overflow-x-hidden select-none">
-              <div className="flex gap-2 justify-center">
+            {/* The fixed-width keys stay centered when they fit; on a narrow
+                inspector, scroll to the navigation/numpad instead of clipping them. */}
+            <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE] overflow-x-auto select-none">
+              <div className="flex w-max mx-auto gap-2">
                 
                 {/* ALPHANUMERIC 15u */}
                 <div className="space-y-[1.5px] shrink-0">

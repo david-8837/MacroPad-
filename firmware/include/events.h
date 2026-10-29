@@ -26,7 +26,7 @@ typedef struct {
     uint8_t index;   /* key 0..8, 0 for the knob */
     uint8_t event;   /* EV_* */
     uint8_t channel; /* active channel when it happened */
-    int16_t value;   /* rotation detents, else 0 */
+    int16_t value;   /* rotation detents; key HOLD_RELEASE: held ms (capped at 32767) */
     uint16_t action; /* action_type_t that fired, 0 if none */
 } key_event_t; /* 8 bytes, matches KEY_EVENT_SIZE */
 

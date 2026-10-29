@@ -61,10 +61,12 @@ const ALIASES = {
   DEL: 'DELETE', DELETE: 'DELETE', INS: 'INSERT',
   PGUP: 'PAGEUP', PGDN: 'PAGEDOWN', PAGEUP: 'PAGEUP', PAGEDOWN: 'PAGEDOWN',
   ARROWLEFT: 'LEFT', ARROWRIGHT: 'RIGHT', ARROWUP: 'UP', ARROWDOWN: 'DOWN',
+  LEFTARROW: 'LEFT', RIGHTARROW: 'RIGHT', UPARROW: 'UP', DOWNARROW: 'DOWN',
   LEFT: 'LEFT', RIGHT: 'RIGHT', UP: 'UP', DOWN: 'DOWN',
   TAB: 'TAB', HOME: 'HOME', END: 'END',
   VOLUMEUP: 'VOLUME_UP', VOLUMEDOWN: 'VOLUME_DOWN', VOLUMEMUTE: 'VOLUME_MUTE', MUTE: 'VOLUME_MUTE',
   MEDIANEXTTRACK: 'MEDIA_NEXT', MEDIAPREVIOUSTRACK: 'MEDIA_PREV', MEDIAPLAYPAUSE: 'MEDIA_PLAY_PAUSE',
+  MEDIASTOP: 'MEDIA_STOP',
   PLAYPAUSE: 'MEDIA_PLAY_PAUSE', NEXT: 'MEDIA_NEXT', PREV: 'MEDIA_PREV', PREVIOUS: 'MEDIA_PREV',
   MEDIATRACKNEXT: 'MEDIA_NEXT', MEDIATRACKPREVIOUS: 'MEDIA_PREV', 'NUMPAD.': 'DECIMAL',
   EQUAL: 'OEM_PLUS', MINUS: 'OEM_MINUS', DIGIT0: '0',
@@ -151,6 +153,15 @@ function buildChordSequence(keyNames) {
   return { sequence };
 }
 
+/* Native parity with the pad's curated consumer-HID tray. A code with no
+ * mapping cannot be offered as an executable desktop-preview action. */
+const MEDIA_ACTION_KEYS = Object.freeze({
+  play_pause: ['MediaPlayPause'], stop: ['MediaStop'],
+  next: ['MediaNextTrack'], prev: ['MediaPreviousTrack'],
+  volume_up: ['VolumeUp'], volume_down: ['VolumeDown'], mute: ['VolumeMute'],
+});
+function mediaKeys(action) { return MEDIA_ACTION_KEYS[action] || null; }
+
 // repeat > 1 sends the chord several times inside ONE PowerShell process
 // (spawning one process per detent made volume steps take seconds).
 async function sendChord(keyNames, repeat = 1) {
@@ -214,15 +225,7 @@ async function executeAction(action) {
   }
 
   if (category === 'media') {
-    const map = {
-      play_pause: ['MediaPlayPause'],
-      next: ['MediaNextTrack'],
-      prev: ['MediaPreviousTrack'],
-      volume_up: ['VolumeUp'],
-      volume_down: ['VolumeDown'],
-      mute: ['VolumeMute'],
-    };
-    const keys = map[payload.mediaAction];
+    const keys = mediaKeys(payload.mediaAction);
     if (!keys) return { success: false, error: `Unknown media action: ${payload.mediaAction}` };
     return sendChord(keys);
   }
@@ -277,6 +280,15 @@ async function executeAction(action) {
     return { success: false, error: 'No audio delta or mute flag' };
   }
 
+  if (category === 'text') {
+    if (typeof payload.text !== 'string' || !payload.text.length) {
+      return { success: false, error: 'No text to type' };
+    }
+    // A macro text step is never a launch request, even if the text ends in
+    // .exe/.bat. Program launches must be explicit script/app_launch actions.
+    return typeText(payload.text);
+  }
+
   if (category === 'script') {
     if (typeof payload.command === 'string' && payload.command.startsWith('macro:')) {
       return { success: false, error: 'Macro expansion must be handled in the renderer' };
@@ -299,4 +311,4 @@ async function executeAction(action) {
   return { success: false, error: `Unsupported category: ${category}` };
 }
 
-module.exports = { executeAction, sendChord, typeText, resolveVk, buildChordSequence };
+module.exports = { executeAction, sendChord, typeText, resolveVk, buildChordSequence, mediaKeys };

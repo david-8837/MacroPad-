@@ -27,8 +27,9 @@ import { dirname, join } from 'node:path';
 import {
   ACTION_TYPE, CAP, CHANNEL_COUNT, CHUNK_COUNT, CHUNK_SIZE, CMD, CONFIG_FORMAT_VERSION,
   CONFIG_MAGIC_U32, ConfigAssembler, FRAME_OVERHEAD, HID, KEY_COUNT, LED_COUNT,
-  LED_MODE, MAGIC_U32, MEDIA, MTU, FrameDecoder, OFFSETS, PROTOCOL_VERSION,
-  SIZES, STATUS, crc16, crc32, decodeConfig, decodeInfo, decodeKeyEvent,
+  LED_MODE, LED_TEST_HOLD_MS, MAGIC_U32, MEDIA, MTU, FrameDecoder, OFFSETS, PROTOCOL_VERSION,
+  SIZES, STATUS, OLED_MODE_COUNT, OLED_STREAM, crc16, crc32, decodeConfig, decodeInfo, decodeKeyEvent,
+  decodeOledFrameAck, decodeOledFrameChunk, decodeOledState, encodeOledFrameChunks,
   defaultConfig, encodeChunk, encodeConfig, encodeConfigFrames, encodeFrame, encodeLedTest,
   encodeLighting, decodeLighting, emptyAction,
 } from '../protocol/mpad3-protocol.mjs';
@@ -97,6 +98,8 @@ const C_STRUCT_FOR = {
   config: 'cfg_blob_t',
   sectorHeader: 'sector_header_t',
   keyEvent: 'key_event_t',
+  oledFrameChunk: 'oled_stream_chunk_t',
+  oledState: 'oled_state_t',
 };
 
 for (const [jsName, cName] of Object.entries(C_STRUCT_FOR)) {
@@ -150,9 +153,79 @@ check('channels', () => eq(CHANNEL_COUNT, layout.constants.channels));
 check('keys', () => eq(KEY_COUNT, layout.constants.keys));
 check('leds', () => eq(LED_COUNT, layout.constants.leds));
 check('mtu', () => eq(MTU, layout.constants.mtu));
+check('OLED canvas, catalogue, header, chunks, expiry and capability', () => {
+  eq(OLED_MODE_COUNT, layout.constants.oledModes);
+  eq(OLED_STREAM.FRAME_BYTES, layout.constants.oledFrameBytes);
+  eq(OLED_STREAM.HEADER_BYTES, layout.constants.oledStreamHeaderBytes);
+  eq(OLED_STREAM.CHUNK_BYTES, layout.constants.oledStreamChunkBytes);
+  eq(OLED_STREAM.TTL_MS, layout.constants.oledStreamTtlMs);
+  eq(OLED_STREAM.STAGING_TIMEOUT_MS, layout.constants.oledStageTimeoutMs);
+  eq(CAP.OLED_STREAM, layout.constants.capOledStream);
+  eq(CMD.OLED_FRAME, layout.constants.cmdOledFrame);
+  eq(CMD.OLED_FRAME_ACK, layout.constants.cmdOledFrameAck);
+  eq(CMD.OLED_MODE_EVENT, layout.constants.cmdOledModeEvent);
+});
 check('frame overhead', () => eq(FRAME_OVERHEAD, layout.constants.frameOverhead));
 check('every declared offset was checked', () => {
   if (offsetChecks < 40) throw new Error(`only ${offsetChecks} offsets compared; expected 40+`);
+});
+
+/* The generated .d.ts/docs come from protocol.json, not from this runtime JS.
+ * Check its source against the C-checked constants so generated types cannot
+ * quietly keep saying three channels while the pad has four. */
+const spec = JSON.parse(readFileSync(join(repoRoot, 'host', 'protocol', 'protocol.json'), 'utf8'));
+suite('protocol.json describes the running firmware and host codec');
+check('spec config format version', () => eq(spec.meta.configFormatVersion, CONFIG_FORMAT_VERSION));
+check('spec protocol version', () => eq(spec.meta.protocolVersion, PROTOCOL_VERSION));
+check('LED output gate, status, capability and timer agree with compiled C', () => {
+  eq(layout.constants.ledOutputDefault, 0, 'default build must be gated: ');
+  eq(PROTOCOL_VERSION, 3);
+  eq(CAP.LED_OUTPUT, layout.constants.capLedOutput);
+  eq(STATUS.LED_DISABLED, layout.constants.statusLedDisabled);
+  eq(LED_TEST_HOLD_MS, layout.constants.ledTestHoldMs);
+  eq(spec.meta.ledTestHoldMs, LED_TEST_HOLD_MS);
+  eq(spec.enums.capabilities[`0x${CAP.LED_OUTPUT.toString(16).toUpperCase()}`], 'LED_OUTPUT');
+  eq(spec.enums.status[String(STATUS.LED_DISABLED)], 'LED_DISABLED');
+  for (const cmd of ['PREVIEW_LIGHTING', 'LED_TEST']) {
+    const entry = Object.values(spec.commands).find((c) => c.name === cmd);
+    if (!entry?.note?.includes('CAP_LED_OUTPUT') || !entry.note.includes('LED_DISABLED')) {
+      throw new Error(`${cmd} must describe the gated ERROR`);
+    }
+  }
+});
+check('spec channel count', () => eq(spec.meta.channels, CHANNEL_COUNT));
+check('spec config byte count', () => eq(spec.structs.config.size, SIZES.config));
+check('spec config CRC offset', () => {
+  eq(spec.structs.config.crc.coveredBytes, OFFSETS.config.crc32);
+  eq(spec.structs.config.fields.find((f) => f.name === 'crc32').offset, OFFSETS.config.crc32);
+});
+check('spec tuple length for config channels', () =>
+  eq(spec.structs.config.fields.find((f) => f.name === 'channels').type, `channel[${CHANNEL_COUNT}]`));
+check('OLED globals in generated spec match the C-checked host codec', () => {
+  eq(spec.structs.global.size, SIZES.global);
+  for (const name of ['oledAutoCycleS', 'oledPlaylist', 'oledBootMode', 'oledContrast', 'oledInverted', 'oledPad']) {
+    eq(spec.structs.global.fields.find((f) => f.name === name)?.offset, OFFSETS.global[name], name + ': ');
+  }
+});
+check('volatile OLED wire spec matches compiled C structs and JS codec', () => {
+  eq(spec.meta.oledModes, OLED_MODE_COUNT);
+  for (const [name, val] of [
+    ['oledFrameBytes', OLED_STREAM.FRAME_BYTES], ['oledStreamChunkBytes', OLED_STREAM.CHUNK_BYTES],
+    ['oledStreamHeaderBytes', OLED_STREAM.HEADER_BYTES], ['oledStreamTtlMs', OLED_STREAM.TTL_MS],
+    ['oledStageTimeoutMs', OLED_STREAM.STAGING_TIMEOUT_MS],
+  ]) eq(spec.meta[name], val, name + ': ');
+  eq(Number.parseInt(Object.entries(spec.enums.capabilities).find(([, v]) => v === 'OLED_STREAM')?.[0], 16), CAP.OLED_STREAM);
+  for (const [name, code] of Object.entries(CMD)) {
+    eq(spec.commands[`0x${code.toString(16).padStart(2, '0').toUpperCase()}`]?.name, name, `${name}: `);
+  }
+  for (const struct of ['oledFrameChunk', 'oledState']) {
+    eq(spec.structs[struct].size, SIZES[struct]);
+    eq(spec.payloads[struct].size, SIZES[struct]);
+    for (const f of spec.structs[struct].fields) {
+      eq(f.offset, OFFSETS[struct][f.name], `${struct}.${f.name}: `);
+      eq(spec.payloads[struct].fields.find((p) => p.name === f.name)?.offset, f.offset);
+    }
+  }
 });
 
 /* ── 2. CRC against published vectors ────────────────────────────────────── */
@@ -325,7 +398,63 @@ check('a frame split across an arbitrary chunk boundary decodes', () => {
   }
 });
 
-/* ── 4. config codec ─────────────────────────────────────────────────────── */
+/* ── 4. volatile OLED stream codec ───────────────────────────────────────── */
+
+suite('SSD1306 canvas and pad mode payloads');
+
+check('two fixed chunks contain exactly one page-order frame with common CRC-32', () => {
+  const pages = Uint8Array.from({ length: OLED_STREAM.FRAME_BYTES }, (_, i) => (i * 37 + (i >> 6)) & 255);
+  const halves = encodeOledFrameChunks(pages, 1, 0x1234);
+  eq(halves.length, 2);
+  halves.forEach((bytes, i) => {
+    eq(bytes.length, 265);
+    eq(bytes[0], 0x34);
+    eq(bytes[1], 0x12);
+    const decoded = decodeOledFrameChunk(bytes);
+    eq(decoded.index, i);
+    eq(decoded.count, 2);
+    eq(decoded.mode, 1);
+    eq(decoded.seq, 0x1234);
+    eq(decoded.crc32, crc32(pages));
+    deepEq(Array.from(decoded.pages), Array.from(pages.subarray(i * 256, (i + 1) * 256)));
+    const full = encodeFrame(CMD.OLED_FRAME, bytes);
+    eq(full[3] | (full[4] << 8), 265);
+    const decoder = new FrameDecoder();
+    decoder.push(full);
+    eq(decoder.next()?.cmd, CMD.OLED_FRAME);
+  });
+  eq(halves[0][9 + 127], pages[127]);
+  eq(halves[0][9 + 128], pages[128]);
+  eq(halves[1][9 + 255], pages[511]);
+});
+
+check('invalid OLED canvas length, mode, sequence and corrupt chunk headers fail', () => {
+  for (const [pages, mode, seq] of [
+    [new Uint8Array(511), 1, 1], [new Uint8Array(512), 12, 1],
+    [new Uint8Array(512), 1, -1], [new Uint8Array(512), 1, 65536],
+  ]) {
+    let threw = false;
+    try { encodeOledFrameChunks(pages, mode, seq); } catch { threw = true; }
+    if (!threw) throw new Error('invalid canvas payload was accepted');
+  }
+  const [p] = encodeOledFrameChunks(new Uint8Array(512), 0, 0);
+  p[4] = 3;
+  let threw = false;
+  try { decodeOledFrameChunk(p); } catch { threw = true; }
+  if (!threw) throw new Error('invalid chunk count was decoded');
+});
+
+check('state epoch and complete-frame ACK decode exactly three bytes', () => {
+  deepEq(decodeOledState(Uint8Array.from([9, 0xff, 0x10])), { mode: 9, epoch: 0x10ff });
+  deepEq(decodeOledFrameAck(Uint8Array.from([0x34, 0x12, 9])), { seq: 0x1234, mode: 9 });
+  for (const invalid of [Uint8Array.from([12, 0, 0]), Uint8Array.from([0, 0])]) {
+    let threw = false;
+    try { decodeOledState(invalid); } catch { threw = true; }
+    if (!threw) throw new Error('bad state was decoded');
+  }
+});
+
+/* ── 5. config codec ─────────────────────────────────────────────────────── */
 
 suite('config codec');
 
@@ -353,6 +482,26 @@ check('default config round trips through encode/decode', () => {
     eq(ch.knobCcw.code, MEDIA.VOLUME_DOWN, 'knob ccw: ');
     eq(ch.knobTap.code, MEDIA.MUTE, 'knob tap: ');
     eq(ch.knobHold.type, ACTION_TYPE.CHANNEL_NEXT, 'knob hold: ');
+  }
+});
+
+check('v3 OLED boot/contrast/invert bytes and playlist survive a round trip', () => {
+  const cfg = defaultConfig();
+  cfg.global.oledBootMode = 9;
+  cfg.global.oledContrast = 183;
+  cfg.global.oledInverted = 1;
+  cfg.global.oledAutoCycleS = 14;
+  cfg.global.oledPlaylist = (1 << 4) | (1 << 9);
+  const encoded = encodeConfig(cfg);
+  const g = OFFSETS.config.global;
+  eq(encoded[g + OFFSETS.global.oledBootMode], 9);
+  eq(encoded[g + OFFSETS.global.oledContrast], 183);
+  eq(encoded[g + OFFSETS.global.oledInverted], 1);
+  eq(encoded[g + OFFSETS.global.oledAutoCycleS], 14);
+  eq(new DataView(encoded.buffer).getUint16(g + OFFSETS.global.oledPlaylist, true), (1 << 4) | (1 << 9));
+  const back = decodeConfig(encoded).global;
+  for (const name of ['oledBootMode', 'oledContrast', 'oledInverted', 'oledAutoCycleS', 'oledPlaylist']) {
+    eq(back[name], cfg.global[name], name + ': ');
   }
 });
 

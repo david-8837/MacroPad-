@@ -18,8 +18,8 @@ interface WebhookInfo {
 const SNIPPETS: { title: string; endpoint: string; body: Record<string, unknown> }[] = [
   { title: 'Trigger Key Switch #1 (Tap)', endpoint: '/api/v1/trigger', body: { target: 'key', index: 0, action: 'tap' } },
   { title: 'Rotate Knob Clockwise (1 Detent)', endpoint: '/api/v1/dial', body: { direction: 'cw', step: 1 } },
-  { title: 'Push Text to the OLED Display', endpoint: '/api/v1/oled', body: { line1: 'STREAM STARTING', line2: 'COUNTDOWN 05:00' } },
-  { title: 'Switch to Layer 2', endpoint: '/api/v1/action', body: { layer: 2 } },
+  { title: 'Update PC OLED labels (live stream only on a verified pad)', endpoint: '/api/v1/oled', body: { line1: 'STREAM STARTING', line2: 'COUNTDOWN 05:00' } },
+  { title: 'Edit / preview Layer 2 (pad unchanged)', endpoint: '/api/v1/action', body: { layer: 2 } },
 ];
 
 export const WebhookDocPanel: React.FC<WebhookDocPanelProps> = ({ onRunLocally }) => {

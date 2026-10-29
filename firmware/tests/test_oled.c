@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "oled.h"
+#include "oled_runtime.h"
 #include "test.h"
 #include "test_runner.h"
 
@@ -121,8 +122,27 @@ static void play_reports_whether_it_drew(void) {
 }
 
 static void host_build_has_no_panel(void) {
+    ASSERT_EQ(oled_hw_init(), 0);
     ASSERT_EQ(oled_hw_present(), 0);
-    oled_flush(&C); /* must be safe to call with no panel fitted */
+    oled_flush(&C); /* safe with no Pico SDK or physical panel */
+}
+
+static void offline_runtime_screens_show_something_real(void) {
+    uint8_t earlier[OLED_FRAME_BYTES];
+    for (int mode = 0; mode < OLED_MODE_COUNT; mode++) {
+        oled_render_local(&C, (uint8_t)mode, 4523000, 2);
+        ASSERT(oled_ink(&C) > 0); /* no PC data must not produce a blank panel */
+    }
+    oled_render_local(&C, OLED_MODE_CHANNEL, 2000, 0);
+    memcpy(earlier, C.fb, sizeof(earlier));
+    oled_render_local(&C, OLED_MODE_CHANNEL, 2000, 3);
+    ASSERT(memcmp(earlier, C.fb, sizeof(earlier)) != 0);
+    oled_render_layer_overlay(&C, 3);
+    ASSERT(oled_ink(&C) > 0);
+    oled_render_local(&C, OLED_MODE_CLOCK, 2000, 0);
+    memcpy(earlier, C.fb, sizeof(earlier));
+    oled_render_local(&C, OLED_MODE_CLOCK, 62000, 0);
+    ASSERT(memcmp(earlier, C.fb, sizeof(earlier)) != 0);
 }
 
 static void frame_is_page_ordered(void) {
@@ -146,5 +166,6 @@ const test_case_t oled_tests[] = {
     {"oled play reports whether it drew", play_reports_whether_it_drew},
     {"oled frame layout is page ordered", frame_is_page_ordered},
     {"oled host build has no panel", host_build_has_no_panel},
+    {"oled offline runtime screens", offline_runtime_screens_show_something_real},
     {NULL, NULL},
 };

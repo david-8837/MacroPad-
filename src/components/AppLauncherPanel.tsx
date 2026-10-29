@@ -32,6 +32,7 @@ import { DiscoveredApp } from '../types';
 
 export interface AppLauncherPanelProps {
   selectedKeyIndex: number | null;
+  isDeckLocked?: boolean;
   onAssignApp: (
     keyIndex: number,
     app: DiscoveredApp,
@@ -106,6 +107,7 @@ const SkeletonCard: React.FC = () => (
 
 export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   selectedKeyIndex,
+  isDeckLocked = false,
   onAssignApp,
   onTriggerAction,
   activeChannelIndex = 0,
@@ -261,7 +263,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   }, []);
 
   const handleAssign = useCallback(() => {
-    if (!selectedApp) return;
+    if (!selectedApp || isDeckLocked) return;
     const targetIdx = targetSwitchIndex;
     playKeyClick('heavy');
     onAssignApp(
@@ -279,6 +281,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
     setTimeout(() => setAssignedAppId(null), 1800);
   }, [
     selectedApp,
+    isDeckLocked,
     targetSwitchIndex,
     targetChannelIndex,
     onAssignApp,
@@ -396,10 +399,10 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
             </button>
           )}
 
-          {/* Layer Selector */}
-          <div className="flex items-center gap-1 bg-[#EDECE8] px-2 py-1.5 border border-[#E3E2DE] text-xs font-mono">
-            <span className="text-[10px] text-[#646464] uppercase mr-1">Layer:</span>
-            {[0, 1, 2].map((ch) => (
+          {/* Editor target selector, not a remote pad channel switch. */}
+          <div className="flex items-center gap-1 bg-[#EDECE8] px-2 py-1.5 border border-[#E3E2DE] text-xs font-mono" title="Select the layer to edit; this does not switch the pad">
+            <span className="text-[10px] text-[#646464] uppercase mr-1">Edit Layer:</span>
+            {[0, 1, 2, 3].map((ch) => (
               <button
                 key={ch}
                 type="button"
@@ -413,7 +416,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
  : 'text-[#444343] hover:text-[#141414] hover:bg-[#EDECE8]'
  }`}
               >
-                Layer {ch + 1}
+                Layer {ch}
               </button>
             ))}
           </div>
@@ -838,13 +841,17 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
                   {/* Assign Button */}
                   <button
                     onClick={handleAssign}
-                    className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-mono font-bold transition-all cursor-pointer ${
+                    disabled={isDeckLocked}
+                    title={isDeckLocked ? 'Unlock deck in the sidebar before assigning an app' : undefined}
+                    className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-mono font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
  assignedAppId === selectedApp.id
  ? 'bg-[#1351AA] text-[#E3E2DE]'
  : 'bg-[#EDECE8] hover:bg-[#1351AA] text-[#1351AA] hover:text-[#E3E2DE] border border-[#C7C7C7] hover:border-[#1351AA]'
  }`}
                   >
-                    {assignedAppId === selectedApp.id ? (
+                    {isDeckLocked ? (
+                      <span>UNLOCK DECK TO ASSIGN</span>
+                    ) : assignedAppId === selectedApp.id ? (
                       <>
                         <Check className="w-4 h-4 stroke-[3]" />
                         <span>ASSIGNED!</span>
@@ -853,7 +860,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
                       <>
                         <Zap className="w-4 h-4" />
                         <span>
-                          Assign to Switch #{targetSwitchIndex + 1} (Layer {targetChannelIndex + 1})
+                          Assign to Switch #{targetSwitchIndex + 1} (Layer {targetChannelIndex})
                         </span>
                       </>
                     )}

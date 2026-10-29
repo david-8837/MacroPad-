@@ -32,7 +32,7 @@ interface KnobConfigDrawerProps {
   dial: DialBinding;
   onSave: (updatedDial: DialBinding) => void;
   onClose: () => void;
-  onTriggerAction: (actionId: string, actionName: string, category: string) => void;
+  onTriggerAction: (actionId: string, actionName: string, category: string, payload?: ActionDefinition['payload']) => void;
   onSelectChannel?: (channelIndex: number) => void;
 }
 
@@ -305,10 +305,10 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
         setTestHoldProgress(100);
         playDetentClick('cw');
         setTestLog({
-          message: `★ HOLD TRIGGERED (${elapsed}ms) -> Switched Layer bank!`,
+          message: `★ SIMULATED HOLD (${elapsed}ms) -> Pad unchanged; physical hold switches layer`,
           type: 'hold'
         });
-        onTriggerAction('test-hold', `[TEST RIG HOLD] Layer Switch (${elapsed}ms)`, 'navigation');
+        onTriggerAction('test-hold', `[TEST RIG HOLD] Pad not switched (${elapsed}ms)`, 'navigation');
         return;
       }
 
@@ -336,7 +336,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
         message: `✓ TAP FIRED (${elapsed}ms) -> Triggered "${pressAction.name}"`,
         type: 'tap'
       });
-      onTriggerAction(pressAction.id, `[TEST RIG TAP] ${pressAction.name} (${elapsed}ms)`, pressAction.category);
+      onTriggerAction(pressAction.id, `[TEST RIG TAP] ${pressAction.name} (${elapsed}ms)`, pressAction.category, pressAction.payload);
     }
 
     testDidHoldRef.current = false;

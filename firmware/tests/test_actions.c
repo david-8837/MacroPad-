@@ -12,6 +12,7 @@
 #include "actions.h"
 #include "channel.h"
 #include "config.h"
+#include "dispatch.h"
 #include "events.h"
 #include "gesture.h"
 #include "storage.h"
@@ -336,6 +337,51 @@ static void test_release_all_clears_a_stuck_modifier(void) {
     ASSERT_EQ(Rn, after);
 }
 
+static void test_release_all_sends_consumer_zero_once(void) {
+    g_current = __func__;
+    reset_recording();
+    action_t media = mk(ACTION_TYPE_MEDIA, ACTION_FLAG_HOLD_DOWN, MEDIA_VOLUME_UP);
+    ASSERT(action_fire(&media, true));
+    ASSERT_EQ(Rn, 1);
+    ASSERT_EQ(R[0].kind, REC_CONSUMER);
+    ASSERT_EQ(R[0].usage, MEDIA_VOLUME_UP);
+
+    action_release_all();
+    ASSERT_EQ(Rn, 2);
+    ASSERT_EQ(R[1].kind, REC_CONSUMER);
+    ASSERT_EQ(R[1].usage, 0); /* this was skipped after s_held was zeroed */
+    action_release_all();
+    ASSERT_EQ(Rn, 2); /* idempotent; do not spam releases */
+}
+
+static void test_channel_switch_releases_held_keyboard_and_media(void) {
+    g_current = __func__;
+    storage_host_reset();
+    storage_init();
+    events_init();
+    channel_set(0);
+    reset_recording();
+
+    action_t key = mk(ACTION_TYPE_KEYCODE, ACTION_FLAG_HOLD_DOWN,
+                      (uint16_t)((MOD_LCTL << 8) | HID_A));
+    action_t media = mk(ACTION_TYPE_MEDIA, ACTION_FLAG_HOLD_DOWN, MEDIA_VOLUME_UP);
+    ASSERT(action_fire(&key, true));
+    ASSERT(action_fire(&media, true));
+    ASSERT_EQ(count_kind(REC_KBD), 1);
+    ASSERT_EQ(count_kind(REC_CONSUMER), 1);
+    channel_set(1);
+    ASSERT_EQ(count_kind(REC_KBD), 2);
+    ASSERT_EQ(count_kind(REC_CONSUMER), 2);
+    ASSERT_EQ(R[Rn - 2].kind, REC_KBD);
+    ASSERT_EQ(R[Rn - 2].mods, 0);
+    ASSERT_EQ(R[Rn - 2].keys[0], 0);
+    ASSERT_EQ(R[Rn - 1].kind, REC_CONSUMER);
+    ASSERT_EQ(R[Rn - 1].usage, 0);
+    int after = Rn;
+    channel_set(1);
+    ASSERT_EQ(Rn, after);
+}
+
 static void test_from_cfg_copies_and_terminates_text(void) {
     g_current = __func__;
     cfg_action_t c;
@@ -450,6 +496,44 @@ static void test_events_disabled_push_nothing(void) {
     ASSERT_EQ(events_pending(), 1);
 }
 
+/* PC-owned M0–M15 upload as ACTION_TYPE_NONE. A physical tap must still
+ * publish the gesture, with its actual channel and NONE ownership, and must
+ * NOT type the old string "macro:0" or send any keyboard report. */
+static void test_pc_owned_empty_slot_emits_a_tap_event(void) {
+    g_current = __func__;
+    cfg_blob_t *cfg = config_mutable();
+    cfg->channels[2].keys[3].type = ACTION_TYPE_NONE;
+    cfg->channels[2].keys[3].text[0] = '\0';
+    config_reseal(cfg);
+    dispatch_init();
+    channel_set(2);
+    events_init();
+    events_enable(true);
+    Rn = 0;
+
+    gesture_queue_t q;
+    gesture_queue_init(&q);
+    gesture_t g;
+    memset(&g, 0, sizeof(g));
+    g.kind = GESTURE_TAP;
+    g.index = 3;
+    ASSERT(gesture_queue_push(&q, &g));
+    ASSERT_EQ(dispatch_run(&q, 40), 1);
+    ASSERT_EQ(Rn, 0); /* no HID or consumer report */
+
+    key_event_t e;
+    ASSERT(events_pop(&e));
+    ASSERT_EQ(e.source, EV_SOURCE_KEY);
+    ASSERT_EQ(e.index, 3);
+    ASSERT_EQ(e.event, EV_TAP);
+    ASSERT_EQ(e.channel, 2);
+    ASSERT_EQ(e.action, ACTION_TYPE_NONE);
+    ASSERT_EQ(events_pending(), 0);
+
+    channel_set(0);
+    events_init();
+}
+
 const test_case_t actions_tests[] = {
     {"empty_action_does_nothing", test_empty_action_does_nothing},
     {"keycode_tap_sends_down_then_up", test_keycode_tap_sends_down_then_up},
@@ -463,11 +547,14 @@ const test_case_t actions_tests[] = {
     {"webhook_emits_event_and_no_hid", test_webhook_emits_event_and_no_hid},
     {"char_to_usage_matches_us_layout", test_char_to_usage_matches_us_layout},
     {"release_all_clears_a_stuck_modifier", test_release_all_clears_a_stuck_modifier},
+    {"release_all_sends_consumer_zero_once", test_release_all_sends_consumer_zero_once},
+    {"channel_switch_releases_held_keyboard_and_media", test_channel_switch_releases_held_keyboard_and_media},
     {"from_cfg_copies_and_terminates_text", test_from_cfg_copies_and_terminates_text},
     {"action_for_gesture_reads_the_active_channel", test_action_for_gesture_reads_the_active_channel},
     {"knob_gestures_map_to_the_right_slots", test_knob_gestures_map_to_the_right_slots},
     {"channel_switch_releases_held_keys", test_channel_switch_releases_held_keys},
     {"event_ring_drops_oldest_when_full", test_event_ring_drops_oldest_when_full},
     {"events_disabled_push_nothing", test_events_disabled_push_nothing},
+    {"pc_owned_empty_slot_emits_a_tap_event", test_pc_owned_empty_slot_emits_a_tap_event},
     {NULL, NULL},
 };

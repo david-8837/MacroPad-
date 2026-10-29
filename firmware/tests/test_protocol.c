@@ -344,6 +344,34 @@ static void test_handler_get_info_reports_four_channels(void) {
     ASSERT_EQ(buf[FRAME_HEADER_SIZE + 8], 4);
     ASSERT_EQ(buf[FRAME_HEADER_SIZE + 9], 9);
     ASSERT_EQ(buf[FRAME_HEADER_SIZE + 10], 9);
+    /* Compiled board support is not proof of a responding SSD1306. The LED
+     * capability states a bench compile flag, never measured safe current. */
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE + 11] & CAP_OLED, 0);
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE + 11] & CAP_LED_OUTPUT,
+              BOARD_LED_OUTPUT_ENABLED ? CAP_LED_OUTPUT : 0);
+}
+
+/* CAP_EVENTS means firmware can report events, NOT that the current config
+ * already enables streaming. Otherwise an event-disabled pad cannot be opted
+ * back in during an authenticated full-config upload: INFO would say it lacks
+ * the very capability the user is trying to enable. */
+static void test_info_event_capability_survives_disabled_stream(void) {
+    g_current = __func__;
+    storage_host_reset();
+    storage_init();
+    cfg_blob_t *cfg = config_mutable();
+    cfg->global.usb_report_events = 0;
+    config_reseal(cfg);
+    events_enable(false);
+    usb_proto_init();
+    send_frame(CMD_GET_INFO, NULL, 0);
+    uint8_t buf[64];
+    size_t n = drain(buf, sizeof(buf));
+    ASSERT_EQ((int)n, FRAME_OVERHEAD + INFO_SIZE);
+    ASSERT_EQ(buf[2], CMD_INFO);
+    ASSERT_EQ(config_get()->global.usb_report_events, 0);
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE + 11] & CAP_EVENTS, CAP_EVENTS);
+    events_enable(true);
 }
 
 static void test_handler_unknown_command_reports_error(void) {
@@ -440,12 +468,14 @@ static void test_handler_get_channel_reports_active(void) {
     ASSERT_EQ(buf[FRAME_HEADER_SIZE], 1);
 }
 
-static void test_handler_preview_lighting_does_not_persist(void) {
+static void test_handler_preview_respects_led_output_gate(void) {
     g_current = __func__;
     storage_host_reset();
     storage_init();
     usb_proto_init();
     ASSERT(storage_commit());
+    const uint8_t original_mode = config_get()->channels[0].lighting.mode;
+    ASSERT_EQ(original_mode, LED_MODE_REACTIVE);
 
     cfg_lighting_t L;
     memset(&L, 0, sizeof(L));
@@ -460,16 +490,30 @@ static void test_handler_preview_lighting_does_not_persist(void) {
     send_frame(CMD_PREVIEW_LIGHTING, pl, (uint16_t)sizeof(pl));
     uint8_t buf[64];
     drain(buf, sizeof(buf));
+#if BOARD_LED_OUTPUT_ENABLED
     ASSERT_EQ(buf[2], CMD_SET_ACK);
-    /* Visible immediately (that is what a colour picker needs) ... */
     ASSERT_EQ(config_get()->channels[0].lighting.mode, LED_MODE_RAINBOW);
-    /* ... but not marked dirty, so a reboot loses it. */
+#else
+    ASSERT_EQ(buf[2], CMD_ERROR);
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE], STATUS_LED_DISABLED);
+    ASSERT_EQ(config_get()->channels[0].lighting.mode, original_mode);
+#endif
+    /* A preview never marks flash dirty, including when refused. */
     ASSERT(!storage_stats()->dirty);
 
-    /* SET_LIGHTING on the other hand must persist. */
+    /* Saving an inactive preset is useful even when physical output is gated. */
     send_frame(CMD_SET_LIGHTING, pl, (uint16_t)sizeof(pl));
     drain(buf, sizeof(buf));
+    ASSERT_EQ(buf[2], CMD_SET_ACK);
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE], STATUS_OK);
+    ASSERT_EQ(config_get()->channels[0].lighting.mode, LED_MODE_RAINBOW);
     ASSERT(storage_stats()->dirty);
+    send_frame(CMD_COMMIT, NULL, 0);
+    drain(buf, sizeof(buf));
+    ASSERT_EQ(buf[2], CMD_COMMIT_ACK);
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE], STATUS_OK);
+    storage_init(); /* flashed settings survive, but the output gate remains */
+    ASSERT_EQ(config_get()->channels[0].lighting.mode, LED_MODE_RAINBOW);
 }
 
 static void test_handler_set_lighting_rejects_bad_channel(void) {
@@ -606,11 +650,13 @@ static void test_handler_reset_config_restores_defaults(void) {
     ASSERT_EQ(config_get()->channels[0].keys[0].type, ACTION_TYPE_NONE);
 }
 
-static void test_handler_led_test_takes_27_bytes(void) {
+static void test_handler_led_test_gate_timeout_and_restore(void) {
     g_current = __func__;
     storage_host_reset();
     storage_init();
+    events_init();
     usb_proto_init();
+    usb_proto_pump(1000);
     uint8_t rgb[CFG_LED_COUNT * 3];
     for (int i = 0; i < CFG_LED_COUNT; i++) {
         rgb[i * 3 + 0] = (uint8_t)(i * 10);
@@ -620,13 +666,55 @@ static void test_handler_led_test_takes_27_bytes(void) {
     send_frame(CMD_LED_TEST, rgb, sizeof(rgb));
     uint8_t buf[64];
     drain(buf, sizeof(buf));
+#if BOARD_LED_OUTPUT_ENABLED
     ASSERT_EQ(buf[2], CMD_SET_ACK);
-    ASSERT(led_host_test_active());
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE], STATUS_OK);
+    ASSERT(led_host_test_active(1000));
+    ASSERT_EQ(led_host_last_frame()->px[0].b, 255);
+    ASSERT(led_host_test_active(1000 + LED_TEST_HOLD_MS - 1));
+    ASSERT(!led_host_test_active(1000 + LED_TEST_HOLD_MS));
+    /* The next main.c LED tick resumes normal rendering. Raw data cannot
+     * stick indefinitely (even if the host disconnects). */
+    usb_proto_pump(UINT32_MAX - 99u);
+    send_frame(CMD_LED_TEST, rgb, sizeof(rgb));
+    drain(buf, sizeof(buf));
+    ASSERT(led_host_test_active(UINT32_MAX - 99u + LED_TEST_HOLD_MS - 1u));
+    ASSERT(!led_host_test_active(UINT32_MAX - 99u + LED_TEST_HOLD_MS));
+    usb_proto_pump(1500);
+    send_frame(CMD_LED_TEST, rgb, sizeof(rgb));
+    drain(buf, sizeof(buf));
+    ASSERT(led_host_test_active(1500));
+    cfg_lighting_t L = config_get()->channels[0].lighting;
+    L.mode = LED_MODE_STATIC;
+    uint8_t settings[1 + sizeof(cfg_lighting_t)] = {0};
+    memcpy(settings + 1, &L, sizeof(L));
+    send_frame(CMD_SET_LIGHTING, settings, sizeof(settings));
+    drain(buf, sizeof(buf));
+    ASSERT_EQ(buf[2], CMD_SET_ACK);
+    ASSERT(!led_host_test_active(1500)); /* explicit setting wins immediately */
+    send_frame(CMD_LED_TEST, rgb, sizeof(rgb));
+    drain(buf, sizeof(buf));
+    ASSERT(led_host_test_active(1500));
+    usb_proto_init();
+    ASSERT(!led_host_test_active(1500)); /* USB reinitialization clears test */
+#else
+    ASSERT_EQ(buf[2], CMD_ERROR);
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE], STATUS_LED_DISABLED);
+    ASSERT(!led_host_test_active(1000));
+    /* Even a valid all-white raw frame is rejected; saved config unchanged. */
+    ASSERT_EQ(config_get()->channels[0].lighting.mode, LED_MODE_REACTIVE);
+#endif
 
     uint8_t short_pl[9] = {0};
     send_frame(CMD_LED_TEST, short_pl, sizeof(short_pl));
     drain(buf, sizeof(buf));
     ASSERT_EQ(buf[2], CMD_ERROR);
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE], STATUS_BAD_ARG);
+    uint8_t long_pl[CFG_LED_COUNT * 3 + 1] = {0};
+    send_frame(CMD_LED_TEST, long_pl, sizeof(long_pl));
+    drain(buf, sizeof(buf));
+    ASSERT_EQ(buf[2], CMD_ERROR);
+    ASSERT_EQ(buf[FRAME_HEADER_SIZE], STATUS_BAD_ARG);
 }
 
 static void test_key_events_stream_when_enabled(void) {
@@ -700,18 +788,19 @@ const test_case_t protocol_tests[] = {
     {"final_chunk_with_bad_crc_is_rejected", test_final_chunk_with_bad_crc_is_rejected},
     {"handler_ping_replies_pong", test_handler_ping_replies_pong},
     {"handler_get_info_reports_four_channels", test_handler_get_info_reports_four_channels},
+    {"info_event_capability_survives_disabled_stream", test_info_event_capability_survives_disabled_stream},
     {"handler_unknown_command_reports_error", test_handler_unknown_command_reports_error},
     {"handler_get_config_streams_the_whole_blob", test_handler_get_config_streams_the_whole_blob},
     {"handler_get_config_rejects_bad_chunk_index", test_handler_get_config_rejects_bad_chunk_index},
     {"handler_set_channel_switches_and_replies", test_handler_set_channel_switches_and_replies},
     {"handler_get_channel_reports_active", test_handler_get_channel_reports_active},
-    {"handler_preview_lighting_does_not_persist", test_handler_preview_lighting_does_not_persist},
+    {"handler_preview_respects_led_output_gate", test_handler_preview_respects_led_output_gate},
     {"handler_set_lighting_rejects_bad_channel", test_handler_set_lighting_rejects_bad_channel},
     {"handler_set_lighting_rejects_short_payload", test_handler_set_lighting_rejects_short_payload},
     {"handler_full_set_config_round_trip", test_handler_full_set_config_round_trip},
     {"handler_set_config_rejects_corrupt_stream", test_handler_set_config_rejects_corrupt_stream},
     {"handler_reset_config_restores_defaults", test_handler_reset_config_restores_defaults},
-    {"handler_led_test_takes_27_bytes", test_handler_led_test_takes_27_bytes},
+    {"handler_led_test_gate_timeout_and_restore", test_handler_led_test_gate_timeout_and_restore},
     {"key_events_stream_when_enabled", test_key_events_stream_when_enabled},
     {NULL, NULL},
 };

@@ -79,7 +79,7 @@ Ordered by cost per unit of value, in my reading of the code:
 3. **Three browsers over one shortcut table.** `CommandPalette` (623 lines), `ShortcutsPanel` (297) and the picker inside `KeyConfigDrawer` (1684) all list `pcShortcuts.ts` (1474 lines / 39.6 KB). Two of the three could go; the palette is the fast path and the drawer picker is where assignment happens.
 4. **Key Tester page.** `ViaKeyTester` (577 lines) + the sound engine — it duplicates the Shortcuts vault's purpose for anyone with a working keyboard.
 5. **App launcher.** `AppLauncherPanel` (940 lines) + `appDiscovery.cjs`. Launches things the OS launcher already launches, and its data lives in `localStorage` rather than the device. **Decided: kept, but de-tabbed** — the browse grid is how a key gets bound to a program, so the page stays; what went was its nav slot.
-6. **Firmware flasher.** `FirmwareModal` (350 lines) + `firmware.cjs` — an in-app UF2 flasher for a board that also flashes by dragging a file onto `RPI-RP2`.
+6. **Firmware flasher.** `FirmwarePanel` (expandable in the left sidebar) + `firmware.cjs` — retained by user request. Manual drag-and-drop onto `RPI-RP2` would lose the app's UF2 inspection and BOOTSEL status; no separate Firmware modal remains.
 7. **Fake telemetry fallback.** `App.tsx:481` invents `cpuLoad: Math.floor(18 + Math.random() * 25)` when there are no native metrics, so the OLED "System Telemetry" screen shows plausible numbers that mean nothing. Either show `--`/`SIM` or drop the simulated ticker.
 
 ---

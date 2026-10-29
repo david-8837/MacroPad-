@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { playKeyClick } from '../../utils/soundEffects';
+import { clearHeldKeys, createTesterState, ignoreKeyTesterTarget, reduceTesterEvent } from '../../utils/keyTesterModel';
 import { 
   Keyboard as KeyboardIcon, 
   RotateCcw, 
@@ -7,16 +8,6 @@ import {
   VolumeX, 
   Activity
 } from 'lucide-react';
-
-interface TestedKeyInfo {
-  code: string;
-  name: string;
-  pressCount: number;
-  lastDownTimestamp: number;
-  lastUpTimestamp: number;
-  latencyMs: number;
-  isChattering?: boolean;
-}
 
 export interface KeyDef {
   code: string;
@@ -31,17 +22,17 @@ export interface KeyDef {
 // MAIN 60% ALPHANUMERIC CLUSTER
 const MAIN_ROW_0: KeyDef[] = [
   { code: 'Escape', label: 'Esc', width: 1 },
-  { code: 'spacer-0.5', label: '', width: 0.5 },
+  { code: 'spacer-0.5-a', label: '', width: 0.5 },
   { code: 'F1', label: 'F1', width: 1 },
   { code: 'F2', label: 'F2', width: 1 },
   { code: 'F3', label: 'F3', width: 1 },
   { code: 'F4', label: 'F4', width: 1 },
-  { code: 'spacer-0.5', label: '', width: 0.5 },
+  { code: 'spacer-0.5-b', label: '', width: 0.5 },
   { code: 'F5', label: 'F5', width: 1 },
   { code: 'F6', label: 'F6', width: 1 },
   { code: 'F7', label: 'F7', width: 1 },
   { code: 'F8', label: 'F8', width: 1 },
-  { code: 'spacer-0.5', label: '', width: 0.5 },
+  { code: 'spacer-0.5-c', label: '', width: 0.5 },
   { code: 'F9', label: 'F9', width: 1 },
   { code: 'F10', label: 'F10', width: 1 },
   { code: 'F11', label: 'F11', width: 1 },
@@ -189,102 +180,42 @@ const NUMPAD_GRID_KEYS: (KeyDef & { gridArea: string })[] = [
 
 export const ViaKeyTester: React.FC = () => {
   const [layoutMode, setLayoutMode] = useState<'full' | 'tkl' | '60'>('full');
-  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set());
-  const [testedKeys, setTestedKeys] = useState<{ [code: string]: TestedKeyInfo }>({});
+  const [tester, setTester] = useState(createTesterState);
   const [soundProfile, setSoundProfile] = useState<'thock' | 'click' | 'silent'>('thock');
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [totalKeypresses, setTotalKeypresses] = useState(0);
-  const [chatterWarnings, setChatterWarnings] = useState(0);
-  const [lastActuatedKey, setLastActuatedKey] = useState<string>('None');
-
-  // Key normalization matching DOM Level 3 e.code
-  const normalizeKey = (e: KeyboardEvent): string => {
-    if (e.code) return e.code;
-    // Fallbacks for older browsers
-    if (e.key === ' ') return 'Space';
-    if (e.key === 'Escape') return 'Escape';
-    if (e.key === 'Enter') return 'Enter';
-    return e.key;
-  };
+  const { activeKeys, testedKeys, keydownEvents, pressEvents, repeatEvents, lastKey } = tester;
+  const testedCount = Object.keys(testedKeys).length;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent browser shortcuts like Tab navigation, F-keys, or Space scroll while testing
-      e.preventDefault();
-      
-      const code = normalizeKey(e);
-      const now = performance.now();
-
-      setActiveKeys(prev => {
-        const next = new Set(prev);
-        next.add(code);
-        return next;
-      });
-
-      setTestedKeys(prev => {
-        const existing = prev[code];
-        const lastDown = existing?.lastDownTimestamp || 0;
-        const timeSinceLastDown = now - lastDown;
-
-        // Switch chatter threshold: consecutive presses under 25ms indicate switch bounce/defect
-        const isChatter = existing && timeSinceLastDown < 25;
-        if (isChatter) {
-          setChatterWarnings(c => c + 1);
-        }
-
-        return {
-          ...prev,
-          [code]: {
-            code,
-            name: e.key || code,
-            pressCount: (existing?.pressCount || 0) + 1,
-            lastDownTimestamp: now,
-            lastUpTimestamp: existing?.lastUpTimestamp || 0,
-            latencyMs: existing ? Math.round(timeSinceLastDown) : 0,
-            isChattering: isChatter,
-          }
-        };
-      });
-
-      setLastActuatedKey(e.code || e.key);
-      setTotalKeypresses(c => c + 1);
-
-      if (soundEnabled) {
+      // Observe OS-delivered DOM events; never intercept app shortcuts, form
+      // fields or browser navigation and never infer scan or USB latency.
+      if (ignoreKeyTesterTarget(e.target)) return;
+      setTester(prev => reduceTesterEvent(prev, { type: 'down', code: e.code, key: e.key, repeat: e.repeat }));
+      if (!e.repeat && soundEnabled) {
         if (soundProfile === 'thock') playKeyClick('heavy');
         else if (soundProfile === 'click') playKeyClick('down');
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      const code = normalizeKey(e);
-      setActiveKeys(prev => {
-        const next = new Set(prev);
-        next.delete(code);
-        return next;
-      });
-
-      if (soundEnabled && soundProfile !== 'silent') {
-        playKeyClick('up');
-      }
+      if (ignoreKeyTesterTarget(e.target)) return;
+      setTester(prev => reduceTesterEvent(prev, { type: 'up', code: e.code, key: e.key, repeat: e.repeat }));
+      if (soundEnabled && soundProfile !== 'silent') playKeyClick('up');
     };
+    const handleBlur = () => setTester(prev => clearHeldKeys(prev));
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
     };
   }, [soundEnabled, soundProfile]);
 
-  const resetTester = () => {
-    setActiveKeys(new Set());
-    setTestedKeys({});
-    setTotalKeypresses(0);
-    setChatterWarnings(0);
-    setLastActuatedKey('None');
-  };
-
-  const testedCount = Object.keys(testedKeys).length;
+  const resetTester = () => setTester(createTesterState());
 
   // Render a standard key button
   const renderKey = (k: KeyDef, customHeight?: string) => {
@@ -336,13 +267,13 @@ export const ViaKeyTester: React.FC = () => {
           </div>
           <div>
             <h3 className="font-semibold text-[#141414] text-base flex items-center gap-2">
-              VIA Key Matrix & Switch Tester
+              Key Tester — OS Event Visualizer
               <span className="text-[10px] font-mono text-[#1351AA] bg-[#EDECE8] px-2 py-0.5 border border-[#C7C7C7]">
-                LIVE 1000Hz POLLING
+                WINDOW KEY EVENTS
               </span>
             </h3>
             <p className="text-xs text-[#646464]">
-              Full-Size 104-Key ANSI Matrix — Press any switch to verify registration, latency, and switch chatter
+              ANSI layout preview of OS keyboard events delivered to this focused window. Cannot measure hardware scan/USB latency, switch chatter or identify which keyboard sent a key.
             </p>
           </div>
         </div>
@@ -412,7 +343,7 @@ export const ViaKeyTester: React.FC = () => {
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F4F3F0] hover:bg-[#EDECE8] border border-[#E3E2DE] text-xs text-[#444343] hover:text-[#141414] font-mono transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Matrix</span>
+            <span>Reset events</span>
           </button>
         </div>
       </div>
@@ -420,22 +351,20 @@ export const ViaKeyTester: React.FC = () => {
       {/* Diagnostics Bar */}
       <div className="grid grid-cols-4 gap-3 text-center font-mono">
         <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE]">
-          <div className="text-[10px] text-[#646464] uppercase">Keys Registered</div>
+          <div className="text-[10px] text-[#646464] uppercase">Codes observed</div>
           <div className="text-sm font-bold text-[#1351AA]">{testedCount} Keys</div>
         </div>
         <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE]">
-          <div className="text-[10px] text-[#646464] uppercase">Total Actuations</div>
-          <div className="text-sm font-bold text-[#141414]">{totalKeypresses}</div>
+          <div className="text-[10px] text-[#646464] uppercase">Fresh keydowns</div>
+          <div className="text-sm font-bold text-[#141414]">{pressEvents}</div>
         </div>
         <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE]">
-          <div className="text-[10px] text-[#646464] uppercase">Active Down</div>
+          <div className="text-[10px] text-[#646464] uppercase">Held in window</div>
           <div className="text-sm font-bold text-[#1351AA]">{activeKeys.size} Keys</div>
         </div>
         <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE]">
-          <div className="text-[10px] text-[#646464] uppercase">Switch Chatter</div>
-          <div className={`text-sm font-bold ${chatterWarnings > 0 ? 'text-[#141414]' : 'text-[#1351AA]'}`}>
-            {chatterWarnings > 0 ? `${chatterWarnings} Warnings` : 'Clean (0 Bounces)'}
-          </div>
+          <div className="text-[10px] text-[#646464] uppercase">OS auto-repeat</div>
+          <div className="text-sm font-bold text-[#1351AA]">{repeatEvents} Events</div>
         </div>
       </div>
 
@@ -558,17 +487,17 @@ export const ViaKeyTester: React.FC = () => {
         </div>
       </div>
 
-      {/* Key Actuation Feed Ticker */}
+      {/* Only the OS-delivered code is known; the source device is not. */}
       <div className="p-3 bg-[#FFFFFF] border border-[#E3E2DE] flex items-center justify-between text-xs font-mono">
         <div className="flex items-center gap-2 text-[#444343]">
           <Activity className="w-4 h-4 text-[#1351AA]" />
-          <span>Last Actuated Switch:</span>
+          <span>Last OS key code:</span>
           <span className="font-bold text-[#141414] px-2 py-0.5 bg-[#F4F3F0] border border-[#E3E2DE]">
-            {lastActuatedKey}
+            {lastKey}
           </span>
         </div>
         <div className="text-[11px] text-[#646464]">
-          Actuation counter increments on every switch press • Bounce latency tracked in real-time
+          {keydownEvents} DOM keydown events (includes {repeatEvents} OS repeats) · Not a pad scan or contact test
         </div>
       </div>
     </div>

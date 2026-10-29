@@ -45,7 +45,7 @@ static void test_defaults_leave_keys_empty_and_knob_useful(void) {
     }
 }
 
-static void test_three_channels_have_distinct_colours(void) {
+static void test_four_channels_have_distinct_colours(void) {
     g_current = __func__;
     cfg_blob_t c;
     config_defaults(&c);
@@ -139,14 +139,19 @@ static void test_struct_sizes_match_the_wire_format(void) {
     ASSERT_EQ((int)sizeof(cfg_action_t), 40);
     ASSERT_EQ((int)sizeof(cfg_lighting_t), 40);
     ASSERT_EQ((int)sizeof(cfg_channel_t), 560);
-    ASSERT_EQ((int)sizeof(cfg_global_t), 16);
-    ASSERT_EQ((int)sizeof(cfg_blob_t), 8 + 16 + 3 * 560 + 4);
-    ASSERT_EQ((int)sizeof(cfg_blob_t), 1708);
-    ASSERT_EQ((int)CFG_CRC_OFFSET, 1704);
+    ASSERT_EQ((int)sizeof(cfg_global_t), 20);
+    ASSERT_EQ(CFG_CHANNEL_COUNT, 4);
+    ASSERT_EQ((int)sizeof(cfg_blob_t), 8 + 20 + CFG_CHANNEL_COUNT * 560 + 4);
+    ASSERT_EQ((int)sizeof(cfg_blob_t), 2272); /* pinned v3 wire-format size */
+    ASSERT_EQ((int)CFG_CRC_OFFSET, 2268);
+    ASSERT_EQ((int)offsetof(cfg_global_t, oled_boot_mode), 16);
+    ASSERT_EQ((int)offsetof(cfg_global_t, oled_contrast), 17);
+    ASSERT_EQ((int)offsetof(cfg_global_t, oled_inverted), 18);
+    ASSERT_EQ((int)offsetof(cfg_global_t, _oled_pad), 19);
     /* Offsets the host encoder must agree with. */
     ASSERT_EQ((int)offsetof(cfg_blob_t, global), 8);
-    ASSERT_EQ((int)offsetof(cfg_blob_t, channels), 24);
-    ASSERT_EQ((int)offsetof(cfg_blob_t, crc32), 1704);
+    ASSERT_EQ((int)offsetof(cfg_blob_t, channels), 28);
+    ASSERT_EQ((int)offsetof(cfg_blob_t, crc32), 2268);
     ASSERT_EQ((int)offsetof(cfg_channel_t, lighting), 520);
     ASSERT_EQ((int)offsetof(cfg_channel_t, knob_cw), 360);
     ASSERT_EQ((int)offsetof(cfg_lighting_t, per_key_mask), 7);
@@ -162,6 +167,140 @@ static void test_first_boot_creates_a_valid_sector(void) {
     ASSERT(storage_commit());
     ASSERT(storage_stats()->valid);
     ASSERT_EQ(storage_host_write_count(), 2); /* defaults + explicit commit */
+}
+
+/* Build a real v2 sector with header+blob CRCs, not a mocked config struct. */
+static void write_v2_sector(uint8_t slot, uint32_t seq, const char *label) {
+    cfg_blob_t current;
+    config_defaults(&current);
+    current.channels[3].keys[8].type = ACTION_TYPE_TEXT;
+    strcpy((char *)current.channels[3].keys[8].text, label);
+    current.channels[3].lighting.brightness = 37;
+    current.global.boot_channel = 3;
+    current.global.hold_ms = 417;
+    current.global.oled_auto_cycle_s = 13;
+    current.global.oled_playlist = 0x0123;
+
+    uint8_t body[2268] = {0};
+    memcpy(body, &current, 8);
+    uint16_t old_version = 2, old_length = sizeof(body);
+    memcpy(body + 4, &old_version, sizeof(old_version));
+    memcpy(body + 6, &old_length, sizeof(old_length));
+    memcpy(body + 8, &current.global, 16);
+    memcpy(body + 24, current.channels, sizeof(current.channels));
+    uint32_t crc = crc32_ieee(body, 2264);
+    memcpy(body + 2264, &crc, sizeof(crc));
+
+    sector_header_t header = {.magic = MAGIC_SECTOR, .seq = seq, .blob_crc = crc};
+    header.hdr_crc = crc32_ieee((const uint8_t *)&header, SECTOR_HEADER_SIZE - 4);
+    uint8_t bytes[SECTOR_HEADER_SIZE + sizeof(body)];
+    memcpy(bytes, &header, SECTOR_HEADER_SIZE);
+    memcpy(bytes + SECTOR_HEADER_SIZE, body, sizeof(body));
+    ASSERT(storage_flash_write_slot(slot, bytes, sizeof(bytes)));
+}
+
+static void test_v2_migration_preserves_settings_and_reboots_cleanly(void) {
+    g_current = __func__;
+    storage_host_reset();
+    write_v2_sector(0, 19, "keep-my-key");
+    ASSERT(storage_init());
+    ASSERT_EQ(storage_stats()->seq, 20);
+    ASSERT_EQ(storage_stats()->active_slot, 1);
+    ASSERT_EQ(config_get()->version, 3);
+    ASSERT_EQ(config_get()->global.boot_channel, 3);
+    ASSERT_EQ(config_get()->global.hold_ms, 417);
+    ASSERT_EQ(config_get()->global.oled_auto_cycle_s, 13);
+    ASSERT_EQ(config_get()->global.oled_playlist, 0x0123);
+    ASSERT_EQ(config_get()->global.oled_boot_mode, 0);
+    ASSERT_EQ(config_get()->global.oled_contrast, 0x8F);
+    ASSERT_EQ(config_get()->global.oled_inverted, 0);
+    ASSERT_STR_EQ((const char *)config_get()->channels[3].keys[8].text, "keep-my-key");
+    ASSERT_EQ(config_get()->channels[3].lighting.brightness, 37);
+    ASSERT_EQ(storage_host_write_count(), 2); /* fixture + exactly one migration */
+    ASSERT(storage_init());
+    ASSERT_EQ(storage_stats()->seq, 20);
+    ASSERT_EQ(storage_host_write_count(), 2); /* no write on every subsequent boot */
+}
+
+static void test_v2_brownout_keeps_previous_sector_bootable(void) {
+    g_current = __func__;
+    storage_host_reset();
+    write_v2_sector(1, 81, "keep-my-key");
+    storage_host_fail_next_write(true);
+    ASSERT(storage_init()); /* usable old data even when upgrade fails */
+    ASSERT(storage_stats()->dirty);
+    ASSERT_EQ(storage_host_write_count(), 1);
+    ASSERT_EQ(config_get()->channels[3].lighting.brightness, 37);
+    ASSERT(storage_init()); /* reboot rejects torn target, retries intact v2 */
+    ASSERT_EQ(storage_stats()->recoveries, 1); /* partial v3 sector failed CRC */
+    ASSERT_EQ(storage_stats()->seq, 82);
+    ASSERT_EQ(storage_stats()->active_slot, 0);
+    ASSERT_EQ(storage_host_write_count(), 2);
+    ASSERT_STR_EQ((const char *)config_get()->channels[3].keys[8].text, "keep-my-key");
+}
+
+static void test_v2_newest_sector_wins_before_migration(void) {
+    g_current = __func__;
+    storage_host_reset();
+    write_v2_sector(0, 41, "older-binding");
+    write_v2_sector(1, 42, "newer-binding");
+    ASSERT(storage_init());
+    ASSERT_EQ(storage_stats()->seq, 43);
+    ASSERT_EQ(storage_stats()->active_slot, 0);
+    ASSERT_STR_EQ((const char *)config_get()->channels[3].keys[8].text, "newer-binding");
+    ASSERT(storage_init());
+    ASSERT_STR_EQ((const char *)config_get()->channels[3].keys[8].text, "newer-binding");
+    ASSERT_EQ(storage_host_write_count(), 3); /* two v2 fixtures + one v3 */
+}
+
+static void test_corrupt_v2_blob_is_not_migrated(void) {
+    g_current = __func__;
+    storage_host_reset();
+    write_v2_sector(0, 14, "corrupt-binding");
+    uint8_t raw[SECTOR_HEADER_SIZE + sizeof(cfg_blob_t)];
+    ASSERT(storage_flash_read_slot(0, raw, sizeof(raw)));
+    raw[SECTOR_HEADER_SIZE + 30] ^= 0x80; /* keep header CRC valid, break blob CRC */
+    ASSERT(storage_flash_write_slot(0, raw, sizeof(raw)));
+    ASSERT(!storage_init());
+    ASSERT_EQ(config_get()->channels[3].keys[8].type, ACTION_TYPE_NONE);
+    ASSERT_EQ(config_get()->global.oled_contrast, 0x8F);
+}
+
+static void test_new_oled_settings_validate_and_persist(void) {
+    g_current = __func__;
+    storage_host_reset();
+    storage_init();
+    cfg_blob_t *cfg = config_mutable();
+    cfg->global.oled_boot_mode = 9;
+    cfg->global.oled_contrast = 210;
+    cfg->global.oled_inverted = 1;
+    cfg->global.oled_playlist = (1u << 9) | (1u << 4);
+    cfg->global.oled_auto_cycle_s = 0;
+    config_reseal(cfg);
+    ASSERT(config_validate(cfg));
+    ASSERT(storage_commit());
+    ASSERT(storage_init());
+    ASSERT_EQ(config_get()->global.oled_boot_mode, 9);
+    ASSERT_EQ(config_get()->global.oled_contrast, 210);
+    ASSERT_EQ(config_get()->global.oled_inverted, 1);
+    ASSERT_EQ(config_get()->global.oled_auto_cycle_s, 0);
+    ASSERT_EQ(config_get()->global.oled_playlist, (1u << 9) | (1u << 4));
+    cfg_blob_t invalid = *config_get();
+    invalid.global.oled_boot_mode = 12;
+    config_reseal(&invalid);
+    ASSERT(!config_validate(&invalid));
+    invalid.global.oled_boot_mode = 0;
+    invalid.global.oled_inverted = 2;
+    config_reseal(&invalid);
+    ASSERT(!config_validate(&invalid));
+    invalid.global.oled_inverted = 0;
+    invalid.global._oled_pad = 1;
+    config_reseal(&invalid);
+    ASSERT(!config_validate(&invalid));
+    invalid.global._oled_pad = 0;
+    invalid.global.oled_auto_cycle_s = 1;
+    config_reseal(&invalid);
+    ASSERT(!config_validate(&invalid));
 }
 
 static void test_config_survives_a_reboot(void) {
@@ -273,7 +412,7 @@ static void test_reset_restores_factory_and_persists(void) {
 const test_case_t config_tests[] = {
     {"defaults_are_valid_and_sealed", test_defaults_are_valid_and_sealed},
     {"defaults_leave_keys_empty_and_knob_useful", test_defaults_leave_keys_empty_and_knob_useful},
-    {"three_channels_have_distinct_colours", test_three_channels_have_distinct_colours},
+    {"four_channels_have_distinct_colours", test_four_channels_have_distinct_colours},
     {"crc_detects_a_single_bit_flip", test_crc_detects_a_single_bit_flip},
     {"crc_detects_corruption_anywhere_in_the_blob", test_crc_detects_corruption_anywhere_in_the_blob},
     {"validation_rejects_unknown_action_type", test_validation_rejects_unknown_action_type},
@@ -283,6 +422,11 @@ const test_case_t config_tests[] = {
     {"struct_sizes_match_the_wire_format", test_struct_sizes_match_the_wire_format},
     {"first_boot_creates_a_valid_sector", test_first_boot_creates_a_valid_sector},
     {"config_survives_a_reboot", test_config_survives_a_reboot},
+    {"v2_migration_preserves_settings_and_reboots_cleanly", test_v2_migration_preserves_settings_and_reboots_cleanly},
+    {"v2_brownout_keeps_previous_sector_bootable", test_v2_brownout_keeps_previous_sector_bootable},
+    {"v2_newest_sector_wins_before_migration", test_v2_newest_sector_wins_before_migration},
+    {"corrupt_v2_blob_is_not_migrated", test_corrupt_v2_blob_is_not_migrated},
+    {"new_oled_settings_validate_and_persist", test_new_oled_settings_validate_and_persist},
     {"ab_pingpong_alternates_sectors", test_ab_pingpong_alternates_sectors},
     {"a_failed_write_leaves_the_previous_copy_bootable",
      test_a_failed_write_leaves_the_previous_copy_bootable},

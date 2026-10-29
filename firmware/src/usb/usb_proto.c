@@ -1,5 +1,5 @@
 /*
- * usb_proto.c — the config protocol over CDC.
+ * usb_proto.c — config, events and volatile OLED streaming over CDC.
  *
  * Request/response over a byte stream, driven from the main loop rather than
  * from a USB callback. Reason: the handlers touch storage (which blocks for
@@ -24,6 +24,9 @@
 #include "ascii_cmd.h"
 #include "protocol.h"
 #include "leds.h"
+#include "oled.h"
+#include "oled_playlist.h"
+#include "oled_stream.h"
 #include "storage.h"
 
 #ifndef USB_PROTO_NO_HW
@@ -71,6 +74,10 @@ static uint8_t s_tx_head, s_tx_tail, s_tx_count;
 
 static uint16_t s_fw_build = 1;
 static uint32_t s_now_ms; /* last value passed to usb_proto_pump */
+static uint16_t s_mode_epoch;
+static uint8_t s_announced_mode;
+static bool s_mode_known;
+static bool s_mode_event_pending; /* retry if the TX ring is full */
 
 /* Retire the head slot once it has gone out completely. */
 static void tx_advance(void) {
@@ -100,6 +107,24 @@ static bool tx_queue(const uint8_t cmd, const void *payload, uint16_t len) {
     return tx_push(&f);
 }
 
+static bool tx_mode_snapshot(const uint8_t state[3]) {
+    frame_out_t f;
+    if (!frame_build(&f, CMD_OLED_MODE_EVENT, state, 3)) return false;
+    /* A pad with no serial reader may rotate forever. Coalesce the last
+     * unsent snapshot instead of filling all four TX slots with old modes and
+     * starving the PING/GET_STATE that a newly opened host must receive.
+     * Never mutate a partially sent slot (that would corrupt its CRC). */
+    for (uint8_t n = 0; n < s_tx_count; n++) {
+        tx_slot_t *slot = &s_tx[(s_tx_head + n) % TX_RING_SLOTS];
+        if (slot->sent == 0 && slot->buf[2] == CMD_OLED_MODE_EVENT) {
+            memcpy(slot->buf, f.buf, f.len);
+            slot->len = f.len;
+            return true;
+        }
+    }
+    return tx_push(&f);
+}
+
 static void tx_error(uint8_t code) {
     frame_out_t f;
     if (frame_build_error(&f, code)) tx_push(&f);
@@ -110,15 +135,36 @@ void usb_proto_init(void) {
     config_assembler_init(&s_assembler);
     s_rx_open = false;
     s_tx_head = s_tx_tail = s_tx_count = 0;
+    s_now_ms = 0;
+    s_mode_epoch = 0;
+    s_mode_known = false;
+    s_mode_event_pending = false;
+    led_host_test_clear(); /* a USB reconnect cannot leave a raw frame latched */
+    oled_stream_init();
 }
 
 void usb_proto_set_build(uint16_t build) { s_fw_build = build; }
 
+void usb_proto_oled_mode_changed(uint8_t mode) {
+    if (mode >= OLED_SCREEN_COUNT || (s_mode_known && mode == s_announced_mode)) return;
+    s_announced_mode = mode;
+    s_mode_known = true;
+    s_mode_epoch++;
+    s_mode_event_pending = true;
+    oled_stream_invalidate(); /* never reuse pixels from the previous screen */
+}
+
 /* ---- command handlers --------------------------------------------------- */
 static uint8_t capabilities(void) {
-    uint8_t c = CAP_ENCODER | CAP_FLASH;
-    if (BOARD_OLED_PRESENT) c |= CAP_OLED;
-    if (config_get()->global.usb_report_events) c |= CAP_EVENTS;
+    /* CAP_EVENTS advertises protocol SUPPORT, not the user's current switch.
+     * A disabled stream is re-enableable via cfg.global.usb_report_events in
+     * an acknowledged SET_CONFIG/COMMIT; clearing this bit when off would
+     * incorrectly make the host think the firmware cannot emit events. */
+    uint8_t c = CAP_ENCODER | CAP_FLASH | CAP_EVENTS;
+    if (oled_hw_present()) c |= CAP_OLED | CAP_OLED_STREAM;
+#if BOARD_LED_OUTPUT_ENABLED
+    c |= CAP_LED_OUTPUT; /* bench enable flag only, never a current certification */
+#endif
     return c;
 }
 
@@ -240,9 +286,17 @@ static void handle_set_lighting(uint8_t cmd, const uint8_t *payload, uint16_t le
         tx_error(STATUS_BAD_ARG);
         return;
     }
+    /* A preview claims to illuminate the pad now; refuse that claim when
+     * physical output is gated. A saved setting remains useful for later bench
+     * commissioning, so SET_LIGHTING is still allowed. */
+    if (cmd == CMD_PREVIEW_LIGHTING && !BOARD_LED_OUTPUT_ENABLED) {
+        tx_error(STATUS_LED_DISABLED);
+        return;
+    }
     cfg_blob_t *cfg = config_mutable();
     memcpy(&cfg->channels[ch].lighting, payload + 1, sizeof(cfg_lighting_t));
     config_reseal(cfg);
+    led_host_test_clear(); /* a new lighting choice ends a temporary raw test */
     /* PREVIEW does not mark dirty: it is for the app's live colour picker and
      * must not survive a power cycle unless the user then saves. */
     if (cmd == CMD_SET_LIGHTING) storage_mark_dirty();
@@ -250,15 +304,61 @@ static void handle_set_lighting(uint8_t cmd, const uint8_t *payload, uint16_t le
 }
 
 static void handle_led_test(const uint8_t *payload, uint16_t len) {
-    if (len < CFG_LED_COUNT * 3) {
+    if (len != CFG_LED_COUNT * 3) {
         tx_error(STATUS_BAD_ARG);
         return;
     }
-    /* Bypasses the lighting engine entirely: this is the "is my wiring right"
-     * command. If LED 3 does not light when this says it should, the problem is
-     * solder, not firmware. */
-    led_host_test_override(payload);
+    if (!BOARD_LED_OUTPUT_ENABLED) {
+        tx_error(STATUS_LED_DISABLED);
+        return;
+    }
+    /* Exact unscaled RGB bytes for a current-limited BENCH test only. A dark
+     * pixel alone cannot distinguish firmware, wiring, power and part mismatch.
+     * The override expires automatically; zero is not a restore command. */
+    led_host_test_override(payload, s_now_ms);
     tx_queue(CMD_SET_ACK, (const uint8_t[]){STATUS_OK}, 1);
+}
+
+static void handle_get_oled_state(void) {
+    uint8_t mode = oled_playlist_current();
+    /* Tests and a late caller may not have installed the playlist listener.
+     * The actual cursor always wins; never advertise a stale mode. */
+    if (!s_mode_known || s_announced_mode != mode) usb_proto_oled_mode_changed(mode);
+    const uint8_t state[3] = {mode, (uint8_t)s_mode_epoch, (uint8_t)(s_mode_epoch >> 8)};
+    tx_queue(CMD_OLED_STATE, state, sizeof(state));
+}
+
+static void handle_set_oled_mode(const uint8_t *payload, uint16_t len) {
+    if (len != 1u || payload[0] >= OLED_SCREEN_COUNT || !oled_hw_present()) {
+        tx_error(STATUS_BAD_ARG);
+        return;
+    }
+    (void)oled_playlist_select(payload[0]);
+    /* A manual selection starts its full dwell even when it re-selects the
+     * current screen. The listener invalidates live pixels on real changes. */
+    oled_playlist_touch(s_now_ms);
+    handle_get_oled_state();
+}
+
+static void handle_oled_frame(const uint8_t *payload, uint16_t len) {
+    /* There is no request ID on ERROR. Report at most one application error
+     * for a two-packet transfer: an invalid first half is silently discarded,
+     * then the final half returns BAD_ARG/CRC/BUSY once. Two asynchronous ERRORs
+     * could otherwise let the second steal an unrelated mode/save request. */
+    const bool first_half = len > 3u && payload[3] == 0u;
+    if (s_rx_open) { if (!first_half) tx_error(STATUS_BUSY); return; }
+    oled_stream_result_t result = oled_stream_accept(payload, len, s_now_ms,
+                                                      oled_playlist_current(),
+                                                      oled_hw_present() != 0);
+    if (result == OLED_STREAM_COMPLETE) {
+        /* Only a fully assembled, CRC-checked frame receives an ACK. */
+        const uint8_t ack[3] = {payload[0], payload[1], payload[2]};
+        tx_queue(CMD_OLED_FRAME_ACK, ack, sizeof(ack));
+    } else if (result == OLED_STREAM_BAD_CRC) {
+        tx_error(STATUS_BAD_CRC); /* full-frame check only runs on final half */
+    } else if (result < 0 && !first_half) {
+        tx_error(STATUS_BAD_ARG);
+    }
 }
 
 static void handle_bootloader(void) {
@@ -282,8 +382,27 @@ static void dispatch_command(const frame_in_t *f) {
     case CMD_SET_LIGHTING:
     case CMD_PREVIEW_LIGHTING: handle_set_lighting(f->cmd, f->payload, f->len); break;
     case CMD_LED_TEST: handle_led_test(f->payload, f->len); break;
+    case CMD_OLED_FRAME: handle_oled_frame(f->payload, f->len); break;
+    case CMD_GET_OLED_STATE: handle_get_oled_state(); break;
+    case CMD_SET_OLED_MODE: handle_set_oled_mode(f->payload, f->len); break;
     case CMD_BOOTLOADER: handle_bootloader(); break;
     default: tx_error(STATUS_UNKNOWN_CMD); break;
+    }
+}
+
+/* A transport-corrupt OLED packet never earns a frame ACK. Unlike ordinary
+ * single-request commands, two OLED packets share one pending host reply.
+ * Reporting parser errors for both could leave an orphan ERROR that steals the
+ * next mode or flash request (ERROR has no request ID). A corrupt first packet
+ * is followed by an application BAD_ARG on the final packet; a corrupt final
+ * packet simply times out at the host and the pad falls back locally. */
+static void report_parse_error(parse_result_t r) {
+    if (s_parser.cmd == CMD_OLED_FRAME) return;
+    switch (r) {
+    case PARSE_BAD_CRC:     tx_error(STATUS_BAD_CRC);     break;
+    case PARSE_BAD_LEN:     tx_error(STATUS_BAD_LENGTH);  break;
+    case PARSE_BAD_VERSION: tx_error(STATUS_BAD_VERSION); break;
+    default:                                              break;
     }
 }
 
@@ -338,31 +457,31 @@ void usb_proto_pump(uint32_t now_ms) {
         if (r == PARSE_OK) {
             dispatch_command(&f);
         } else {
-            /* Report the reason, not a catch-all. magic.h defines a distinct
-             * status for each of these, and collapsing them onto BAD_CRC - which
-             * this used to do - sends the app chasing line noise when the real
-             * problem was a protocol version mismatch or a truncated frame. The
-             * three causes have three different fixes and the host cannot tell
-             * them apart any other way.
-             *
-             * PARSE_NEED_MORE is the normal case mid-frame and PARSE_RESYNC means
-             * junk was dropped while hunting for the start-of-frame magic. Neither
-             * gets a reply: answering RESYNC would mean replying to bytes that were
-             * never a frame, which is how a line glitch turns into a flood. */
-            switch (r) {
-            case PARSE_BAD_CRC:     tx_error(STATUS_BAD_CRC);     break;
-            case PARSE_BAD_LEN:     tx_error(STATUS_BAD_LENGTH);  break;
-            case PARSE_BAD_VERSION: tx_error(STATUS_BAD_VERSION); break;
-            default:                                              break;
-            }
+            /* Report the distinct CRC/length/version errors for ordinary
+             * commands. OLED transfers are the exception: an invalid packet
+             * gets no ACK, and the final half or host timeout rejects it once,
+             * so an orphan second ERROR cannot steal the next request.
+             * PARSE_NEED_MORE/RESYNC are not requests and get no reply. */
+            report_parse_error(r);
         }
     }
 
 #endif
 
-    /* Stream pending events. Deliberately OUTSIDE the hardware guard: this is
-     * protocol logic, not CDC plumbing, so the host tests exercise the real
-     * code path instead of a copy of it. */
+    /* Mode changes come from the physical playlist (including its timer and
+     * bound OLED_NEXT actions). Keep only the newest unsent event rather than
+     * depending on CDC DTR: some serial hosts open the port without asserting
+     * line state, but still exchange binary frames. A disconnected pad can
+     * rotate indefinitely without consuming the reply ring. */
+    if (s_mode_event_pending) {
+        const uint8_t state[3] = {s_announced_mode,
+                                  (uint8_t)s_mode_epoch, (uint8_t)(s_mode_epoch >> 8)};
+        if (tx_mode_snapshot(state)) s_mode_event_pending = false;
+    }
+
+    /* Stream pending key events. Deliberately OUTSIDE the hardware guard: this
+     * is protocol logic, not CDC plumbing, so host tests exercise the real
+     * path instead of a copy of it. */
     if (config_get()->global.usb_report_events) {
         key_event_t ev;
         int budget = 4; /* do not let event traffic starve command replies */
@@ -401,6 +520,7 @@ void usb_proto_inject(const uint8_t *data, size_t len) {
     for (size_t i = 0; i < len; i++) {
         parse_result_t r = protocol_parser_push(&s_parser, data[i], &f);
         if (r == PARSE_OK) dispatch_command(&f);
+        else report_parse_error(r);
     }
 }
 

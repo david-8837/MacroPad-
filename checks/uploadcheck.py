@@ -43,18 +43,13 @@ async def main():
               "SUCCESSFULLY UPLOADED" not in before)
         check("the modal no longer claims a 1,708-byte blob", "1,708" not in before)
 
-        flicked = await pg.evaluate("""() => {
-          const b = Array.from(document.querySelectorAll('button')).find(x => /FLASH \\/ UPLOAD ALL/i.test(x.textContent||''));
-          if (!b) return false; b.click(); return true; }""")
-        await pg.wait_for_timeout(1200)
+        upload_button = pg.get_by_role("button", name="FLASH / UPLOAD ALL TO MACROPAD NOW")
+        check("upload requires a compatible MPAD3 device, not just an open port",
+              await upload_button.is_disabled())
+        check("the modal explains how to connect", "Connect the USB serial / COM port" in before)
         after = await pg.evaluate("() => document.body.innerText")
-
-        check("the flash button runs", flicked)
-        check("with no pad, the result says nothing was written", "NOTHING WAS WRITTEN" in after,
-              after[-400:].replace("\n", " | "))
-        check("and it names the reason", "No pad is answering" in after)
-        check("it never claims the pad acknowledged a commit",
-              "ACKNOWLEDGED" not in after and "SUCCESSFULLY UPLOADED" not in after)
+        check("no disconnected upload is reported as success",
+              "THE PAD ACKNOWLEDGED" not in after and "SUCCESSFULLY UPLOADED" not in after)
         check("no alert dialogs", not dialogs, "; ".join(dialogs[:2]))
         check("no console errors", not errs, "; ".join(errs[:3]))
         await pg.screenshot(path="checks/artifacts/uploadcheck.png")

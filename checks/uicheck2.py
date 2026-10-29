@@ -105,7 +105,7 @@ async def main():
         check("reset restores the interval", prefs.get("autoCycleS") == 30, str(prefs.get("autoCycleS")))
         check("reset restores the rotation", len(prefs.get("playlist") or []) == 12, str(len(prefs.get("playlist") or [])))
         check("reset clears inversion", prefs.get("inverted") is False, str(prefs.get("inverted")))
-        check("reset restores brightness", prefs.get("brightness") == 100, str(prefs.get("brightness")))
+        check("reset restores SSD1306 0x8F contrast (56%)", prefs.get("brightness") == 56, str(prefs.get("brightness")))
 
         # G. Telemetry tab: says plainly that nothing was measured.
         await page.evaluate(TAB, "TELEMETRY")
@@ -115,10 +115,11 @@ async def main():
         check("telemetry shows placeholders", "--" in text)
         check("media shows NO MEDIA", "NO MEDIA" in text)
         check("telemetry has no fake meter values", "35%" not in text and "58%" not in text)
+        check("display save is labeled as PC-only", "SAVE DISPLAY (PC ONLY)" in text)
 
-        # H. Save closes cleanly and leaves the prefs in place.
+        # H. PC-only Save leaves the preference preview in place.
         await page.evaluate("""() => {
-          const b = Array.from(document.querySelectorAll('button')).find(x => /^SAVE DISPLAY$/.test((x.textContent||'').trim()));
+          const b = Array.from(document.querySelectorAll('button')).find(x => (x.textContent||'').trim() === 'SAVE DISPLAY (PC ONLY)');
           b && b.click();
         }""")
         await page.wait_for_timeout(300)

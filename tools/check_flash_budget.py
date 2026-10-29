@@ -3,18 +3,18 @@
 check_flash_budget.py — make sure the firmware image stops where the OLED frame
 region begins.
 
-The panel's animation frames are `const` tables in XIP flash, and they sit in a
-reserved region directly below the two config sectors:
+The panel's animation frames are `const` tables linked into the normal UF2
+image, NOT a separately written frame store. The flash map reserves an unused
+window for a possible future store:
 
-    0x00000000 .. 0x0001FFFF  boot2 + application image     (ceiling 0x1E0000)
-    0x001E0000 .. 0x001FDFFF  OLED frames                     (120 KiB = 240 x 512 B)
-    0x001FE000 .. 0x001FFFFF  config A / config B             (2 x 4 KiB)
+    0x00000000 .. 0x001DFFFF  boot2 + app + baked frames    (ceiling 0x1E0000)
+    0x001E0000 .. 0x001FDFFF  unused/reserved window       (120 KiB budget)
+    0x001FE000 .. 0x001FFFFF  config A / config B           (2 x 4 KiB)
 
-That arithmetic is derived in src/oled/capacity.ts and asserted in
-firmware/include/board.h, but neither of those can see how big the compiled
-image actually got. This script can: it reads the .uf2 the build produced and
-checks the highest addressed byte, so a firmware that grows into the frame
-region fails the build instead of silently corrupting saved frames.
+The animation-content budget is derived in src/oled/capacity.ts and asserted in
+firmware/include/board.h. This script reads a built UF2 to check that the whole
+image stays below the reserved window; it does not prove that frames are mapped
+there or that the target board actually boots.
 
     python3 tools/check_flash_budget.py                    # auto-find a .uf2
     python3 tools/check_flash_budget.py path/to/mpad3.uf2

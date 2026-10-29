@@ -1,5 +1,7 @@
 /*
- * leds.c — colour maths and the PIO/dMA driver for 9 x SK6812MINI-E.
+ * leds.c — colour maths for nine pixels; gated GPIO or bench-only PIO/DMA.
+ * The strip is not yet selected; existing bit timing targets the Normand
+ * SK6812MINI-E Rev.02 as a reference, not an automatic compatibility claim.
  *
  * The maths half (led_compute_frame, hsv_to_rgb, led_gamma_scale) is pure and
  * compiled into the host tests too. The hardware half is behind
@@ -12,13 +14,13 @@
 #include "actions.h"
 
 #ifndef LEDS_NO_HW
+#include "pico/stdlib.h"
+#if BOARD_LED_OUTPUT_ENABLED
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
-#include "hardware/irq.h"
 #include "hardware/pio.h"
-#include "pico/stdlib.h"
-
 #include "ws2812minie.pio.h"
+#endif
 #endif
 
 /* ---- gamma -------------------------------------------------------------- */
@@ -216,11 +218,15 @@ void led_compute_frame(const led_engine_t *eng, const cfg_lighting_t *L, const l
     }
 }
 
-/* ---- raw override ------------------------------------------------------- */
+/* ---- bounded raw wiring test ------------------------------------------- */
+#if BOARD_LED_OUTPUT_ENABLED
 static led_frame_t s_override;
+static uint32_t s_override_expires_at_ms;
+#endif
 static bool s_override_active;
 
-void led_host_test_override(const uint8_t *rgb24) {
+void led_host_test_override(const uint8_t *rgb24, uint32_t now_ms) {
+#if BOARD_LED_OUTPUT_ENABLED
     if (!rgb24) {
         s_override_active = false;
         return;
@@ -228,65 +234,92 @@ void led_host_test_override(const uint8_t *rgb24) {
     memset(&s_override, 0, sizeof(s_override));
     s_override.count = CFG_LED_COUNT;
     for (int i = 0; i < CFG_LED_COUNT; i++) {
-        /* No gamma and no brightness scaling here on purpose: the point of the
-         * wiring test is to see the exact bytes you asked for on the exact LED
-         * you asked for. */
+        /* Raw exact bytes are for current-limited BENCH wiring checks only.
+         * This command cannot bypass the compile-time output gate. */
         s_override.px[i].r = rgb24[i * 3 + 0];
         s_override.px[i].g = rgb24[i * 3 + 1];
         s_override.px[i].b = rgb24[i * 3 + 2];
     }
+    s_override_expires_at_ms = now_ms + LED_TEST_HOLD_MS;
     s_override_active = true;
     led_hw_show(&s_override);
+#else
+    (void)rgb24;
+    (void)now_ms;
+    s_override_active = false;
+#endif
 }
 
-bool led_host_test_active(void) { return s_override_active; }
+bool led_host_test_active(uint32_t now_ms) {
+#if BOARD_LED_OUTPUT_ENABLED
+    if (s_override_active && (int32_t)(now_ms - s_override_expires_at_ms) >= 0) {
+        s_override_active = false;
+    }
+#else
+    (void)now_ms;
+#endif
+    return s_override_active;
+}
 
-/* Called by main before each engine-driven frame so a normal update always wins
- * over a stale test pattern. */
 void led_host_test_clear(void) { s_override_active = false; }
+
+/* The PIO shifts LEFT, 24 bits per LED. Put GRB/RGB in bits 31..8 so the
+ * first output bit is G7 (or R7 for an explicitly RGB-ordered LED variant).
+ * Bits 7..0 are never transmitted; the next 32-bit word autopulls after bit 24. */
+uint32_t led_pack_pio_word(uint8_t r, uint8_t g, uint8_t b) {
+#if BOARD_LED_RGB_ORDER
+    return ((uint32_t)r << 24) | ((uint32_t)g << 16) | ((uint32_t)b << 8);
+#else
+    return ((uint32_t)g << 24) | ((uint32_t)r << 16) | ((uint32_t)b << 8);
+#endif
+}
 
 /* ---- hardware ----------------------------------------------------------- */
 #ifndef LEDS_NO_HW
+#if BOARD_LED_OUTPUT_ENABLED
 
 static PIO s_pio;
 static uint s_sm;
 static int s_dma_chan = -1;
-/* One 32-bit PIO word per LED (low 24 bits used). */
+static bool s_frame_started;
+/* One 32-bit PIO word per LED (upper 24 bits transmitted). */
 static uint32_t s_dma_buf[CFG_LED_COUNT];
+
+/* Conservatively allow the last 24-bit pixel to finish AFTER the TX FIFO
+ * empties, then leave >80 us LOW for the Normand SK6812MINI-E reset/latch.
+ * Keeping the values explicit lets tools/pio_timing.py cross-check them against
+ * the measured instruction paths and the cited datasheet. */
+#define LED_PIO_CLOCK_MHZ 10u
+#define LED_SYMBOL_CYCLES 13u
+#define LED_LAST_WORD_US ((24u * LED_SYMBOL_CYCLES + LED_PIO_CLOCK_MHZ - 1u) / LED_PIO_CLOCK_MHZ)
+#define LED_RESET_GUARD_US 100u
+
+static void led_hw_wait_previous(void) {
+    if (!s_frame_started) return;
+    /* DMA completion means the last word was written into the PIO FIFO, NOT
+     * that the pixel has been transmitted. Never overwrite the DMA source
+     * before this wait (the old implementation did exactly that). */
+    dma_channel_wait_for_finish_blocking(s_dma_chan);
+    while (!pio_sm_is_tx_fifo_empty(s_pio, s_sm)) tight_loop_contents();
+    busy_wait_us(LED_LAST_WORD_US + LED_RESET_GUARD_US);
+}
 
 void led_hw_init(void) {
     uint offset;
     s_pio = pio0;
-    /* pio_add_program can fail only if the PIO is out of instruction memory,
-     * which cannot happen with a single 12-instruction program, but check
-     * anyway: silently running with a bad offset is much harder to debug. */
+    /* pio_add_program can fail if another user already filled PIO memory;
+     * don't run the state machine with an invalid program offset. */
     if (!pio_can_add_program(s_pio, &ws2812minie_program)) return;
     offset = pio_add_program(s_pio, &ws2812minie_program);
     s_sm = pio_claim_unused_sm(s_pio, true);
 
-    /* 8 MHz PIO clock, so one PIO cycle is 125 ns. ws2812minie.pio derives
-     * T0H/T1H/T0L/T1L from that, and tools/pio_timing.py simulates the loop and
-     * fails the test run if the waveform leaves the usable envelope or if this
-     * number stops matching it.
-     *
-     * 125 ns is not an arbitrary pick, it is the optimum for this loop shape.
-     * With the bit loop at T0H=2, T1H=4, T0L=3, T1L=3 cycles, the datasheet
-     * windows constrain the cycle time to:
-     *     T0H 150..450 ns -> 75..225      T1H 450..750 ns -> 112.5..187.5
-     *     T0L 150..450 ns -> 50..150      T1L 450..750 ns -> 150..250
-     * The first three intersect at 112.5..150 ns; T1L wants >= 150 and only just
-     * touches it, so no cycle time satisfies all four. 125 ns (exactly 133/16.625,
-     * representable in the PIO's 16.16 divisor) satisfies three and leaves T1L
-     * 75 ns short, which is the same compromise every WS2812 driver makes - the
-     * part discriminates on the high pulse and has no maximum low time below the
-     * ~50 us reset.
-     *
-     * If a batch of LEDs misreads the data, slow this down rather than editing the
-     * .pio: 6 MHz scales every pulse by 1.25 and leaves the ratios alone. */
-    float div = (float)clock_get_hz(clk_sys) / (8.0f * 1000000.0f);
+    /* 10 MHz PIO clock: 100 ns/cycle. Both .pio bit paths take 13 cycles,
+     * yielding T0H/T0L = 300/1000 ns and T1H/T1L = 700/600 ns. The Normand
+     * Rev.02 minima and maxima (including >=1.2 us per bit) are checked by
+     * tools/pio_timing.py. Physical GPIO/buffer timing still needs a scope. */
+    float div = (float)clock_get_hz(clk_sys) / (LED_PIO_CLOCK_MHZ * 1000000.0f);
 
-    ws2812minie_program_init(s_pio, s_sm, offset, BOARD_LED_PIN, div,
-                             BOARD_LED_INVERT_OUTPUT ? 1 : 0);
+    ws2812minie_program_init(s_pio, s_sm, offset, BOARD_LED_PIN, div);
 
     s_dma_chan = dma_claim_unused_channel(true);
     dma_channel_config c = dma_channel_get_default_config(s_dma_chan);
@@ -299,36 +332,39 @@ void led_hw_init(void) {
     memset(s_dma_buf, 0, sizeof(s_dma_buf));
     dma_channel_configure(s_dma_chan, &c, &s_pio->txf[s_sm], s_dma_buf, CFG_LED_COUNT,
                           false);
+    s_frame_started = false;
 }
 
 void led_hw_show(const led_frame_t *f) {
     if (!f || s_dma_chan < 0) return;
 
-    /* Pack 24-bit GRB words, 8 bits per PIO write. The PIO program consumes one
-     * 32-bit word per LED and shifts out 24 bits from it. */
+    /* Wait BEFORE writing s_dma_buf; an in-progress DMA still reads from it.
+     * The PIO FIFO and OSR also need to drain and latch before the next frame. */
+    led_hw_wait_previous();
     for (int i = 0; i < CFG_LED_COUNT; i++) {
-        uint8_t r = f->px[i].r, g = f->px[i].g, b = f->px[i].b;
-#if BOARD_LED_RGB_ORDER
-        s_dma_buf[i] = ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
-#else
-        s_dma_buf[i] = ((uint32_t)g << 16) | ((uint32_t)r << 8) | b;
-#endif
+        s_dma_buf[i] = led_pack_pio_word(f->px[i].r, f->px[i].g, f->px[i].b);
     }
-
-    /* Wait for the previous frame to finish before touching the buffer. At 60 Hz
-     * with a 216 us frame this never blocks for long, but not waiting is what
-     * causes the classic "top half of the strip shows last frame's colours" bug. */
-    dma_channel_wait_for_finish_blocking(s_dma_chan);
     dma_channel_set_read_addr(s_dma_chan, s_dma_buf, true);
+    s_frame_started = true;
 }
 
 void led_hw_blank(void) {
+    if (s_dma_chan < 0) return;
+    led_hw_wait_previous();
     memset(s_dma_buf, 0, sizeof(s_dma_buf));
-    if (s_dma_chan >= 0) {
-        dma_channel_wait_for_finish_blocking(s_dma_chan);
-        dma_channel_set_read_addr(s_dma_chan, s_dma_buf, true);
-    }
+    dma_channel_set_read_addr(s_dma_chan, s_dma_buf, true);
+    s_frame_started = true;
 }
+
+#else /* default target build: no PIO/DMA, GPIO LOW after initialization */
+void led_hw_init(void) {
+    gpio_init(BOARD_LED_PIN);
+    gpio_put(BOARD_LED_PIN, false); /* set output latch BEFORE enabling output */
+    gpio_set_dir(BOARD_LED_PIN, GPIO_OUT);
+}
+void led_hw_show(const led_frame_t *f) { (void)f; }
+void led_hw_blank(void) { gpio_put(BOARD_LED_PIN, false); }
+#endif /* BOARD_LED_OUTPUT_ENABLED */
 
 #else /* host build */
 

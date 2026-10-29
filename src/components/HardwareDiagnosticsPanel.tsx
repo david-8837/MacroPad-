@@ -2,20 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Activity,
   Terminal,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
   Copy,
   Trash2,
   RefreshCw,
   Search,
-  Filter,
   Cpu,
   Volume2,
   Network,
   Download,
-  X,
-  Zap,
 } from 'lucide-react';
 import type { DiagnosticLogEntry, DiagnosticSelfTestResult } from '../types/electron';
 
@@ -30,20 +24,17 @@ export interface ActionHistoryEntry {
   source?: 'hardware' | 'app' | 'webhook';
 }
 
-interface DiagnosticLogDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface HardwareDiagnosticsPanelProps {
+  isExpanded: boolean;
   actionHistory: ActionHistoryEntry[];
   onClearHistory: () => void;
-  onOpenFirmwareModal?: () => void;
 }
 
-export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
-  isOpen,
-  onClose,
+/** Inline disclosure body: the parent Hardware summary owns expand/collapse. */
+export const HardwareDiagnosticsPanel: React.FC<HardwareDiagnosticsPanelProps> = ({
+  isExpanded,
   actionHistory,
   onClearHistory,
-  onOpenFirmwareModal,
 }) => {
   const [activeTab, setActiveTab] = useState<'timeline' | 'health' | 'nativelog'>('timeline');
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,40 +44,52 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
   const [nativeLogs, setNativeLogs] = useState<DiagnosticLogEntry[]>([]);
   const [copiedNotice, setCopiedNotice] = useState<string | null>(null);
 
-  // Poll native log entries when drawer is open
+  // Poll native log entries only while the inline section is expanded.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isExpanded) return;
 
-    const fetchNativeLog = () => {
-      window.electronAPI?.getDiagnosticLog?.().then((res) => {
-        if (res && res.ok && Array.isArray(res.value)) {
+    const fetchNativeLog = async () => {
+      try {
+        const res = await window.electronAPI?.getDiagnosticLog?.();
+        if (res?.ok && Array.isArray(res.value)) {
           setNativeLogs(res.value.slice().reverse());
         }
-      });
+      } catch {
+        setNativeLogs([]);
+      }
     };
 
     fetchNativeLog();
     const interval = setInterval(fetchNativeLog, 2000);
     return () => clearInterval(interval);
-  }, [isOpen]);
+  }, [isExpanded]);
 
   const runDiagnostics = async () => {
     setIsRunningTest(true);
     try {
       const res = await window.electronAPI?.runDiagnosticSelfTest?.();
-      if (res && res.ok) {
+      if (res?.ok) {
         setSelfTestResult(res.value);
       } else {
-        // Fallback for browser testing
+        // Browser previews cannot test Windows modules; do not report mock passes.
+        const detail = window.electronAPI?.runDiagnosticSelfTest
+          ? 'Native self-test returned no result. Open the Windows app and retry.'
+          : 'Unavailable in browser preview. Run inside the Windows app for native checks.';
         setSelfTestResult({
-          system: { ok: true, detail: 'Browser mode: Mock system telemetry active' },
-          audio: { ok: true, detail: 'Browser mode: Mock WebAudio active' },
-          webhook: { ok: true, detail: 'Port 38491 listening (token protected)' },
+          system: { ok: false, detail },
+          audio: { ok: false, detail },
+          webhook: { ok: false, detail },
           time: new Date().toISOString(),
         });
       }
     } catch {
-      // ignore
+      const detail = 'Native self-test failed to respond. Retry in the Windows app.';
+      setSelfTestResult({
+        system: { ok: false, detail },
+        audio: { ok: false, detail },
+        webhook: { ok: false, detail },
+        time: new Date().toISOString(),
+      });
     } finally {
       setIsRunningTest(false);
     }
@@ -148,19 +151,20 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
     copyToClipboard(report, 'Full Diagnostic Report Copied!');
   };
 
-  if (!isOpen) return null;
+  if (!isExpanded) return null;
+
+  const nativeChecksAvailable = Boolean(window.electronAPI?.runDiagnosticSelfTest);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#EDECE8] animate-in fade-in duration-150">
-      <div className="relative w-full max-w-4xl h-[85vh] bg-[#FFFFFF] border border-[#E3E2DE] flex flex-col overflow-hidden">
-        {/* Top Header */}
-        <div className="px-6 py-4 border-b border-[#E3E2DE] flex items-center justify-between bg-[#EDECE8]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#EDECE8] border border-[#C7C7C7] flex items-center justify-center text-[#1351AA]">
-              <Activity className="w-5 h-5" />
+    <div className="min-w-0 h-[min(55vh,500px)] min-h-[280px] flex flex-col overflow-hidden border-t border-[#E3E2DE] bg-[#FFFFFF]">
+        {/* Inline header: no overlay, modal backdrop or separate close button. */}
+        <div className="px-3 py-2 border-b border-[#E3E2DE] flex flex-wrap items-center justify-between gap-2 bg-[#EDECE8]">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 shrink-0 bg-[#EDECE8] border border-[#C7C7C7] flex items-center justify-center text-[#1351AA]">
+              <Activity className="w-4 h-4" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-[#141414] flex items-center gap-2">
+            <div className="min-w-0">
+              <h2 className="text-xs font-bold text-[#141414] flex flex-wrap items-center gap-1">
                 Action History & Diagnostics
                 {copiedNotice && (
                   <span className="text-[11px] font-mono text-[#1351AA] bg-[#EDECE8] px-2 py-0.5 border border-[#C7C7C7] animate-pulse">
@@ -168,11 +172,11 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
                   </span>
                 )}
               </h2>
-              <p className="text-xs text-[#646464]">Live hardware telemetry, execution stream, and subsystem self-tests</p>
+              <p className="text-[10px] text-[#646464]">Action stream, self-tests and native wire log</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ml-auto">
             <button
               onClick={exportFullDiagnosticReport}
               className="px-3 py-1.5 bg-[#F4F3F0] hover:bg-[#EDECE8] text-[#141414] text-xs font-mono border border-[#E3E2DE] flex items-center gap-1.5 transition-colors"
@@ -181,24 +185,20 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
               <Download className="w-3.5 h-3.5 text-[#1351AA]" />
               Export Report
             </button>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 bg-[#F4F3F0] hover:bg-[#EDECE8] text-[#444343] hover:text-[#141414] flex items-center justify-center border border-[#E3E2DE] transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+
           </div>
         </div>
 
         {/* Tab Selection */}
-        <div className="px-6 pt-3 border-b border-[#E3E2DE] flex items-center gap-4 bg-[#E3E2DE]">
+        <div className="px-3 pt-2 border-b border-[#E3E2DE] flex items-center gap-3 overflow-x-auto shrink-0 bg-[#E3E2DE] [&>button]:shrink-0 [&>button]:whitespace-nowrap">
           <button
             onClick={() => setActiveTab('timeline')}
+            aria-label={`Action History Stream (${actionHistory.length})`}
             className={`pb-2.5 text-xs font-mono font-bold transition-all relative ${
  activeTab === 'timeline' ? 'text-[#1351AA]' : 'text-[#646464] hover:text-[#444343]'
  }`}
           >
-            Action History Stream ({actionHistory.length})
+            History ({actionHistory.length})
             {activeTab === 'timeline' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1351AA] " />
             )}
@@ -208,22 +208,24 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
               setActiveTab('health');
               if (!selfTestResult) runDiagnostics();
             }}
+            aria-label="Subsystem Self-Tests"
             className={`pb-2.5 text-xs font-mono font-bold transition-all relative ${
  activeTab === 'health' ? 'text-[#1351AA]' : 'text-[#646464] hover:text-[#444343]'
  }`}
           >
-            Subsystem Self-Tests
+            Self-Tests
             {activeTab === 'health' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1351AA] " />
             )}
           </button>
           <button
             onClick={() => setActiveTab('nativelog')}
+            aria-label={`Native Engine Wire Log (${nativeLogs.length})`}
             className={`pb-2.5 text-xs font-mono font-bold transition-all relative ${
  activeTab === 'nativelog' ? 'text-[#1351AA]' : 'text-[#646464] hover:text-[#444343]'
  }`}
           >
-            Native Engine Wire Log ({nativeLogs.length})
+            Wire Log ({nativeLogs.length})
             {activeTab === 'nativelog' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1351AA] " />
             )}
@@ -231,9 +233,9 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-hidden p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3">
           {activeTab === 'timeline' && (
-            <div className="h-full flex flex-col space-y-3">
+            <div className="min-h-full flex flex-col space-y-3">
               {/* Controls bar */}
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
                 <div className="flex items-center gap-2 flex-1 max-w-sm">
@@ -290,7 +292,7 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
               </div>
 
               {/* Action Log Entries List */}
-              <div className="flex-1 overflow-y-auto space-y-1.5 pr-2 font-mono text-xs">
+              <div className="flex-1 space-y-1.5 pr-1 font-mono text-xs">
                 {filteredHistory.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-[#646464] text-xs italic">
                     <Terminal className="w-8 h-8 mb-2 opacity-40" />
@@ -308,7 +310,7 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
  : 'bg-[#FFFFFF] border-[#E3E2DE] text-[#141414] hover:border-[#E3E2DE]'
  }`}
                     >
-                      <div className="flex items-center gap-3 truncate">
+                      <div className="flex items-center gap-2 min-w-0 truncate">
                         <span className="text-[10px] text-[#646464]">{entry.timestamp}</span>
                         <span
                           className={`w-2 h-2 shrink-0 ${
@@ -343,9 +345,9 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
           )}
 
           {activeTab === 'health' && (
-            <div className="h-full flex flex-col space-y-4 overflow-y-auto pr-1">
-              <div className="flex items-center justify-between">
-                <div>
+            <div className="flex flex-col space-y-4 pr-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
                   <h3 className="text-sm font-semibold text-[#141414]">Subsystem Health & Self-Tests</h3>
                   <p className="text-xs text-[#646464]">Query hardware interop, drivers, audio and streaming sockets</p>
                 </div>
@@ -366,11 +368,11 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
                     <div className="p-2.5 bg-[#EDECE8]/10 text-[#1351AA] border border-[#C7C7C7]/20">
                       <Cpu className="w-5 h-5" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs font-bold text-[#141414] font-mono">SYSTEM TELEMETRY ENGINE</span>
                         <span className={`text-[10px] font-mono px-2 py-0.5 border ${selfTestResult.system.ok ? 'text-[#1351AA] bg-[#EDECE8] border-[#C7C7C7]' : 'text-[#141414] bg-[#EDECE8]/10 border-[#C7C7C7]/20'}`}>
-                          {selfTestResult.system.ok ? 'OPERATIONAL' : 'DEGRADED'}
+                          {selfTestResult.system.ok ? 'OPERATIONAL' : nativeChecksAvailable ? 'DEGRADED' : 'UNAVAILABLE'}
                         </span>
                       </div>
                       <p className="text-xs text-[#444343] font-mono mt-1">{selfTestResult.system.detail}</p>
@@ -382,11 +384,11 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
                     <div className="p-2.5 bg-[#EDECE8]/10 text-[#1351AA] border border-[#C7C7C7]/20">
                       <Volume2 className="w-5 h-5" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs font-bold text-[#141414] font-mono">WINDOWS COREAUDIO INTEROP</span>
                         <span className={`text-[10px] font-mono px-2 py-0.5 border ${selfTestResult.audio.ok ? 'text-[#1351AA] bg-[#EDECE8] border-[#C7C7C7]' : 'text-[#141414] bg-[#EDECE8]/10 border-[#C7C7C7]/20'}`}>
-                          {selfTestResult.audio.ok ? 'OPERATIONAL' : 'DEGRADED'}
+                          {selfTestResult.audio.ok ? 'OPERATIONAL' : nativeChecksAvailable ? 'DEGRADED' : 'UNAVAILABLE'}
                         </span>
                       </div>
                       <p className="text-xs text-[#444343] font-mono mt-1">{selfTestResult.audio.detail}</p>
@@ -398,40 +400,17 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
                     <div className="p-2.5 bg-[#EDECE8]/10 text-[#1351AA] border border-[#C7C7C7]/20">
                       <Network className="w-5 h-5" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs font-bold text-[#141414] font-mono">REST & WEBHOOK API SERVER</span>
                         <span className={`text-[10px] font-mono px-2 py-0.5 border ${selfTestResult.webhook.ok ? 'text-[#1351AA] bg-[#EDECE8] border-[#C7C7C7]' : 'text-[#141414] bg-[#EDECE8]/10 border-[#C7C7C7]/20'}`}>
-                          {selfTestResult.webhook.ok ? 'LISTENING :38491' : 'INACTIVE'}
+                          {selfTestResult.webhook.ok ? 'LISTENING :38491' : nativeChecksAvailable ? 'INACTIVE' : 'UNAVAILABLE'}
                         </span>
                       </div>
                       <p className="text-xs text-[#444343] font-mono mt-1">{selfTestResult.webhook.detail}</p>
                     </div>
                   </div>
 
-                  {/* RP2040 Firmware & Bootloader */}
-                  <div className="p-4 bg-[#EDECE8] border border-[#E3E2DE] flex items-start gap-4">
-                    <div className="p-2.5 bg-[#EDECE8] text-[#1351AA] border border-[#C7C7C7]">
-                      <Zap className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-[#141414] font-mono">RP2040 FIRMWARE & BOOTLOADER</span>
-                        {onOpenFirmwareModal && (
-                          <button
-                            onClick={onOpenFirmwareModal}
-                            className="px-2.5 py-1 bg-[#EDECE8] hover:bg-[#EDECE8] text-[#1351AA] border border-[#C7C7C7] text-[10px] font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                          >
-                            <Zap className="w-3 h-3 fill-current" />
-                            Flash Firmware (.uf2)
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-xs text-[#444343] font-mono mt-1">
-                        RP2040 mass-storage bootloader (RPI-RP2) detection and safe block-level UF2 validation.
-                      </p>
-                    </div>
-                  </div>
                 </div>
               ) : (
                 <div className="h-64 flex flex-col items-center justify-center text-[#646464] text-xs italic">
@@ -442,7 +421,7 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
           )}
 
           {activeTab === 'nativelog' && (
-            <div className="h-full flex flex-col space-y-3 font-mono text-xs">
+            <div className="flex flex-col space-y-3 font-mono text-xs">
               <div className="flex items-center justify-between pb-2 border-b border-[#E3E2DE]">
                 <span className="text-xs text-[#444343]">Chronological Native Ring Buffer (Last 400 lines)</span>
                 <button
@@ -459,15 +438,17 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-1 pr-2 bg-[#EDECE8] p-3 border border-[#E3E2DE] text-[11px]">
+              <div className="space-y-1 pr-1 bg-[#EDECE8] p-3 border border-[#E3E2DE] text-[11px]">
                 {nativeLogs.length === 0 ? (
-                  <div className="text-[#646464] italic">No native log events emitted yet.</div>
+                  <div className="text-[#646464] italic">{window.electronAPI?.getDiagnosticLog
+                    ? 'No native log events emitted yet.'
+                    : 'Native log unavailable in browser preview; open the Windows app to view native events.'}</div>
                 ) : (
                   nativeLogs.map((log, index) => (
-                    <div key={index} className="flex items-start gap-2 text-[#444343] leading-relaxed">
+                    <div key={index} className="flex flex-wrap items-start gap-2 text-[#444343] leading-relaxed break-words">
                       <span className="text-[#646464] select-none">{new Date(log.at).toLocaleTimeString()}</span>
                       <span className="text-[#1351AA] font-bold">[{log.where}]</span>
-                      <span className="flex-1 text-[#444343]">{log.message}</span>
+                      <span className="flex-1 min-w-0 text-[#444343]">{log.message}</span>
                       {log.extra && <span className="text-[#646464] italic">{log.extra}</span>}
                     </div>
                   ))
@@ -476,7 +457,6 @@ export const DiagnosticLogDrawer: React.FC<DiagnosticLogDrawerProps> = ({
             </div>
           )}
         </div>
-      </div>
     </div>
   );
 };

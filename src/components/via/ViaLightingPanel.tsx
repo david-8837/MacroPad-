@@ -9,16 +9,16 @@
  * with the same fields as `cfg_lighting_t` (mode, brightness, speed, base RGB,
  * nine per-key colours). The preview is the firmware's own maths ported to
  * TypeScript and checked against the C by `tests/ledEngine.test.cjs`. Writes go
- * out as real MPAD3 frames: PREVIEW_LIGHTING while you adjust, SET_LIGHTING when
- * you save, and the status line says exactly what happened — or that nothing did,
- * because no device answered.
+ * out as real MPAD3 frames: a bench-only, capability-gated PREVIEW_LIGHTING
+ * when explicitly clicked, SET_LIGHTING when saving (even on output-disabled
+ * firmware), with acknowledgements and readback. The on-screen animation is
+ * NOT evidence that an unknown physical strip or supply is safe or active.
  */
 import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   ArrowDownToLine,
   Check,
-  ChevronRight,
   RotateCcw,
   Send,
   Zap,
@@ -26,7 +26,7 @@ import {
 
 import { hardwareBridge } from '../../utils/hardwareBridge';
 import { LinkError } from '../../utils/mpad3Link';
-import type { Lighting } from '../../../host/protocol/mpad3-protocol.mjs';
+import { lightingFromWire, lightingToWire } from '../../utils/lightingWire';
 import { LED_COUNT, LED_MODE, type LightingConfig } from '../../lighting/engine';
 import {
   LIGHTING_CHANNELS,
@@ -50,37 +50,6 @@ const SWATCHES: Array<{ name: string; rgb: [number, number, number] }> = [
   { name: 'Ember', rgb: [255, 70, 20] },
   { name: 'Ink', rgb: [12, 18, 40] },
 ];
-
-/** The shape the protocol module wants; our editor state is a superset. */
-function toWire(c: LightingConfig): Lighting {
-  return {
-    mode: c.mode,
-    brightness: c.brightness,
-    speed: c.speed,
-    r: c.r,
-    g: c.g,
-    b: c.b,
-    perKeyMask: c.perKeyMask,
-    perKey: c.perKey.flat(),
-  } as unknown as Lighting;
-}
-
-function fromWire(L: Lighting): Partial<LightingConfig> {
-  const flat = Array.from(L.perKey as unknown as ArrayLike<number>);
-  const perKey: Array<[number, number, number]> = [];
-  for (let i = 0; i < LED_COUNT; i++) {
-    perKey.push([flat[i * 3] ?? 0, flat[i * 3 + 1] ?? 0, flat[i * 3 + 2] ?? 0]);
-  }
-  return {
-    mode: L.mode,
-    brightness: L.brightness,
-    speed: L.speed,
-    r: L.r,
-    g: L.g,
-    b: L.b,
-    perKey,
-  };
-}
 
 const hexOf = ([r, g, b]: [number, number, number]) =>
   '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
@@ -137,6 +106,7 @@ export const ViaLightingPanel: React.FC = () => {
 
   const protocol = hardwareBridge.protocol;
   const hasDevice = protocol !== null;
+  const canDrive = protocol?.hasLedOutput === true; /* bench build, not current-certified */
 
   /* The bridge notifies on connection and on probe, but this panel has no props,
    * so it has to listen for itself or it would keep saying "no device" at a pad
@@ -160,7 +130,7 @@ export const ViaLightingPanel: React.FC = () => {
       try {
         const L = await hardwareBridge.readLighting(channel);
         if (cancelled) return;
-        setCfg(saveChannel(channel, fromWire(L)));
+        setCfg(saveChannel(channel, lightingFromWire(L)));
         setSource('pad');
       } catch {
         /* It answered a PING but not GET_LIGHTING: keep the editor copy and say
@@ -180,14 +150,20 @@ export const ViaLightingPanel: React.FC = () => {
       setStatus('No device answered: nothing was sent. This is the editor only.');
       return;
     }
+    if (!save && !canDrive) {
+      setStatus('Physical LED data output is disabled in this firmware. Preview is unavailable; Save can store settings without lighting the strip.');
+      return;
+    }
     setBusy(true);
     setStatus(save ? 'Saving to the pad…' : 'Previewing on the pad…');
     try {
-      await hardwareBridge.writeLighting(channel, toWire(cfg), save);
+      await hardwareBridge.writeLighting(channel, lightingToWire(cfg), save);
       setStatus(
         save
-          ? `Saved. Channel ${channel} written to flash and acknowledged by the pad.`
-          : `Previewing on the pad (not saved). Press Save to keep it.`,
+          ? canDrive
+            ? `Saved. Channel ${channel} written to flash and acknowledged by the pad. LED output is bench-enabled only.`
+            : `Saved. Channel ${channel} written to flash and acknowledged; physical LED output remains disabled.`
+          : `Previewing on the bench-enabled pad (not saved). Press Save to keep it.`,
       );
     } catch (err) {
       const msg = err instanceof LinkError ? err.message : (err as Error)?.message ?? 'unknown error';
@@ -205,7 +181,7 @@ export const ViaLightingPanel: React.FC = () => {
     setBusy(true);
     try {
       const L = await hardwareBridge.readLighting(channel);
-      setCfg(saveChannel(channel, fromWire(L)));
+      setCfg(saveChannel(channel, lightingFromWire(L)));
       setSource('pad');
       setStatus(`Read channel ${channel} from the pad.`);
     } catch (err) {
@@ -223,9 +199,9 @@ export const ViaLightingPanel: React.FC = () => {
           <div className="eyebrow">Lighting</div>
           <div className="mt-1 text-[13px] font-bold leading-none text-[#141414]">LED STUDIO</div>
           <div className="mt-2 font-mono text-[9px] leading-relaxed text-[#646464]">
-            9 × SK6812MINI-E
+            9 × LED positions · strip not yet selected
             <br />
-            {LED_MODE_INFO.length} hardware modes
+            {LED_MODE_INFO.length} firmware modes
             <br />
             {protocolReady && protocol
               ? `${protocol.leds} LED · ${protocol.channels} CH · FW ${protocol.firmwareBuild}`
@@ -270,7 +246,9 @@ export const ViaLightingPanel: React.FC = () => {
           </div>
           <p className="mt-1 font-mono text-[9px] leading-relaxed text-[#646464]">
             {hasDevice
-              ? 'Writes go out as binary frames over the open serial port.'
+              ? canDrive
+                ? 'BENCH LED DATA ENABLED. This does not verify strip type, power supply, or current budget; use a current-limited setup.'
+                : 'LED DATA OUTPUT DISABLED. Saving settings works; physical preview and raw tests do not. This does not disconnect LED power.'
               : 'Connect the pad by USB serial. Without it this page edits the desktop copy only.'}
           </p>
         </div>
@@ -309,7 +287,7 @@ export const ViaLightingPanel: React.FC = () => {
         <div className="col-span-5 border border-[#C7C7C7] bg-[#FFFFFF]">
           <div className="flex items-center justify-between px-3 py-2 border-b border-[#C7C7C7]">
             <span className="eyebrow">Preview · 9 pixels</span>
-            <span className="font-mono text-[9px] text-[#646464]">same maths as the pad</span>
+            <span className="font-mono text-[9px] text-[#646464]">on-screen simulation</span>
           </div>
 
           <div className="p-3">
@@ -364,8 +342,8 @@ export const ViaLightingPanel: React.FC = () => {
               </div>
             </div>
             <p className="mt-2 font-mono text-[9px] leading-relaxed text-[#646464]">
-              Brightness is the firmware's 0–255 scale applied after gamma, not a CSS lightness. There is no
-              hue/saturation pair on the device: it stores three bytes per colour.
+              Brightness is a visual 0–255 scale after gamma, NOT a current limit. The strip model and
+              available 5 V LED current are unknown; do not enable physical output without a current-limited bench setup.
             </p>
           </div>
         </div>
@@ -408,15 +386,16 @@ export const ViaLightingPanel: React.FC = () => {
               })}
             </div>
             <p className="mt-2 font-mono text-[9px] leading-relaxed text-[#646464]">
-              A key with a colour is in per-key mode; clearing all nine makes the mask empty, and the pad
-              falls back to the base colour. The mask is derived, exactly like the protocol encoder does.
+              A key with a colour is in per-key mode. Clearing all nine makes the mask empty;
+              the lighting engine then uses the base colour. This does not imply physical LED output.
             </p>
           </div>
 
           <div className="mt-auto border-t border-[#C7C7C7] p-3 space-y-2">
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || !canDrive}
+              title={canDrive ? 'Bench-only physical preview; check current-limited LED supply first' : 'Physical LED output is disabled in this firmware'}
               onClick={() => write(false)}
               className="w-full flex items-center justify-between px-3 py-2 border border-[#C7C7C7] bg-[#FFFFFF] hover:border-[#141414] disabled:opacity-40"
             >
@@ -454,15 +433,6 @@ export const ViaLightingPanel: React.FC = () => {
                 <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em]">Reset</span>
               </button>
             </div>
-            <button
-              type="button"
-              onClick={() => hardwareBridge.ledTest(Array.from({ length: LED_COUNT }, () => [0, 0, 0] as [number, number, number])).catch((e) => setStatus(`LED test failed: ${e.message}`))}
-              className="w-full flex items-center justify-between px-2 py-1.5 border border-[#C7C7C7] bg-[#FFFFFF] hover:border-[#141414]"
-              title="Send nine zero bytes, clearing any wiring-test pattern on the pad"
-            >
-              <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em]">Clear pad LEDs</span>
-              <ChevronRight className="w-3 h-3" />
-            </button>
           </div>
         </div>
       </div>
@@ -479,8 +449,10 @@ export const ViaLightingPanel: React.FC = () => {
         <p className="font-mono text-[10px] leading-relaxed text-[#444343]">
           {status ||
             (hasDevice
-              ? 'Ready. The pad answered, so Preview and Save will reach it.'
-              : 'Editor only: no pad is answering, so the preview shows what the settings would look like, not what any device is doing.')}
+              ? canDrive
+                ? 'Bench-enabled output: preview can reach the pad. Verify strip and power with current limiting first.'
+                : 'LED data output disabled: Save can store settings, but physical LEDs cannot be previewed.'
+              : 'Editor only: no pad is answering. The on-screen preview does not represent physical LEDs.')}
         </p>
       </div>
     </div>

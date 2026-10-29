@@ -6,7 +6,6 @@ import {
   Activity,
   Zap,
   Volume2,
-  Usb,
   Cpu,
   RefreshCw,
   Power,
@@ -41,13 +40,12 @@ export interface CommandPaletteProps {
   activeLayer: Layer;
   onSelectLayer: (layerId: string) => void;
   onOpenDiagnostics: () => void;
-  onOpenFirmwareModal: () => void;
+  onOpenFirmwarePanel: () => void;
   onExportDeck: () => void;
   hardwareState: HardwareConnectionState;
-  onConnectHID: () => void;
   onConnectSerial: () => void;
   onDisconnectHardware: () => void;
-  onSyncEEPROM: () => void;
+  onOpenUploadSheet: () => void;
   onSelectKey?: (index: number) => void;
   onSelectKnob?: () => void;
   onTriggerAction?: (name: string, detail?: string, type?: 'success' | 'safety' | 'error' | 'info') => void;
@@ -92,14 +90,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   activeLayer,
   onSelectLayer,
   onOpenDiagnostics,
-  onOpenFirmwareModal,
+  onOpenFirmwarePanel,
   deck,
   onExportDeck,
   hardwareState,
-  onConnectHID,
   onConnectSerial,
   onDisconnectHardware,
-  onSyncEEPROM,
+  onOpenUploadSheet,
   onSelectKey,
   onSelectKnob,
   onTriggerAction,
@@ -127,9 +124,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       {
         id: 'tab-tester',
         group: 'Page',
-        label: 'Key Tester',
-        where: 'Interactive matrix validator',
-        also: 'tester matrix actuation switches check',
+        label: 'Key Tester (OS events)',
+        where: 'Keyboard-event visualizer · not pad timing',
+        also: 'tester os keyboard events keydown visualization no hardware measurement',
         icon: <CheckCircle className="w-4 h-4 text-[#1351AA]" />,
         run: () => onChangeTab('tester'),
       },
@@ -171,13 +168,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       }
     );
 
-    // 2. Modals, Diagnostics & Drawers
+    // 2. Hardware inspector and other actions
     list.push(
       {
         id: 'action-diagnostics',
         group: 'Action',
-        label: 'Open Action History & Diagnostics',
-        where: 'Real-time telemetry, wire log & self-tests',
+        label: 'Hardware Status & Diagnostics',
+        where: 'Studio inspector · action history, wire log & self-tests',
         also: 'diagnostics action history logs debug health selftest errors',
         icon: <Activity className="w-4 h-4 text-[#1351AA]" />,
         run: onOpenDiagnostics,
@@ -185,11 +182,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       {
         id: 'action-firmware',
         group: 'Action',
-        label: 'RP2040 Firmware Flasher (.uf2)',
-        where: 'ROM bootloader UF2 flasher',
+        label: 'RP2040 Firmware & Bootloader (.uf2)',
+        where: 'Left sidebar · BOOTSEL, UF2 inspection & flash',
         also: 'firmware update flash rp2040 uf2 bootloader bootsel rpi-rp2',
         icon: <Zap className="w-4 h-4 text-[#1351AA]" />,
-        run: onOpenFirmwareModal,
+        run: onOpenFirmwarePanel,
       },
       {
         id: 'action-export-deck',
@@ -204,19 +201,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
     // 3. Hardware Interop Actions
     if (hardwareState === 'connected') {
-      list.push(
+      if (!deck.isLocked) list.push(
         {
           id: 'hw-sync',
           group: 'Hardware',
-          label: 'Sync Keymap to Flash / EEPROM',
-          where: 'Commit configuration to hardware',
+          label: 'Review & Upload Config to RP2040 Flash',
+          where: 'Bottom sheet · preview, then commit and verify on the pad',
           also: 'sync eeprom flash write memory upload device macropad',
           icon: <RefreshCw className="w-4 h-4 text-[#1351AA]" />,
-          run: () => {
-            onSyncEEPROM();
-            onTriggerAction?.('Sync Keymap', 'Flashing deck to hardware EEPROM', 'success');
-          },
-        },
+          run: onOpenUploadSheet,
+        }
+      );
+      list.push(
         {
           id: 'hw-disconnect',
           group: 'Hardware',
@@ -232,15 +228,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       );
     } else {
       list.push(
-        {
-          id: 'hw-connect-hid',
-          group: 'Hardware',
-          label: 'Connect WebHID Macropad',
-          where: 'QMK / Raw HID endpoint (0xFF60)',
-          also: 'connect hid webhid usb qmk macropad',
-          icon: <Usb className="w-4 h-4 text-[#1351AA]" />,
-          run: onConnectHID,
-        },
         {
           id: 'hw-connect-serial',
           group: 'Hardware',
@@ -258,9 +245,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       list.push({
         id: `layer-${l.id}`,
         group: 'Layer',
-        label: `Switch to ${l.name}`,
-        where: l.id === activeLayer.id ? 'Current active layer' : `Channel #${idx + 1}`,
-        also: `layer channel ${l.name} ch${idx + 1} layer${idx + 1}`,
+        label: `Edit / preview ${l.name}`,
+        where: l.id === activeLayer.id ? 'Editing here · pad unchanged' : `Preview Layer ${idx} · pad unchanged`,
+        also: `edit preview layer channel ${l.name} ch${idx} layer${idx}`,
         icon: <Layers className="w-4 h-4 text-[#1351AA]" />,
         run: () => {
           onSelectLayer(l.id);
@@ -384,12 +371,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     onChangeTab,
     onSelectLayer,
     onOpenDiagnostics,
-    onOpenFirmwareModal,
+    onOpenFirmwarePanel,
     onExportDeck,
-    onConnectHID,
     onConnectSerial,
     onDisconnectHardware,
-    onSyncEEPROM,
+    onOpenUploadSheet,
     onSelectKey,
     onSelectKnob,
     onTriggerAction,

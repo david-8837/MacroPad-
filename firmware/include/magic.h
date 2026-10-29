@@ -17,11 +17,11 @@
 #define MAGIC_U32 0x4D504144u /* 'M','P','A','D' little-endian */
 #define MAGIC_CONFIG 0x43464733u /* 'CFG3' — start of a saved config blob */
 
-#define PROTOCOL_VERSION 1
-/* 2: CFG_CHANNEL_COUNT 3 -> 4. The blob grew by one 560-byte channel, so a
- * config saved by version 1 is rejected by length and re-seeded from defaults
- * rather than being read with the wrong channel stride. */
-#define CONFIG_FORMAT_VERSION 2
+#define PROTOCOL_VERSION 3 /* LED output gate/capability and status; config stays v3 */
+/* v2: four channels. v3 adds OLED boot mode, contrast and inversion. The
+ * storage loader migrates CRC-valid v2 A/B sectors without erasing bindings;
+ * host SET_CONFIG requires the current v3 wire format. */
+#define CONFIG_FORMAT_VERSION 3
 
 #define FRAME_SOF0 0xA5
 #define FRAME_SOF1 0x5A
@@ -57,9 +57,15 @@
 #define CMD_SET_LIGHTING 0x09  /* payload: channel byte + cfg_lighting_t */
 #define CMD_PREVIEW_LIGHTING 0x0A /* like SET_LIGHTING but does not save */
 #define CMD_LED_TEST 0x0B      /* payload: 9 x 3 bytes raw RGB, bypasses engine */
+#define CMD_OLED_FRAME 0x0C    /* two 265-byte chunks -> one CRC-checked 512-byte canvas */
+#define CMD_GET_OLED_STATE 0x0D /* -> OLED_STATE, actual physical mode + epoch */
+#define CMD_SET_OLED_MODE 0x0E /* payload: 1 byte mode -> OLED_STATE */
+#define CMD_OLED_FRAME_ACK 0x8C /* device -> host: u16 sequence + u8 mode */
+#define CMD_OLED_STATE 0x8D    /* device -> host: u8 mode + u16 epoch */
 #define CMD_CHANNEL 0x86       /* device -> host: 1 byte current channel */
 #define CMD_LIGHTING 0x88      /* device -> host: 1 byte channel + cfg_lighting_t */
 #define CMD_KEY_EVENT 0xC0     /* device -> host: key_event_t, if enabled */
+#define CMD_OLED_MODE_EVENT 0xC1 /* device -> host: OLED_STATE after pad mode change */
 #define CMD_BOOTLOADER 0xFE    /* -> reboot into USB bootloader */
 #define CMD_ERROR 0xFF         /* device -> host: 1 byte error_code_t */
 
@@ -73,6 +79,7 @@
 #define STATUS_BUSY 0x06
 #define STATUS_UNKNOWN_CMD 0x07
 #define STATUS_BAD_ARG 0x08
+#define STATUS_LED_DISABLED 0x09 /* physical LED output is gated in this build */
 
 /* ---- info_t, the reply to CMD_GET_INFO ---------------------------------- */
 /* 16 bytes. Tells the host what it is talking to without parsing anything. */
@@ -81,10 +88,12 @@
  *   u32 magic           = MAGIC_U32
  *   u16 proto_version
  *   u16 cfg_version
- *   u8  channels        = 3
+ *   u8  channels        = 4
  *   u8  keys            = 9
  *   u8  leds            = 9
- *   u8  capabilities    = bit0 encoder, bit1 oled, bit2 flash, bit3 events
+ *   u8  capabilities    = bit0 encoder, bit1 oled, bit2 flash, bit3 events,
+ *                         bit4 OLED stream (if ACK), bit5 LED data output enabled
+ *                         (BENCH flag only; NOT a safety/current certification)
  *   u16 config_size     = sizeof(cfg_blob_t)
  *   u16 fw_build        = firmware build number
  *   u8  _pad
@@ -92,7 +101,9 @@
 #define CAP_ENCODER 0x01
 #define CAP_OLED 0x02
 #define CAP_FLASH 0x04
-#define CAP_EVENTS 0x08
+#define CAP_EVENTS 0x08 /* event protocol supported even when usb_report_events=0 */
+#define CAP_OLED_STREAM 0x10
+#define CAP_LED_OUTPUT 0x20 /* compiled LED drive, not certified 5 V supply */
 
 /* ---- key_event_t, the payload of CMD_KEY_EVENT -------------------------- */
 /* 8 bytes, streamed only when cfg_global_t.usb_report_events is 1.

@@ -22,9 +22,11 @@ interface OLEDCanvasProps {
 const TRACK_FPS = 30;
 
 /**
- * A real 128×32 panel: one canvas, 1-bit pixels, drawn straight from the shared
- * framebuffer. The same `renderPanel()` call produces the firmware frames, so
- * what is drawn here is exactly what the hardware shows.
+ * A 128×32 1-bit preview in SSD1306 page order. The baked animations are
+ * generated from this renderer and match the firmware. A separate timer streams
+ * runtime frames from the same renderer to a verified physical OLED; this RAF
+ * is preview-only and may pause when the drawer is closed or the tab is hidden.
+ * Without USB data, firmware draws its truthful offline fallback.
  */
 export const OLEDCanvas: React.FC<OLEDCanvasProps> = ({
   mode,

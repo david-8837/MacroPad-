@@ -1,0 +1,32 @@
+# Required physical OLED — one fix at a time
+
+> **Historical OLED milestone notes:** Step 3 below originally introduced wire
+> protocol v2. The current app/firmware speak **protocol v3** to include the
+> default-off LED data capability; saved configuration format remains v3.
+> The OLED streaming behavior described below remains the same.
+
+Hardware selected: **SSD1306 128×32 I²C, address 0x3C**, on a **Waveshare RP2040-Zero**. Connect **SDA→GP28 (header 5), SCL→GP29 (header 4), VCC→3V3 (header 3), GND→GND (header 2)**. Pull SDA/SCL up to **3.3 V**, never 5 V.
+
+## 1. Bring up the real panel and show useful content without a PC — source done
+
+- Initialise I²C0/SSD1306, require an I²C ACK to advertise OLED capability, time out rather than hanging on a faulty bus, and retry after failure.
+- Flush the existing 512-byte page-order baked animations on a timed schedule. For live modes without host data, draw honest local screens (layer, no telemetry/media data, uptime rather than fabricated wall time); show a layer overlay on channel changes.
+- Test the real driver against fake I²C (init sequence, wiring pins, page order, missing device, error/retry), plus the existing firmware/host suites. Document wiring and the limits of these tests.
+- **Source work done; hardware validation pending.** `make test` passed 1,479 firmware assertions plus the fake-I²C driver test; `npm test` passed its host suites (including 121 protocol checks). TypeScript, Vite, Electron staging, board-pin, frame-export and font-export checks also passed. No RP2040, SSD1306, ARM toolchain or Pico SDK is present in this workspace; none of these checks proves the assembled pad works.
+
+## 2. Save display settings to the pad — source done; hardware validation pending
+
+Format v3 adds saved OLED boot mode, SSD1306 contrast and inversion to the existing playlist and dwell settings. The firmware validates both CRCs in old v2 A/B sectors, chooses the newest valid sequence, migrates into the *other* sector, preserves keys/knob bindings and lighting, and leaves the original sector bootable if writing fails. The app's OLED-capable pad gate requires verified MPAD3, flash and a detected panel; Display Save reads the current pad config under one exclusive transaction, changes only OLED globals, requires final SET_ACK, COMMIT_ACK and a matching full-config readback before displaying “Saved to Pad.” A failed/missing device never gets a device-success label. At the end of fix 2, custom labels and live PC data were still PC-only; fix 3 below adds volatile runtime pixels without saving those values in flash. Fresh GET_INFO inside the exclusive transaction prevents a panel that vanished after the initial probe from getting a device-success label. The app reads stored settings on connection, but does not overwrite edits made while that read was in flight.
+
+- **Validation:** `./scripts/test-all.sh` passed **1,539 host-compiled firmware assertions** plus the fake-I²C test and **127 host protocol checks**; `npm test`, TypeScript, Vite and Electron staging passed. All **14 browser check scripts** passed, including a fake-CDC Display Save test for success, failed COMMIT, panel loss and missing panel. Generated protocol/types, OLED frames/font, board pin map and flash-budget checks passed. No Pico SDK, ARM cross-compiler or assembled pad was available; there is **no built or physically tested UF2**. These checks do not prove SSD1306 hardware behavior or power-loss recovery on real flash.
+
+## 3. Live PC data on the physical panel — source done; hardware validation pending
+
+- **Wire v2 / config v3 unchanged.** `CAP_OLED_STREAM` requires a real SSD1306 ACK. On connect, GET_OLED_STATE reads the current physical screen (not just saved boot mode). Unsolicited OLED_MODE_EVENT reports key/knob/timer changes with a wrapping epoch; the app ignores stale events and does not echo pad-originated changes back to the pad. UI selection uses confirmed SET_OLED_MODE. Busy mode changes during an exclusive Save retry rather than silently disappearing.
+- **Volatile pixels.** A separate host timer (not the preview's RAF) renders the existing `Frame.pages` for five runtime modes at ≤5 Hz. Two 265-byte payloads carry one 512-byte page-order canvas, common mode/sequence and CRC-32, plus each packet's MPAD3 CRC-16. Firmware stages at most 350 ms and only exposes the full checked frame after the second half; an ACK confirms the sequence/mode. Partial, mismatched, stale, corrupted, wrong-mode, absent-panel and baked-mode frames cannot replace the OLED canvas. Stream frames never write flash, skip while saves/other commands own the link, and back off after failures.
+- **Autonomy/fallback.** The physical OLED plays seven baked loops locally even when connected. A channel change shows a local overlay. A complete runtime frame expires after 1,200 ms without new data; the next ≤200 ms runtime refresh draws the truthful local screen. Native metrics/media are used only when available; missing data stays `--` / `NO MEDIA`. A browser may throttle a suspended tab, intentionally causing local fallback.
+- **Validation (source only):** `./scripts/test-all.sh` passed **1,668 host-compiled firmware assertions** plus fake-I²C tests and **142 host protocol checks**. `npm test`, TypeScript, Vite build, Electron staging, OLED frame/font generation checks and flash-budget limits passed; **all 15 browser check scripts** passed. C tests exercise atomic assembly, CRC, expiry, sequence wrap, mode events, no-reader event coalescing, panel loss and parser corruption. JS link/bridge tests exercise full ACKs, transaction priority, mode sync, busy Save retry, pad gestures canceling unsent choices, and an older host SET event not canceling a newer choice. A fake-CDC browser check verifies initial live mode, hidden-preview streaming, OS-event-driven pixels, baked autonomy, no echo and disconnect. **There is no ARM-built or physically tested UF2.** Host mocks do not measure USB/key latency on a soldered pad or confirm the actual SSD1306, flash, OS integration or power-loss behavior.
+
+## 4. Physical release gate — requires the assembled pad
+
+Build a real UF2 with the correct Pico SDK/board/ARM toolchain, flash via BOOTSEL, verify re-enumeration, I²C ACK at 0x3C, every mode, channel overlay, keyboard/encoder responsiveness, OLED contrast/polarity and disconnect/reboot behavior. Host-side mocks are not substitutes for this gate.

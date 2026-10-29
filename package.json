@@ -12,9 +12,11 @@
     "pack": "npm run build && npm run build:electron && electron-builder --dir",
     "dist:win": "npm run build && npm run build:electron && electron-builder --win",
     "electron:build": "npm run dist:win",
-    "test": "node scripts/host-artifacts.mjs && node tests/actionExecutor.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/media.test.cjs && node tests/windowTracker.test.cjs && node tests/audioControl.test.cjs && node tests/actionHistory.test.cjs && node tests/firmwareFlasher.test.cjs && node tests/commandPalette.test.cjs && node tests/deckLayers.test.cjs && node tests/deckToConfig.test.cjs && node tests/keyEvents.test.cjs && node tests/macroStorage.test.cjs && node tests/ledEngine.test.cjs && node tests/packagingConfig.test.cjs && node tests/oledModes.test.cjs && node host/tests/run.mjs",
+    "test": "node scripts/export-oled-font.mjs --check && node scripts/host-artifacts.mjs && node tests/actionExecutor.test.cjs && node tests/textAction.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/media.test.cjs && node tests/windowTracker.test.cjs && node tests/audioControl.test.cjs && node tests/actionHistory.test.cjs && node tests/firmwareFlasher.test.cjs && node tests/mpad3Link.test.cjs && node tests/oledWire.test.cjs && node tests/lightingWire.test.cjs && node tests/commandPalette.test.cjs && node tests/deckLayers.test.cjs && node tests/layerSelection.test.cjs && node tests/deckLock.test.cjs && node tests/keyTesterModel.test.cjs && node tests/step6UiCopy.test.cjs && node tests/uploadSheetUi.test.cjs && node tests/deckToConfig.test.cjs && node tests/viaIntegration.test.cjs && node tests/keyEvents.test.cjs && node tests/physicalActionRouter.test.cjs && node tests/macroStorage.test.cjs && node tests/ledEngine.test.cjs && node tests/packagingConfig.test.cjs && node tests/oledModes.test.cjs && node tests/oledStreamer.test.cjs && node host/tests/run.mjs",
     "oled:frames": "node scripts/export-oled-frames.mjs",
     "oled:frames:check": "node scripts/export-oled-frames.mjs --check",
+    "oled:font": "node scripts/export-oled-font.mjs",
+    "oled:font:check": "node scripts/export-oled-font.mjs --check",
     "oled:budget": "python3 tools/check_flash_budget.py",
     "host:artifacts": "node scripts/host-artifacts.mjs",
  "check:contrast": "python3 checks/contrastcheck.py"

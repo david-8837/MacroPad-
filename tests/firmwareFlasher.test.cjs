@@ -82,8 +82,9 @@ async function runTests() {
   assert.ok(rp2350Res.error.includes('This pad uses an RP2040'));
   console.log('✓ inspectUf2() warns and blocks RP2350 image on RP2040 target');
 
-  // 8. inspectUf2 with valid synthetic RP2040 2-block UF2 image
-  const validPath = path.join(tempDir, 'valid-firmware-v2.1.0.uf2');
+  // 8. A syntactically valid UF2 is not necessarily bootable. The old checked-in
+  //    file was a banner followed by zeros and passed the header-only inspector.
+  const validPath = path.join(tempDir, 'structurally-plausible-v2.1.0.uf2');
   const validBuf = Buffer.alloc(1024);
   for (let i = 0; i < 2; i++) {
     const off = i * 512;
@@ -96,28 +97,48 @@ async function runTests() {
     validBuf.writeUInt32LE(2, off + 24); // blockCount
     validBuf.writeUInt32LE(0xe48bff56, off + 28); // RP2040_FAMILY
     if (i === 0) {
-      // Embed version string banner
-      validBuf.write('KADOWAZ 2.1.0 (Build 42)', off + 32, 'utf8');
+      // A small nonempty boot2-shaped payload. This fixture tests structural
+      // validation only; it is not firmware and MUST NOT be flashed.
+      validBuf.fill(0xb5, off + 32, off + 32 + 252);
+    } else {
+      validBuf.writeUInt32LE(0x20042000, off + 32); // initial SP in RP2040 SRAM
+      validBuf.writeUInt32LE(0x10000121, off + 36); // Thumb entry inside the image
     }
     validBuf.writeUInt32LE(0x0ab16958, off + 508); // magicEnd
   }
   fs.writeFileSync(validPath, validBuf);
 
   const validRes = firmware.inspectUf2(validPath);
-  assert.strictEqual(validRes.ok, true, 'Validation of valid UF2 should succeed');
+  assert.strictEqual(validRes.ok, true, 'Structural validation should succeed');
   assert.strictEqual(validRes.value.blockCount, 2);
   assert.strictEqual(validRes.value.firmwareBytes, 512);
   assert.strictEqual(validRes.value.fileBytes, 1024);
   assert.strictEqual(validRes.value.family, 'RP2040');
   assert.strictEqual(validRes.value.version, '2.1.0');
   assert.strictEqual(validRes.value.targetAddress, '0x10000000');
-  console.log('✓ inspectUf2() successfully validates authentic RP2040 UF2 with version banner');
+  console.log('✓ inspectUf2() accepts a structurally plausible RP2040 UF2 (not a hardware boot test)');
 
-  // Built-in official firmware check
+  const bannerOnly = Buffer.from(validBuf);
+  bannerOnly.fill(0, 32, 32 + 256);
+  bannerOnly.write('KADOWAZ 1.0.0 (Official RP2040 Deck Release)', 32);
+  bannerOnly.fill(0, 512 + 32, 512 + 32 + 256);
+  const bannerPath = path.join(tempDir, 'banner-only.uf2');
+  fs.writeFileSync(bannerPath, bannerOnly);
+  assert.match(firmware.inspectUf2(bannerPath).error, /boot2\/vector table/);
+  assert.match((await firmware.flash(bannerPath)).error, /boot2\/vector table/);
+  console.log('✓ banner-and-zero-vectors UF2 is refused before flashing');
+
+  const noncontiguous = Buffer.from(validBuf);
+  noncontiguous.writeUInt32LE(0x10001000, 512 + 12);
+  fs.writeFileSync(path.join(tempDir, 'gap.uf2'), noncontiguous);
+  assert.match(firmware.inspectUf2(path.join(tempDir, 'gap.uf2')).error, /contiguous/);
+  console.log('✓ skipped/overlapping flash blocks are refused');
+
+  // There is deliberately no official built-in image until a real release
+  // build has been produced and tested on an RP2040. A placeholder is unsafe.
   const builtin = firmware.getBuiltinFirmware();
-  assert.strictEqual(builtin.available, true, 'Official built-in firmware binary should be detected');
-  assert.strictEqual(builtin.version, '1.0.0', 'Official built-in firmware version should be 1.0.0');
-  console.log('✓ getBuiltinFirmware() resolves authentic official v1.0.0 project firmware');
+  assert.strictEqual(builtin.available, false, 'No untested bundled UF2 may appear available');
+  console.log('✓ getBuiltinFirmware() does not offer an untested placeholder');
 
   // Clean up
   try {

@@ -1,18 +1,16 @@
 import React, { useState } from 'react';
-import { 
-  VIA_BASIC_KEYS, 
-  VIA_MEDIA_KEYS, 
-  VIA_MACRO_KEYS, 
-  VIA_LAYER_KEYS, 
-  VIA_SPECIAL_KEYS, 
-  ViaKeycodeItem 
+import {
+  VIA_BASIC_KEYS, VIA_MEDIA_KEYS, VIA_MACRO_KEYS, VIA_LAYER_KEYS, VIA_OLED_KEYS, VIA_SPECIAL_KEYS,
+  type ViaKeycodeItem,
 } from '../../data/viaKeycodes';
+import { loadStoredMacros } from '../../utils/executeDeckAction';
+import { isMacroReady } from '../../utils/macroStorage';
 import { Zap } from 'lucide-react';
 
 interface ViaKeycodePickerProps {
   selectedKeyIndex: number | null;
+  isDeckLocked?: boolean;
   onAssignKeycode: (keyIndex: number, item: ViaKeycodeItem) => void;
-  onAssignCustomCode: (keyIndex: number, rawCode: string) => void;
 }
 
 // Format long labels cleanly so they never truncate with ugly '...'
@@ -46,11 +44,11 @@ const formatKeycodeLabel = (item: ViaKeycodeItem): string => {
 
 export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
   selectedKeyIndex,
+  isDeckLocked = false,
   onAssignKeycode,
-  onAssignCustomCode,
 }) => {
-  const [activeCategory, setActiveCategory] = useState<'basic' | 'media' | 'macro' | 'layers' | 'special' | 'custom'>('basic');
-  const [customInput, setCustomInput] = useState('');
+  const [activeCategory, setActiveCategory] = useState<ViaKeycodeItem['category']>('basic');
+  const definedMacros = new Set(loadStoredMacros().filter(isMacroReady).map(m => m.id));
 
   const getActiveList = (): ViaKeycodeItem[] => {
     switch (activeCategory) {
@@ -58,16 +56,10 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
       case 'media': return VIA_MEDIA_KEYS;
       case 'macro': return VIA_MACRO_KEYS;
       case 'layers': return VIA_LAYER_KEYS;
+      case 'oled': return VIA_OLED_KEYS;
       case 'special': return VIA_SPECIAL_KEYS;
       default: return [];
     }
-  };
-
-  const handleCustomSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customInput.trim() || selectedKeyIndex === null) return;
-    onAssignCustomCode(selectedKeyIndex, customInput.trim());
-    setCustomInput('');
   };
 
   return (
@@ -78,7 +70,7 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
         <div className="flex items-center gap-1.5">
           <Zap className="w-3.5 h-3.5 text-[#1351AA]" />
           <span className="text-[11px] font-mono font-bold text-[#141414] uppercase tracking-wider">
-            VIA Quick Keycode Tray
+            MPAD3 Quick Assignments
           </span>
         </div>
 
@@ -93,9 +85,15 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
         )}
       </div>
 
-      {/* Row 2: Category Tabs Pill Bar (100% width, 0 overflow) */}
+      <p className="font-mono text-[9px] text-[#646464] leading-relaxed">
+        Keys, media, layer switches and OLED NEXT run on the pad after upload. Macros run only in the desktop app with USB events.
+      </p>
+      {isDeckLocked && <p role="status" className="font-mono text-[10px] font-bold text-[#1351AA]">
+        DECK LOCKED · Unlock in the sidebar before assigning or clearing a switch.
+      </p>}
+      {/* Only categories with a real MPAD3 or PC route are offered. */}
       <div className="grid grid-cols-6 gap-1 bg-[#FFFFFF] p-1 border border-[#E3E2DE] text-[10px] font-mono text-center">
-        {(['basic', 'media', 'macro', 'layers', 'special', 'custom'] as const).map(cat => (
+        {(['basic', 'media', 'macro', 'layers', 'oled', 'special'] as const).map(cat => (
           <button
             key={cat}
             type="button"
@@ -106,60 +104,43 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
  : 'text-[#646464] hover:text-[#141414] hover:bg-[#F4F3F0]'
  }`}
           >
-            {cat}
+            {cat === 'macro' ? 'PC macros' : cat === 'special' ? 'Clear' : cat}
           </button>
         ))}
       </div>
 
-      {/* Custom Keycode Direct Input */}
-      {activeCategory === 'custom' ? (
-        <form onSubmit={handleCustomSubmit} className="flex gap-2 p-2 bg-[#FFFFFF] border border-[#E3E2DE]">
-          <input
-            type="text"
-            value={customInput}
-            onChange={(e) => setCustomInput(e.target.value)}
-            placeholder="Enter raw QMK / VIA keycode (e.g. KC_LALT, LCTL(KC_C), 0x5D)"
-            className="flex-1 px-3 py-1.5 bg-[#FFFFFF] border border-[#E3E2DE] text-xs font-mono text-[#141414] focus:border-[#1351AA] focus:outline-hidden"
-          />
-          <button
-            type="submit"
-            disabled={selectedKeyIndex === null || !customInput.trim()}
-            className="px-4 py-1.5 bg-[#1351AA] text-[#E3E2DE] font-bold text-xs disabled:opacity-40 cursor-pointer"
-          >
-            Assign
-          </button>
-        </form>
-      ) : (
-        /* Keycode Button Grid - Responsive, No Truncation */
-        <div className="grid grid-cols-7 sm:grid-cols-8 gap-1.5 max-h-40 overflow-y-auto p-1 pr-1.5 select-none scrollbar-thin scrollbar-thumb-white/10">
-          {getActiveList().map(item => {
-            const displayLabel = formatKeycodeLabel(item);
-            return (
-              <button
-                key={item.code}
-                type="button"
-                onClick={() => {
-                  /* No target switch means no assignment, and the header already
-                   * says so. This used to be an alert(), which is a dialog the
-                   * rest of the app never shows. */
-                  if (selectedKeyIndex !== null) onAssignKeycode(selectedKeyIndex, item);
-                }}
-                disabled={selectedKeyIndex === null}
-                title={`${item.code} - ${item.tooltip}${selectedKeyIndex === null ? ' (select a switch first)' : ''}`}
-                className="h-9 px-1  border border-[#E3E2DE] enabled:hover:border-[#1351AA] enabled:hover:bg-[#EDECE8] text-[#444343] enabled:hover:text-[#1351AA] disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center text-center transition-all group enabled:cursor-pointer enabled:active:scale-95"
-              >
-                <span className="font-mono text-[10.5px] font-bold leading-tight">
-                  {displayLabel}
-                </span>
-                {item.sublabel && (
-                  <span className="text-[7px] font-mono text-[#646464] leading-none">
-                    {item.sublabel}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      <div className="grid grid-cols-7 sm:grid-cols-8 gap-1.5 max-h-40 overflow-y-auto p-1 pr-1.5 select-none scrollbar-thin scrollbar-thumb-white/10">
+        {getActiveList().map(item => {
+          const displayLabel = formatKeycodeLabel(item);
+          const macroId = item.category === 'macro' ? Number(item.code.slice(1)) : null;
+          const missingMacro = macroId !== null && !definedMacros.has(macroId);
+          const disabled = selectedKeyIndex === null || missingMacro || isDeckLocked;
+          return (
+            <button
+              key={item.code}
+              type="button"
+              onClick={() => {
+                if (!disabled && selectedKeyIndex !== null) onAssignKeycode(selectedKeyIndex, item);
+              }}
+              disabled={disabled}
+              title={isDeckLocked ? 'Unlock deck in the sidebar to change assignments' : missingMacro
+                ? `${item.code} has no executable steps. Add combo/text/delay steps in PC Macro Studio before assigning; desktop app and USB events required.`
+                : `${item.code} — ${item.tooltip}${selectedKeyIndex === null ? ' (select a switch first)' : ''}`}
+              className="min-h-10 px-1 border border-[#E3E2DE] enabled:hover:border-[#1351AA] enabled:hover:bg-[#EDECE8] text-[#444343] enabled:hover:text-[#1351AA] disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center text-center transition-all group enabled:cursor-pointer enabled:active:scale-95"
+            >
+              <span className="font-mono text-[10.5px] font-bold leading-tight">{displayLabel}</span>
+              <span className="text-[7px] font-mono text-[#646464] leading-none">
+                {missingMacro ? 'SET UP M' : item.category === 'macro' ? 'PC APP' :
+                  item.category === 'special' ? 'REMOVE' : 'ON PAD'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {activeCategory === 'macro' && (
+        <p className="font-mono text-[9px] text-[#646464]">
+          Greyed out? Create that M-slot in Macro Studio first. The desktop app must stay open and connected to USB serial.
+        </p>
       )}
     </div>
   );

@@ -11,7 +11,7 @@ async def open_drawer(pg):
 
 async def close_drawer(pg):
     await pg.evaluate("""() => {
-      const b = Array.from(document.querySelectorAll('button')).find(x => /^CANCEL$/.test((x.textContent||'').trim()));
+      const b = Array.from(document.querySelectorAll('button')).find(x => /^CLOSE$/.test((x.textContent||'').trim()));
       b && b.click(); }""")
     await pg.wait_for_timeout(300)
 

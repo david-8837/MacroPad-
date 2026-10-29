@@ -1,5 +1,5 @@
 /*
- * board.h — hardware truth for the 3-channel macropad on a Waveshare RP2040-Zero.
+ * board.h — hardware truth for the 4-channel macropad on a Waveshare RP2040-Zero.
  *
  * EVERYTHING physical lives in this file. If you re-route a wire, you change it
  * here and nowhere else.
@@ -34,13 +34,12 @@
  * You are hand soldering this, so it assumes the wiring that is hardest to get
  * wrong by hand:
  *
- *   3.3V ──┬── key ──┬── GPIO(n)      (internal pull-up ON, pin reads 1 idle)
- *          │         │
- *         GND      (nothing else)
+ *   GPIO(n) ── [normally-open switch] ── GND
+ *                 internal pull-up to 3V3 is INSIDE the RP2040
  *
- *   Press  -> pin goes LOW.  Release -> pin goes HIGH.
- *   No diodes, no row/col wiring, no ghosting, and you can check every key with a
- *   multimeter in continuity mode without desoldering anything.
+ *   Press -> pin LOW. Release -> pin HIGH. Do NOT wire a switch to 3V3/5V:
+ *   the old sketch wrongly connected 3V3 directly to GND. Check for a short
+ *   between the rails before applying power. No diodes or row/col wiring.
  *
  * A 3x3 matrix would save 3 GPIOs but cost 9 hand-soldered diodes, and on a
  * 9-key pad a solder bridge between two adjacent pads looks exactly like a stuck
@@ -57,15 +56,14 @@
  *   Encoder A       7         16            to GND, pull-up enabled
  *   Encoder B       8         15            to GND, pull-up enabled
  *   Encoder SW      9         14            to GND, pull-up enabled
- *   LED data        10        13            -> 330R -> DIN of LED0
- *   OLED SDA        28        5             I2C0, optional, needs 4.7k pull-ups
- *   OLED SCL        29        4             I2C0, optional
+ *   LED data        10        13            -> buffer A; Y -> 330R -> LED0 DIN
+ *   OLED SDA        28        5             I2C0, required, pull-up to 3V3
+ *   OLED SCL        29        4             I2C0, required, pull-up to 3V3
  *   USB             -         USB-C         native, handled by TinyUSB
  *
- *   That is 14 of the 20 header GPIOs with the OLED fitted, 12 without. Spare:
- *   GP13, GP14, GP15, GP26, GP27 — and GP26..GP29 are the ADC-capable ones, so
- *   keeping keys off them leaves all four ADC channels free for a later analogue
- *   knob, a battery divider, or a light sensor. An earlier version of this map put
+ *   That is 15 of the 20 header GPIOs. Spare: GP13, GP14, GP15, GP26,
+ *   GP27. GP28/GP29 are occupied by the OLED, so ADC0/ADC1 (GP26/GP27)
+ *   remain available for a future analogue input. An earlier version of this map put
  *   K7/K8 on GP26/GP27 to work around a 15-GPIO limit that turned out not to
  *   exist; it cost both ADC0 and ADC1 for two digital keys.
  *
@@ -80,27 +78,25 @@
  *   against your board's silkscreen before soldering.
  *
  * ── LED electrical notes ───────────────────────────────────────────────────
- * SK6812MINI-E datasheet: VDD 3.3..5.8 V, VIH = 0.7 x VDD.
+ * The referenced Normand SK6812MINI-E Rev.02 lists VDD 3.7..5.5 V (not the old
+ * 3.3..5.8 V claim) and VIH >= 0.7 x VDD at 5 V. Confirm the exact purchased
+ * part before wiring. At 5 V, VIH >= 3.5 V, so GP10's 3.3 V output needs the
+ * specified 74AHCT1G125 supplied at 5 V: GP10 -> A, Y -> 330R -> LED0 DIN,
+ * /OE -> GND, with a common GND and a 100 nF VCC bypass cap. The AHCT buffer
+ * is NON-INVERTING; /OE is an enable, not a data pin. Do not substitute AHC
+ * without checking its input-high requirement. A 3V3-powered LED chain is NOT
+ * specified for the referenced SK6812MINI-E variant.
  *
- *   * Powered from the board's 5V pin: VIH = 3.5 V. The RP2040 outputs 3.3 V, so
- *     it is 200 mV SHORT of spec. That is exactly the case the 74AHCT1G125 is
- *     for, so keep it — but note the trap: a 74A**HCT** part needs VIH = 2.0 V and
- *     the RP2040's 3.3 V drives it happily. A plain 74AHC (no T) would need 3.5 V
- *     and would NOT work here. Check the marking on the chip you bought.
- *   * Powered from 3V3 instead: VIH = 2.31 V, so the RP2040 drives it directly
- *     and you can drop the shifter. But 3V3 is the wrong rail for this load. The
- *     ME6217C33M5G is rated 800 mA, which reads like plenty, except that it is a
- *     LINEAR regulator in a SOT-23-5: from a 5 V input it dissipates (5 - 3.3) x I
- *     as heat, so 540 mA for nine LEDs at full white is 0.92 W in a package with
- *     roughly 250 C/W junction-to-ambient. It has thermal shutdown and will use
- *     it, dropping the rail and taking the RP2040 with it - which presents as a
- *     random reboot whenever the LEDs go bright. The practical continuous figure
- *     is ~250 mA total including the board's own ~50-90 mA, so ~150-200 mA of LED
- *     current. docs/HARDWARE.md has the arithmetic.
+ * Nine full-white LEDs would draw ~540 mA IF each colour drew 20 mA; this is
+ * only a planning example, not a measured value for the as-yet-unselected strip
+ * or a safe USB/regulator budget. The default build gates physical LED data,
+ * while a bench build still allows full brightness and raw LED_TEST unscaled.
+ * See docs/HARDWARE.md for the supply/power-sequencing and commissioning plan;
+ * GP10 LOW after firmware init does NOT disconnect 5 V, guarantee boot/reset
+ * darkness, or clear a pixel whose prior colour remains latched.
  *
- * Keep the 330R in series with DIN and the 10..47 uF across the LED 5V/GND at
- * the FIRST LED, not near the board. Those two parts are what stop the first LED
- * from flickering when the strip inrushes.
+ * Keep 330R between buffer Y and LED0 DIN, and 10..47 uF across LED 5V/GND
+ * at the first LED.
  */
 #ifndef BOARD_H
 #define BOARD_H
@@ -140,23 +136,41 @@
 #define BOARD_LED_COUNT 9
 #define BOARD_LED_PIN 10 /* header pin 13. GP16 is the board's own WS2812, not used */
 
-/* The SK6812MINI-E is GRB like the WS2812B, but batches vary. Set this to 1 if
- * you find red and green swapped — it is a batch thing and swapping it in
- * software costs nothing. */
+/* FAIL CLOSED until the actual cuttable strip, its chipset/timing, 5 V supply,
+ * allocated LED current and current-limited bench setup are identified. The
+ * existing PIO timing targets a *reference* Normand SK6812MINI-E Rev.02, not
+ * every addressable strip. Default builds hold GP10 LOW and refuse LED_TEST;
+ * host settings may still be edited/saved but cannot light a strip.
+ * Only opt in for a deliberate bench build via -DMPAD_BENCH_LED_OUTPUT=ON.
+ * That opt-in is NOT evidence the strip or power budget is safe for normal USB
+ * use: confirm part specifications and measure actual voltage/current/waveform
+ * before considering any production enable. No saved config can lift this gate. */
+#ifndef BOARD_LED_OUTPUT_ENABLED
+#define BOARD_LED_OUTPUT_ENABLED 0
+#endif
+#if BOARD_LED_OUTPUT_ENABLED != 0 && BOARD_LED_OUTPUT_ENABLED != 1
+#error "BOARD_LED_OUTPUT_ENABLED must be 0 or 1"
+#endif
+
+/* The reference Normand SK6812MINI-E uses GRB. Check the exact strip's protocol
+ * and colour order before bench output. This setting only selects GRB or RGB;
+ * it cannot adapt RGBW, a different voltage, or incompatible bit timing. */
 #define BOARD_LED_RGB_ORDER 0 /* 0 = GRB, 1 = RGB */
 
-/* Data polarity: the PIO program can invert for free through the pad's GPIO
- * override, which is what makes an N-channel level shifter usable in the data
- * path. 1 = the board drives the shifter's /OE, so a logic 1 at the RP2040
- * becomes a logic 1 at DIN. Set to 0 if you drop the shifter. */
-#define BOARD_LED_INVERT_OUTPUT 1
+/* The serialized led_invert_output byte predates the non-inverting AHCT
+ * buffer. Keep its legacy factory value so old config files and host defaults
+ * agree, but it is NOT a GPIO control. The PIO always drives GP10 normally;
+ * never invert GPIO output-enable or data for the specified 74AHCT1G125.
+ * The actual signal still requires a scope/LED bench check. */
+#define BOARD_LED_LEGACY_INVERT_DEFAULT 1
 
-/* ---- optional OLED on I2C0 (declared, not driven in this build) ---------- */
-/* GP28 = I2C0 SDA and GP29 = I2C0 SCL on the RP2040, and both are header pins
- * (5 and 4, at the top of the left column next to 3V3 — which is convenient,
- * since the pull-ups want to go to 3V3 anyway). GP4/GP5 are the other I2C0 pair
- * and are left free here. */
-#define BOARD_OLED_PRESENT 0 /* set to 1 and implement oled.c when you fit it */
+/* ---- required 128x32 SSD1306 OLED on I2C0 ------------------------------- */
+/* User-selected Waveshare RP2040-Zero wiring: GP28 -> SDA, GP29 -> SCL,
+ * 3V3 -> VCC/pull-ups, GND -> GND. Do NOT connect 5 V pull-ups to the RP2040.
+ * Some four-pin modules have built-in pull-ups; otherwise fit external ~4.7k
+ * resistors to 3V3. Firmware probes for an ACK and reports OLED capability
+ * only when the physical display is responding. */
+#define BOARD_OLED_PRESENT 1
 #define BOARD_OLED_SDA_PIN 28
 #define BOARD_OLED_SCL_PIN 29
 #define BOARD_OLED_I2C_INST 0 /* i2c0 */
@@ -181,22 +195,19 @@
 #define BOARD_CONFIG_SECTOR_B_OFFSET (BOARD_FLASH_SIZE_BYTES - 0x1000u)
 #define BOARD_CONFIG_SECTOR_SIZE 0x1000u
 
-/* ---- OLED frame region --------------------------------------------------- */
-/* Baked animation frames are `const`, so they live in flash and are read
- * straight through the XIP cache — no RAM cost per mode, which is why RAM (264
- * kB) is not what limits how many screens the panel can hold. Flash is.
+/* ---- OLED animation budget / future frame window ------------------------ */
+/* Baked frames are `const` tables linked into the APPLICATION IMAGE and read
+ * from XIP flash, not written to the upper flash window below. The 120 KiB
+ * number is a content budget for those tables; the window is reserved for a
+ * possible future independently writable frame store, but is UNUSED today.
+ * Do not claim that reflash preserves baked artwork: it belongs to the UF2.
  *
- * The region sits directly below the config sectors so that a firmware reflash
- * cannot touch saved frames and a frame write cannot touch saved config. It
- * starts on a 4 KiB erase-sector boundary and its length is an exact multiple of
- * the 512 B frame, so no single frame straddles the sector that holds config.
+ *   app image (including baked frames)  0x00000000 .. 0x001DFFFF
+ *   reserved, currently unused         0x001E0000 .. 0x001FDFFF (120 KiB)
+ *   saved config A/B                    0x001FE000 .. 0x001FFFFF (8 KiB)
  *
- *   app image   0x00000000 .. 0x001DFFFF  (1 965 824 B = 1.87 MiB available)
- *   frames      0x001E0000 .. 0x001FDFFF  (122 880 B = 120 KiB = 240 frames)
- *   config A/B  0x001FE000 .. 0x001FFFFF  (8 KiB)
- *
- * This is the number src/oled/capacity.ts derives and the exporter enforces;
- * tools/check_flash_budget.py checks the built image stays below 0x1E0000. */
+ * src/oled/capacity.ts limits baked table bytes, and check_flash_budget.py
+ * enforces that the *whole* image stays below the unused window. */
 #define BOARD_OLED_FRAME_REGION_OFFSET 0x1E0000u
 #define BOARD_OLED_FRAME_REGION_BYTES                                                          \
     (BOARD_CONFIG_SECTOR_A_OFFSET - BOARD_OLED_FRAME_REGION_OFFSET) /* 122 880 = 120 KiB */

@@ -30,12 +30,16 @@ if ! command -v gcc >/dev/null; then
     bad "gcc not found — cannot run the firmware unit tests"
 else
     LOG=$(mktemp)
-    make -C firmware -f Makefile.host test > "$LOG" 2>&1
-    tail -30 "$LOG"
-    if grep -q "ALL TESTS PASSED" "$LOG"; then
-        ok "firmware unit tests"
+    make -C firmware -f Makefile.host test-both > "$LOG" 2>&1
+    RC=$?
+    tail -33 "$LOG"
+    if [[ $RC -eq 0 ]] && [[ $(grep -c "ALL TESTS PASSED" "$LOG") -eq 2 ]] && \
+       grep -q "LED PIO init, GPIO polarity, DMA packing" "$LOG" && \
+       grep -q "LED default gate: GP10 LOW" "$LOG" && \
+       [[ $(grep -c "HID target-branch busy/retry/release/overflow/boot tests passed" "$LOG") -eq 2 ]]; then
+        ok "gated + bench firmware tests, LED and real-branch HID transport stubs"
     else
-        bad "firmware unit tests"
+        bad "firmware tests or target-branch LED/HID stub"
     fi
     rm -f "$LOG"
 fi
@@ -69,18 +73,20 @@ else
 fi
 
 # ── 3b. PIO waveform ────────────────────────────────────────────────────────
-# The LED bit loop is the one thing the C unit tests structurally cannot check:
-# they assert on the packed DMA buffer, which was correct even while the PIO was
-# emitting a waveform with no data in it. This simulates the loop instead.
-hr "5/7  WS2812 PIO waveform"
+# The C hardware stub tests the real PIO init block and DMA packer. This
+# independent simulator checks the PIO INSTRUCTIONS and refuses out-of-spec
+# SK6812MINI-E waveform values, including the former short zero-bit period.
+hr "5/7  SK6812MINI-E PIO waveform"
 if ! command -v python3 >/dev/null; then
     bad "python3 not found — cannot check the PIO timing"
 else
     LOG=$(mktemp)
     python3 tools/pio_timing.py > "$LOG" 2>&1
     RC=$?
+    python3 tools/test_pio_timing.py >> "$LOG" 2>&1
+    [[ $? -eq 0 ]] || RC=1
     cat "$LOG"
-    if [[ $RC -eq 0 ]]; then ok "WS2812 bit timing"; else bad "WS2812 bit timing"; fi
+    if [[ $RC -eq 0 ]]; then ok "SK6812MINI-E source bit timing"; else bad "SK6812MINI-E source bit timing"; fi
     rm -f "$LOG"
 fi
 
@@ -100,7 +106,8 @@ else
 fi
 
 # ── 4b. USB descriptors ─────────────────────────────────────────────────────
-# Also invisible to the C tests: the host build compiles hid_dev.c out entirely.
+# The normal C runner compiles hid_dev.c out; the new fake-TinyUSB HID target
+# checks transport logic, while this checker still validates descriptor source.
 hr "6/7  USB descriptor structure"
 if ! command -v python3 >/dev/null; then
     bad "python3 not found — cannot check the USB descriptors"

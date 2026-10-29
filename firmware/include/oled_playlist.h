@@ -8,10 +8,11 @@
  *   2. a gesture  — ACTION_TYPE_OLED_NEXT bound to a key or the knob, or the
  *                   host sending OLED:NEXT over CDC.
  *
- * Both go through this module, so the panel cannot end up in a state the host
- * does not know about. The desktop simulator runs the same rules from
- * src/oled/playlist.ts; tests/test_oled_playlist.c and tests/oledModes.test.cjs
- * check both against the same table.
+ * Both go through this module, so the panel stays in a valid catalogue mode.
+ * usb_proto_oled_mode_changed listens to actual cursor changes and emits
+ * CMD_OLED_MODE_EVENT to synchronize the app without echoing/restarting dwell.
+ * The desktop simulator runs the same rules in src/oled/playlist.ts; tests on
+ * both sides check them against the same table.
  *
  * Frames are `const` and live in flash (see BOARD_OLED_FRAME_REGION_*), so a
  * screen costs flash but no RAM. Only one screen is on the panel at a time, so
@@ -70,9 +71,8 @@ bool oled_auto_cycle_due(uint32_t now_ms, uint32_t last_change_ms, uint8_t secon
 
 /* ---- runtime cursor ------------------------------------------------------ */
 
-/* Register what to tell when the screen changes; the panel driver sets this.
- * Without a listener (host build, or BOARD_OLED_PRESENT 0) the module still
- * tracks state, so the logic stays testable. */
+/* Register the USB mode notifier after usb_proto_init(), before playlist_init.
+ * Without a listener (some unit tests) the cursor still tracks state. */
 void oled_playlist_set_listener(void (*fn)(uint8_t screen));
 
 /* Apply the saved config: cursor to the saved screen, dwell timer to `now_ms`. */

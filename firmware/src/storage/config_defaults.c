@@ -74,13 +74,16 @@ void config_defaults(cfg_blob_t *out) {
     out->global.knob_batch = CFG_DEFAULT_KNOB_BATCH;
     out->global.hold_repeat_ms = CFG_DEFAULT_HOLD_REPEAT_MS;
     out->global.boot_channel = 0;
-    out->global.led_invert_output = BOARD_LED_INVERT_OUTPUT;
+    out->global.led_invert_output = BOARD_LED_LEGACY_INVERT_DEFAULT; /* stored, not applied */
     out->global.usb_report_events = 1;
     /* Rotate screens out of the box: a panel that sits on one screen forever
      * looks frozen, and this is the only way the panel changes without the app
      * open. 30 s is long enough to read a screen and read the loop twice. */
     out->global.oled_auto_cycle_s = 30;
     out->global.oled_playlist = 0; /* 0 = every screen, i.e. "nothing disabled yet" */
+    out->global.oled_boot_mode = 0; /* Deck Status, useful before host connects */
+    out->global.oled_contrast = 0x8F; /* match the SSD1306 init default */
+    out->global.oled_inverted = 0;
 
     /* ---- channels ---- */
     for (int ch = 0; ch < CFG_CHANNEL_COUNT; ch++) {
@@ -100,9 +103,10 @@ void config_defaults(cfg_blob_t *out) {
          * is what makes an empty pad feel alive rather than broken. */
         cfg_lighting_t *L = &c->lighting;
         L->mode = LED_MODE_REACTIVE;
-        L->brightness = 90; /* not 255: 9 LEDs at full white is ~540 mA, which
-                             * is more than the board's 5V pin should carry from USB
-                             * alone. Raise it if you power the strip separately. */
+        L->brightness = 90; /* conservative visual default, NOT a current cap.
+                             * Full white could be ~540 mA if all nine pixels
+                             * draw 20 mA/channel; the purchased part, USB power
+                             * budget and regulator require separate checking. */
         L->speed = 128;
         L->r = k_channel_rgb[ch][0];
         L->g = k_channel_rgb[ch][1];

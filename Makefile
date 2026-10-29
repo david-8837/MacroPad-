@@ -17,7 +17,7 @@
 PICO_SDK_PATH ?= $(CURDIR)/pico-sdk
 export PICO_SDK_PATH
 
-.PHONY: all test arm docs clean distclean layout defaults verify pio usb board
+.PHONY: all test arm docs clean distclean layout defaults verify pio usb board protocol oledfont
 
 all: test arm
 
@@ -25,17 +25,24 @@ all: test arm
 # which are produced from the compiled C. Running them out of order would test
 # against a stale dump and pass for the wrong reason.
 test: layout defaults
-	@$(MAKE) -C firmware -f Makefile.host test
+	@$(MAKE) -C firmware -f Makefile.host test-both
 	@node host/tests/run.mjs
 	@$(MAKE) -s verify
 
-# The two checkers for code the unit tests structurally cannot reach: everything
-# inside #ifndef *_NO_HW is compiled out of the host build. See
-# docs/ARCHITECTURE.md, "What the tests cannot reach".
-verify: board pio usb
+# Source checkers for hardware/descriptor properties the normal host runner
+# mocks out. Separate fake-SDK tests now compile the OLED, LED and HID branches;
+# neither kind of test replaces physical validation. See docs/ARCHITECTURE.md.
+verify: board pio usb protocol oledfont
+
+protocol:
+	@python3 tools/gen_protocol.py --check
+
+oledfont:
+	@node scripts/export-oled-font.mjs --check
 
 pio:
 	@python3 tools/pio_timing.py
+	@python3 tools/test_pio_timing.py
 
 usb:
 	@python3 tools/check_usb_descriptors.py

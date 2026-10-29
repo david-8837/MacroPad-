@@ -43,8 +43,8 @@ const ROUTES = {
     if (b.line1 === undefined && b.line2 === undefined) return 'provide line1 and/or line2';
     return null;
   },
-  // Single-deck build: switching is layer-only, so `layer` is the sole selector.
-  // Layers are 0-based: 0, 1, 2, 3.
+  // Single-deck build: this selects an editor preview layer only, not the pad.
+  // Accept `layer` (0-based 0–3) and normalise to `channel` for the renderer.
   '/api/v1/action': (b) => {
     if (b.channel === undefined && b.layer !== undefined) {
       b.channel = b.layer;

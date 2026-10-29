@@ -1,5 +1,7 @@
 # Tier 4 — what to do with the features that cost real money
 
+> Historical product triage. Its original Key Tester rationale was incorrect: that UI only observes OS/DOM keyboard events. Step 6 relabels it; it is not a hardware-in-the-loop or timing validator.
+
 ## Status
 
 | Item | State |
@@ -10,7 +12,7 @@
 | 4. Audio stack | **Done (option A)** — the invented session rows are gone; the panel shows master output and microphone, or says the bridge is unavailable. The per-app bridge channels went with them; the engine stayed, because a key bound to `audio_session` still dispatches through `actionExecutor.cjs` |
 | 5. OBS | **Removed** — the user does not stream; see the correction below |
 | 6. Firmware flasher | Kept — no work, unchanged |
-| 7. Key Tester | Kept — no work, unchanged |
+| 7. Key Tester | Kept; Step 6 relabelled it as an OS-event visualizer, not a hardware test |
 | 8. Apps tab (940 lines) | **Resolved (option D)** — kept in full, removed from the nav bar. It is a palette-only page now, with its own way back |
 
 A correction to the original reasoning: the audit said all nine audio handlers had
@@ -58,7 +60,7 @@ Three of the seven items were described more dramatically than they deserve:
 | 4 | Audio stack | Keep, harden | 9 handlers, all used, all backed by UI. Surface failures instead of cutting |
 | 5 | OBS panel + native module | **Delete** (done) | The user does not stream. The client was real; the panel invented its scene list, so it was worth nothing to the only user |
 | 6 | Firmware flasher | Keep | Only in-app path to update the board; its UF2 validation is covered by 8 tests |
-| 7 | Key Tester page | Keep | The only hardware-in-the-loop verification surface; ~300 of its 525 lines are the keymap it draws |
+| 7 | Key Tester page | Keep, relabelled | OS key-event visualizer only; keyboard layout tables remain, but it cannot certify a physical switch or timing |
 
 ---
 
@@ -165,11 +167,7 @@ a health card, two palette commands, two vault entries).
 knowing what `RPI-RP2` is. Its UF2 inspection already has 8 tests, so it is cheap
 to own and it is the first thing a new buyer needs.
 
-**Key Tester (525).** It is how you verify a physical switch reports before you
-trust it, which is the one thing the desktop app cannot simulate. About 300 of its
-lines are the keyboard layout tables it draws; deleting those means deleting the
-tool. The sound engine (110 lines) is shared with the rotary encoder and macro
-editor, so it stays either way.
+**Key Tester (originally 525 lines).** It draws a conventional keyboard layout for OS-delivered key events, from *any* keyboard in the focused window. It cannot verify which physical switch fired or measure scan/USB latency or chatter. About 300 lines are the layout tables. The sound engine is shared with other controls; it stays for optional feedback.
 
 ---
 

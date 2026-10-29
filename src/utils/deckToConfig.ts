@@ -2,8 +2,8 @@
  * deckToConfig.ts — the deck, expressed as the pad's own configuration.
  *
  * "Upload to deck" used to write a JSON blob that nothing on the device parse.
- * This is the honest version: it produces a `cfg_blob_t` — the same 2268-byte
- * structure the firmware reads out of flash — and the transport streams it as
+ * This is the honest version: it produces a `cfg_blob_t` — the same 2272-byte
+ * v3 structure the firmware reads out of flash — and the transport streams it as
  * SET_CONFIG chunks followed by COMMIT.
  *
  * Two rules keep it trustworthy:
@@ -19,6 +19,7 @@ import { ACTION_TYPE, CHANNEL_COUNT, KEY_COUNT } from '../../host/protocol/mpad3
 import type { Cfg, CfgAction, CfgChannel } from '../../host/protocol/mpad3-protocol.mjs';
 import type { ActionDefinition, Deck, DialBinding } from '../types';
 import { MEDIA_CODE, chordToAction } from './deviceKeymap';
+import { isPcMacroBinding, pcMacroId } from './macroStorage';
 
 /** A binding that stays on the PC and cannot be pushed to the pad. */
 export interface UnsupportedBinding {
@@ -27,6 +28,8 @@ export interface UnsupportedBinding {
   where: string;
   name: string;
   reason: string;
+  /** A desktop action can run from KEY_EVENT; unavailable codes work nowhere. */
+  route: 'desktop' | 'unavailable';
 }
 
 export interface DeckUpload {
@@ -36,15 +39,25 @@ export interface DeckUpload {
   unsupported: UnsupportedBinding[];
 }
 
+/** An OLED gesture only works when INFO says a physical panel answered I²C. */
+export function hasOledNextAction(config: Cfg): boolean {
+  return config.channels.some(ch => [
+    ...ch.keys, ch.knobCw, ch.knobCcw, ch.knobTap, ch.knobHold,
+  ].some(action => action.type === ACTION_TYPE.OLED_NEXT));
+}
+
 function empty(): CfgAction {
   return { type: ACTION_TYPE.NONE, flags: 0, code: 0, text: '' };
 }
 
-type Mapped = { ok: CfgAction } | { reason: string };
+type Mapped = { ok: CfgAction } | { reason: string; route: UnsupportedBinding['route'] };
 
 function cfg(type: number, code = 0, text = ''): Mapped {
   return { ok: { type, flags: 0, code, text } };
 }
+
+const unavailable = (reason: string): Mapped => ({ reason, route: 'unavailable' });
+const desktop = (reason: string): Mapped => ({ reason, route: 'desktop' });
 
 /** "Switch to Layer 2" / "Layer 3" → 2 / 3. Anything else → null. */
 function layerFromName(name: string): number | null {
@@ -64,37 +77,57 @@ function mapAction(action: ActionDefinition | null | undefined): Mapped {
 
   const payload = action.payload ?? {};
 
-  /* A raw VIA keycode (MO(1), KC_NO) is a code the pad sends to itself. The
-   * host cannot type it, and the pad's action set has no momentary-layer slot,
-   * so it stays an editor-only binding rather than being written as nonsense. */
+  /* Legacy QMK codes were offered by the old quick tray, but this firmware is
+   * not QMK. Refuse them rather than claiming they run on the desktop. */
   if (payload.keycode) {
-    return { reason: `${payload.keycode} is a keycode, not an action the pad can store` };
+    return unavailable(`${payload.keycode} works on neither this pad nor this desktop app; reassign the switch`);
+  }
+
+  if (isPcMacroBinding(action)) {
+    const id = pcMacroId(action);
+    if (id === null) return unavailable('invalid legacy/desktop macro ID; choose M0–M15');
+    return desktop(`M${id} requires the desktop app, a saved macro and USB key events; the pad slot stays empty`);
   }
 
   switch (action.category) {
     case 'hotkey': {
       const keys = Array.isArray(payload.keys) ? payload.keys.filter(Boolean) : [];
-      if (keys.length === 0) return { reason: 'no keys set' };
+      if (keys.length === 0) return unavailable('no keys set');
       const chord = chordToAction(keys);
       if (chord.kind === 'keycode') return cfg(ACTION_TYPE.KEYCODE, chord.code);
       if (chord.kind === 'mods') return cfg(ACTION_TYPE.MODS, chord.mask);
-      return { reason: chord.reason };
+      return unavailable(chord.reason);
     }
 
     case 'media': {
       const code = MEDIA_CODE[payload.mediaAction ?? ''];
-      if (code === undefined) return { reason: `unknown media action "${payload.mediaAction}"` };
+      if (code === undefined) return unavailable(`unknown media action "${payload.mediaAction}"`);
       return cfg(ACTION_TYPE.MEDIA, code);
     }
 
+    case 'oled':
+      return payload.oledStep === 'next'
+        ? cfg(ACTION_TYPE.OLED_NEXT, 0)
+        : unavailable('unknown OLED gesture; choose OLED NEXT in quick assignments');
+
     case 'navigation': {
+      /* New quick-tray layer keys state the intended channel explicitly.
+       * Legacy navigation actions still support their old name-based mapping. */
+      if (payload.targetChannel !== undefined) {
+        return Number.isInteger(payload.targetChannel) && payload.targetChannel >= 0 &&
+          payload.targetChannel < CHANNEL_COUNT
+          ? cfg(ACTION_TYPE.CHANNEL, payload.targetChannel)
+          : unavailable('channel must be Layer 0–3');
+      }
       const named = action.name ? layerFromName(action.name) : null;
       if (named !== null) return cfg(ACTION_TYPE.CHANNEL, named);
       if (/next\s+layer|cycle/i.test(action.name ?? '')) return cfg(ACTION_TYPE.CHANNEL_NEXT);
-      return { reason: 'this navigation action only works in the app' };
+      return unavailable('this navigation action has no device or desktop route');
     }
 
     case 'script': {
+      /* The reserved macro: prefix was handled before the printable-ASCII
+       * branch. Literal text "macro:0" must be a text action, not a script. */
       /*
        * A `script` action on the PC does one of two things (see
        * electron/actionExecutor.cjs): if the string is an executable path it runs
@@ -103,29 +136,32 @@ function mapAction(action: ActionDefinition | null | undefined): Mapped {
        * that half is uploaded and the other half is refused.
        */
       const command = (payload.command ?? '').trim();
-      if (!command) return { reason: 'empty command' };
+      if (!command) return unavailable('empty command');
       /* Same rule the PC uses (electron/actionExecutor.cjs, looksLikeExecutable):
        * the first token, quote-aware, ending in an executable extension. If the
        * PC would run it, the pad cannot; if the PC would type it, the pad can. */
       const firstToken = command.match(/"[^"]+"|\S+/)?.[0] ?? '';
       if (/\.(exe|cmd|bat|lnk)$/i.test(firstToken.replace(/^"+|"+$/g, ''))) {
-        return { reason: 'launching an executable happens on the PC' };
+        return desktop('launching an executable happens on the PC');
       }
       if (!PRINTABLE_ASCII.test(command)) {
-        return { reason: 'the pad types US-ASCII only, so this text stays on the PC' };
+        return desktop('the pad types US-ASCII only, so this text stays on the PC');
       }
-      if (command.length > 31) return { reason: `text is ${command.length} chars, the pad holds 31` };
+      if (command.length > 31) return desktop(`text is ${command.length} chars, the pad holds 31`);
       return cfg(ACTION_TYPE.TEXT, 0, command);
     }
 
     case 'app_launch':
-      return { reason: `launching ${payload.appName || 'an app'} happens on the PC` };
+      return desktop(`launching ${payload.appName || 'an app'} happens on the PC`);
     case 'audio_session':
-      return { reason: 'per-app volume needs the Windows audio session, i.e. the PC' };
+      return desktop('per-app volume needs the Windows audio session, i.e. the PC');
+    case 'text':
+      return payload.text ? desktop('this text action is handled by the desktop app')
+        : unavailable('empty text action');
     case 'midi':
-      return { reason: 'MIDI is not part of the pad’s action set yet' };
+      return unavailable('MIDI output is not connected on the pad or desktop');
     default:
-      return { reason: `"${action.category}" is handled by the app` };
+      return unavailable(`"${action.category}" has no supported route`);
   }
 }
 
@@ -149,7 +185,13 @@ function mapDial(
       count.n++;
       return r.ok;
     }
-    unsupported.push({ layer, where, name: action.name, reason: r.reason });
+    unsupported.push({
+      layer, where, name: action.name,
+      reason: where === 'Knob hold'
+        ? 'Knob hold is reserved for the pad’s layer switch; a PC action cannot also run from it'
+        : r.reason,
+      route: where === 'Knob hold' ? 'unavailable' : r.route,
+    });
     return fallback;
   };
 
@@ -191,7 +233,8 @@ export function deckToConfig(deck: Deck, base: Cfg): DeckUpload {
           layer,
           where: `Switch #${i + 1} hold-to-confirm`,
           name: binding.safetyConfirmAction?.name ?? binding.label,
-          reason: 'the pad has no hold-to-confirm slot, so this stays in the app',
+          reason: 'the pad has no hold-to-confirm slot; requires desktop app and reported hold duration',
+          route: 'desktop',
         });
         return empty();
       }
@@ -207,7 +250,8 @@ export function deckToConfig(deck: Deck, base: Cfg): DeckUpload {
               layer,
               where: `Switch #${i + 1} hold/double-tap`,
               name: (binding.holdAction ?? binding.doubleTapAction)?.name ?? binding.label,
-              reason: 'the pad fires one action per key; the tap is the one that was uploaded',
+              reason: 'the pad fires one action per key; the uploaded tap suppresses separate PC hold/double actions',
+              route: 'unavailable',
             });
           }
         }
@@ -218,6 +262,7 @@ export function deckToConfig(deck: Deck, base: Cfg): DeckUpload {
         where: `Switch #${i + 1} tap`,
         name: binding?.tapAction?.name ?? `Switch #${i + 1}`,
         reason: r.reason,
+        route: r.route,
       });
       return empty();
     });

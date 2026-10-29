@@ -5,21 +5,24 @@ import { RotaryEncoder } from './RotaryEncoder';
 import { KeyMatrix } from './KeyMatrix';
 import { useLedFrame } from '../lighting/useLedFrame';
 import { LIGHTING_CHANNELS } from '../lighting/store';
-import { Sliders, Keyboard, ChevronRight, Tv, Zap, ArrowUpRight } from 'lucide-react';
+import { Sliders, Keyboard, ChevronRight, Tv, Zap, ArrowUp } from 'lucide-react';
 
 interface DigitalTwinProps {
   layer: Layer;
   channelIndex?: number;
+  /** Last channel the actual pad reported, not the editor selection. */
+  padChannelIndex?: number | null;
   /** Short label per layer, index-aligned. */
   layerNames?: string[];
   oledState: OLEDState;
   deckName: string;
+  isDeckLocked?: boolean;
   selectedKeyIndex: number | null;
   onSelectKey: (keyIndex: number) => void;
   onOpenDrawer?: (keyIndex?: number) => void;
   onOpenKnobDrawer?: () => void;
   onOpenDisplayDrawer?: () => void;
-  onOpenUploadModal?: () => void;
+  onOpenUploadSheet: () => void;
   isDrawerKeyOpen?: boolean;
   isDrawerKnobOpen?: boolean;
   isDrawerDisplayOpen?: boolean;
@@ -32,15 +35,17 @@ interface DigitalTwinProps {
 export const DigitalTwin: React.FC<DigitalTwinProps> = ({
   layer,
   channelIndex,
+  padChannelIndex = null,
   layerNames = ['EDIT', 'TOOLS', 'CUSTOM', 'MACROS'],
   oledState,
   deckName,
+  isDeckLocked = false,
   selectedKeyIndex,
   onSelectKey,
   onOpenDrawer,
   onOpenKnobDrawer,
   onOpenDisplayDrawer,
-  onOpenUploadModal,
+  onOpenUploadSheet,
   isDrawerKeyOpen = false,
   isDrawerKnobOpen = false,
   isDrawerDisplayOpen = false,
@@ -158,7 +163,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
           {/* layer selector — one cell per layer, 0-based */}
           <div className="panel">
             <div className="flex items-center justify-between px-3 py-2 border-b border-[#C7C7C7]">
-              <span className="eyebrow">Layer</span>
+              <span className="eyebrow">Edit Layer</span>
               <span className="idx text-[#1351AA]">
                 {`0${currentChannelIdx} / 0${Math.max(layerNames.length - 1, 0)}`}
               </span>
@@ -175,6 +180,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
                     key={ch}
                     type="button"
                     onClick={() => onCycleDialMode(ch)}
+                    title={`Edit/preview Layer ${ch}; the physical pad is not switched`}
                     className={`py-2.5 flex flex-col items-center gap-1 transition-colors duration-300 ${
                       isActive
                         ? 'bg-[#141414] text-[#E3E2DE]'
@@ -197,7 +203,10 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
                 {layer.dial.availableModes[currentChannelIdx] || `Layer ${currentChannelIdx}`}
               </p>
               <p className="mt-1 font-mono text-[9px] text-[#646464] leading-relaxed">
-                HOLD {layer.dial.channelHoldThresholdMs || 800}MS TO SWITCH · TAP {layer.dial.pressAction.name.toUpperCase()}
+                Editor preview only · pad {connectionStatus === 'usb_connected'
+                  ? padChannelIndex === null ? 'layer unconfirmed' : `reported Layer ${padChannelIndex}`
+                  : 'not connected'}.
+                Hold the physical knob to switch its layer.
               </p>
             </div>
           </div>
@@ -212,7 +221,9 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
                 key={c.index}
                 type="button"
                 onClick={c.onClick}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 border-b border-[#E3E2DE] last:border-b-0 text-left transition-colors duration-300 group ${
+                disabled={isDeckLocked && c.index !== '03'}
+                title={isDeckLocked && c.index !== '03' ? 'Unlock deck in the sidebar to edit key/knob bindings' : undefined}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 border-b border-[#E3E2DE] last:border-b-0 text-left disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-300 group ${
                   c.open ? 'bg-[#141414] text-[#E3E2DE]' : 'text-[#141414] hover:bg-[#EDECE8]'
                 }`}
               >
@@ -238,20 +249,24 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
           {/* the one primary action in this column */}
           <button
             type="button"
-            onClick={onOpenUploadModal}
+            onClick={onOpenUploadSheet}
             className="btn w-full justify-between h-[46px]"
+            title="Review the deck upload in a bottom sheet"
+            aria-haspopup="dialog"
           >
             <span className="flex items-center gap-2">
               <Zap className="w-3.5 h-3.5" />
               Upload to deck
             </span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
+            <ArrowUp className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
       <p className="mt-5 w-full text-[10px] font-mono uppercase tracking-[0.12em] text-[#646464] border-t border-[#C7C7C7] pt-3">
-        Tap a switch to actuate · long-press for alternate · open a drawer to rebind
+        {isDeckLocked
+          ? 'Deck locked: simulated actions still run; unlock in sidebar to rebind or upload'
+          : 'Tap a switch to actuate · long-press for alternate · open a drawer to rebind'}
       </p>
     </div>
   );

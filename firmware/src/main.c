@@ -1,21 +1,12 @@
 /*
  * main.c — the whole firmware, top to bottom.
  *
- * Superloop, no RTOS. Reason: there are five things to do and one core, and an
- * RTOS would add a scheduler, stack sizing, and a class of bug (priority
- * inversion on the flash write) in exchange for nothing. Everything here is
- * sub-millisecond except the flash erase, which is documented in flash_store.c.
- *
- * Task budget at 133 MHz (BOARD_SYS_CLOCK_KHZ):
- *   scan + debounce      ~3 us   every 1 ms
- *   gesture engine       ~5 us   every 1 ms
- *   dispatch             ~10 us  only when a gesture resolves
- *   LED frame compute    ~25 us  every 16 ms (60 Hz)
- *   USB pump             ~20 us  every loop, dominated by tud_task
- *   flash commit         ~50 ms  only on save
- * Idle CPU load is well under 5%. If you later add the OLED, that is the thing
- * that will eat the budget — I2C at 400 kHz for a 128x32 frame is ~1.5 ms, so
- * render it at 10 Hz, not 60.
+ * Superloop, no RTOS. The required OLED adds a bounded ~12 ms full-frame I2C
+ * transfer at 400 kHz (512 data bytes + control/addressing), not 1.5 ms.
+ * Frames run at the baked animation's 6..15 fps or 5 fps for live screens;
+ * input scanning, HID and USB are still serviced between frames. A stuck I2C
+ * bus times out rather than permanently blocking keys. Flash erase on save is
+ * a separate, much longer documented pause in flash_store.c.
  */
 #include <stdio.h>
 #include <string.h>
@@ -32,7 +23,10 @@
 #include "gesture.h"
 #include "hid_dev.h"
 #include "leds.h"
+#include "oled.h"
 #include "oled_playlist.h"
+#include "oled_runtime.h"
+#include "oled_stream.h"
 #include "protocol.h"
 #include "scan.h"
 #include "storage.h"
@@ -47,16 +41,22 @@ static gesture_engine_t s_gesture;
 static gesture_queue_t s_queue;
 static led_engine_t s_led;
 static led_frame_t s_frame;
+static oled_canvas_t s_oled;
 
 static uint32_t s_next_scan_ms;
 static uint32_t s_next_led_ms;
+static uint32_t s_next_oled_ms;
+static uint32_t s_next_oled_probe_ms;
 static uint32_t s_last_activity_ms;
+static uint32_t s_layer_overlay_until_ms;
+static uint8_t s_last_oled_mode = 0xFF;
+static uint8_t s_last_channel;
+static uint8_t s_applied_contrast, s_applied_inverted;
+static bool s_oled_settings_applied;
 
 extern gesture_engine_t *dispatch_engine(void);
 extern void dispatch_set_engine(gesture_engine_t *e);
 extern void channel_apply_boot(const cfg_blob_t *cfg);
-extern void led_host_test_clear(void);
-
 /* ---- action backend: route everything into the real USB HID ------------- */
 static void be_keyboard(uint8_t mods, const uint8_t keys[6]) {
     mpad_kbd_report_t r;
@@ -151,6 +151,10 @@ int main(void) {
     scan_hw_init_encoder();
     scan_init(&s_scan);
     led_hw_init();
+    /* The OLED is part of this pad, not an optional PC-only preview. A missing
+     * module does not brick the keyboard: it is retried and CAP_OLED stays off
+     * until the SSD1306 actually ACKs at 0x3C. */
+    (void)oled_hw_init();
     hid_dev_init();
     action_set_backend(&s_backend);
 
@@ -164,14 +168,17 @@ int main(void) {
     dispatch_init();
     usb_proto_init();
     usb_proto_set_build(FW_BUILD);
-    /* The panel is not a touchscreen: it starts on the saved screen and moves
-     * on when cfg_global_t.oled_auto_cycle_s elapses, or when a gesture bound to
-     * ACTION_TYPE_OLED_NEXT / the host's OLED:NEXT asks it to. */
-    oled_playlist_init(OLED_SCREEN_KADOWAZ, 0);
+    oled_playlist_set_listener(usb_proto_oled_mode_changed);
+    /* Not a touchscreen: show the saved boot screen; rotate via the saved
+     * playlist/timer, a bound OLED_NEXT gesture, or host SET_OLED_MODE. */
+    uint32_t now = (uint32_t)(time_us_64() / 1000u);
+    oled_playlist_init(cfg->global.oled_boot_mode, now);
 
-    uint32_t now = time_us_64() / 1000u;
     s_next_scan_ms = now;
     s_next_led_ms = now;
+    s_next_oled_ms = now;
+    s_next_oled_probe_ms = now + 2000u;
+    s_last_channel = channel_active();
     s_last_activity_ms = now;
 
     (void)had_config; /* reported to the host via CMD_GET_INFO diagnostics */
@@ -210,8 +217,9 @@ int main(void) {
             s_next_led_ms += (1000u / CFG_LED_FRAME_HZ);
             if ((int32_t)(now - s_next_led_ms) > 100) s_next_led_ms = now;
 
-            if (led_host_test_active()) {
-                /* A raw wiring test is running: do not overwrite it. */
+            if (led_host_test_active(now)) {
+                /* Bench-only raw pattern is briefly visible; when its bounded
+                 * timer expires, the next engine frame restores the mode. */
             } else {
                 led_state_t st;
                 memset(&st, 0, sizeof(st));
@@ -228,22 +236,64 @@ int main(void) {
             }
         }
 
-        /* ---- OLED rotation ---- */
-        /* Cheap enough to poll every pass: one comparison, and only a switch
-         * costs anything (a frame blit, and that only with a panel fitted). */
-        if (oled_playlist_tick(now)) {
-            /* A switch is input-like: a keypress on the new screen should not
-             * be swapped out from under the user. */
-            oled_playlist_touch(now);
+        /* ---- OLED: autonomous art, PC live pixels or truthful offline UI ---- */
+        (void)oled_playlist_tick(now);
+        const uint8_t active_channel = channel_active();
+        if (active_channel != s_last_channel) {
+            s_last_channel = active_channel;
+            s_layer_overlay_until_ms = now + 1400u;
+            s_next_oled_ms = now; /* feedback immediately on a hardware gesture */
+        }
+        const uint8_t mode = oled_playlist_current();
+        if (mode != s_last_oled_mode) {
+            s_last_oled_mode = mode;
+            s_next_oled_ms = now;
+            oled_playlist_touch(now); /* full dwell after a manual switch */
+        }
+        if (!oled_hw_present() && (int32_t)(now - s_next_oled_probe_ms) >= 0) {
+            s_next_oled_probe_ms = now + 2000u;
+            if (oled_hw_init()) {
+                s_next_oled_ms = now;
+                s_oled_settings_applied = false; /* init resets the SSD1306 */
+            }
+        }
+        if (oled_hw_present()) {
+            const cfg_global_t *g = &config_get()->global;
+            if (!s_oled_settings_applied || g->oled_contrast != s_applied_contrast ||
+                g->oled_inverted != s_applied_inverted) {
+                oled_set_contrast(g->oled_contrast);
+                if (oled_hw_present()) oled_set_inverted(g->oled_inverted);
+                if (oled_hw_present()) {
+                    s_applied_contrast = g->oled_contrast;
+                    s_applied_inverted = g->oled_inverted;
+                    s_oled_settings_applied = true;
+                }
+            }
         }
 
         /* ---- USB ---- */
         hid_dev_task();
         usb_proto_pump(now);
-
-        /* Keep the event-enable flag in sync with config (the app can change it
-         * through SET_CONFIG). */
         events_enable(config_get()->global.usb_report_events != 0);
+
+        if (oled_hw_present() && (int32_t)(now - s_next_oled_ms) >= 0) {
+            const oled_anim_t *anim = oled_anim_for(mode);
+            /* Complete frames alone are visible. The layer overlay temporarily
+             * wins, but the stream is not torn down; it resumes when the overlay
+             * ends. Baked art is ALWAYS played locally (even with a PC open). */
+            const uint8_t *live = anim ? NULL : oled_stream_frame(mode, now);
+            uint32_t period_ms = anim ? 1000u / anim->fps : 200u; /* runtime cap: 5 Hz */
+            if (period_ms < 60u) period_ms = 60u; /* cap I2C duty cycle */
+            s_next_oled_ms = now + period_ms;
+            if ((int32_t)(s_layer_overlay_until_ms - now) > 0) {
+                oled_render_layer_overlay(&s_oled, active_channel);
+            } else if (live) {
+                oled_blit_pages(&s_oled, live);
+            } else {
+                oled_render_local(&s_oled, mode, now, active_channel);
+            }
+            oled_flush(&s_oled);
+        }
     }
     return 0;
 }

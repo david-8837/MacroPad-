@@ -120,7 +120,14 @@ static void process_key(gesture_engine_t *e, uint8_t i, bool down, uint32_t now,
             uint32_t held = ms_elapsed(k->press_at, now);
             switch (k->state) {
             case KS_HELD:
-                if (k->hold_fired) emit(q, GESTURE_HOLD_RELEASE, i, 0, now);
+                /* The host cannot confirm a safety hold from the HOLD event:
+                 * that only proves the normal 300 ms threshold was reached.
+                 * Report the full press duration on release, saturated to i16,
+                 * so a PC-only 1500 ms hold can fail closed if released early. */
+                if (k->hold_fired) {
+                    int16_t duration = (int16_t)(held > 32767u ? 32767u : held);
+                    emit(q, GESTURE_HOLD_RELEASE, i, duration, now);
+                }
                 k->state = KS_IDLE;
                 break;
             case KS_PRESSED:
@@ -139,7 +146,8 @@ static void process_key(gesture_engine_t *e, uint8_t i, bool down, uint32_t now,
                      * hold_ms > tap_max_ms). Treat as a hold that fired late. */
                     if (!k->hold_fired && held >= e->hold_ms) {
                         emit(q, GESTURE_HOLD, i, 0, now);
-                        emit(q, GESTURE_HOLD_RELEASE, i, 0, now);
+                        int16_t duration = (int16_t)(held > 32767u ? 32767u : held);
+                        emit(q, GESTURE_HOLD_RELEASE, i, duration, now);
                     } else if (!k->hold_fired) {
                         emit(q, GESTURE_TAP, i, 0, now);
                     }

@@ -2,9 +2,9 @@
 //
 // The panel has no touchscreen, so "switch mode" is not an event the screen can
 // produce. On the device the playlist is advanced by a timer
-// (`oled_auto_cycle_s` in cfg_global_t) and by `OLED:NEXT` over USB CDC; the
-// desktop simulator uses this exact module for the same walk, so the preview
-// cannot invent an order the hardware would not use.
+// (`oled_auto_cycle_s` in cfg_global_t), by a bound OLED_NEXT gesture or legacy
+// `OLED:NEXT` over CDC. Protocol-v2 OLED_MODE_EVENT reports each physical step
+// to the app; the desktop simulator uses this same catalogue order.
 //
 // `firmware/src/core/oled_playlist.c` is the C mirror of this file. Both are
 // tested against the same rule table in tests/oledModes.test.cjs and

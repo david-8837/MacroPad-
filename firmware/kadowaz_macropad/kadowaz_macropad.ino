@@ -1,7 +1,14 @@
 /*
+ * HISTORICAL ARDUINO PROTOTYPE — DO NOT FLASH ON THE CURRENT MACROPAD.
+ * It uses a 3x3 matrix and a different GPIO/OLED pin map and speaks a legacy
+ * text protocol, not MPAD3 v3. For the selected direct-wired RP2040-Zero,
+ * required SSD1306 on GP28/GP29 and verified Display Save, build the Pico SDK
+ * C firmware in firmware/src. This file is retained only as an old reference.
+ *
  * KADOWAZ IND. DECK-09 Physical Firmware Sketch
- * Compatible with Raspberry Pi Pico (RP2040), RP2040-Zero, Arduino Pro Micro (ATmega32U4), or ESP32-S3
- * 
+ * Historical board targets: Raspberry Pi Pico, RP2040-Zero, Arduino Pro Micro
+ * (ATmega32U4), ESP32-S3 — NOT compatible with the current wiring or app.
+ *
  * Hardware Layout:
  * - 3x3 Key Matrix (9 switches)
  * - Rotary Encoder (Pins A, B, and Push Switch)

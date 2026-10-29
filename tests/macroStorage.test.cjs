@@ -106,6 +106,36 @@ async function runTests() {
     assert.ok(/not defined/i.test(res.error || ''), res.error);
   });
 
+  await check('corrupt/duplicate slots cannot make a different M-slot appear ready', async () => {
+    store.clear();
+    store.set(storage.MACRO_STORAGE_KEY, JSON.stringify([
+      null, { id: -1, actions: [{ type: 'combo', keys: ['A'] }] },
+      { id: 0, name: 'First empty', actions: [] },
+      { id: 0, name: 'Forged second', actions: [{ type: 'combo', keys: ['A'] }] },
+    ]));
+    const macros = deck.loadStoredMacros();
+    assert.deepStrictEqual(macros.map(m => m.id), [0]);
+    assert.strictEqual((await deck.executeMacroSlot(0)).success, false);
+  });
+
+  await check('a defined but empty macro is not falsely reported as executed', async () => {
+    store.clear();
+    store.set(storage.MACRO_STORAGE_KEY, JSON.stringify([{ id: 0, name: 'Empty', actions: [] }]));
+    const res = await deck.executeMacroSlot(0);
+    assert.strictEqual(res.success, false);
+    assert.match(res.error, /empty|no steps/i);
+  });
+
+  await check('legacy down/up steps are rejected, not falsely reported as a held key', async () => {
+    store.clear();
+    store.set(storage.MACRO_STORAGE_KEY, JSON.stringify([{ id: 2, name: 'Hold Ctrl', actions: [
+      { type: 'down', value: 'Ctrl' }, { type: 'up', value: 'Ctrl' },
+    ] }]));
+    const res = await deck.executeMacroSlot(2);
+    assert.strictEqual(res.success, false);
+    assert.match(res.error, /not executable|use a combo/i);
+  });
+
   await check('a delay-only macro runs without a native shell', async () => {
     store.clear();
     store.set(
@@ -114,6 +144,73 @@ async function runTests() {
     );
     const res = await deck.executeMacroSlot(1);
     assert.strictEqual(res.success, true);
+  });
+
+  await check('a failing native step aborts the macro rather than reporting success', async () => {
+    store.clear();
+    store.set(storage.MACRO_STORAGE_KEY, JSON.stringify([{ id: 2, name: 'Two steps', actions: [
+      { type: 'combo', value: 'Ctrl+A', keys: ['Ctrl', 'A'] },
+      { type: 'combo', value: 'Ctrl+B', keys: ['Ctrl', 'B'] },
+    ] }]));
+    const calls = [];
+    globalThis.window = { electronAPI: { execAction: async (action) => {
+      calls.push(action);
+      return { success: false, error: 'injected failure' };
+    } } };
+    try {
+      const res = await deck.executeMacroSlot(2);
+      assert.strictEqual(res.success, false);
+      assert.match(res.error, /Step 1 failed.*injected failure/);
+      assert.strictEqual(calls.length, 1, 'the second step must not run');
+    } finally { delete globalThis.window; }
+  });
+
+  await check('an empty native response is a failure, not an invented success', async () => {
+    globalThis.window = { electronAPI: { execAction: async () => undefined } };
+    try {
+      const res = await deck.sendNativeAction({ id: 'empty-reply', category: 'hotkey',
+        name: 'Empty reply', payload: { keys: ['A'] } });
+      assert.strictEqual(res.success, false);
+      assert.match(res.error, /no valid result/);
+    } finally { delete globalThis.window; }
+  });
+
+  await check('a literal text step is not sent as a program-launch script', async () => {
+    store.clear();
+    store.set(storage.MACRO_STORAGE_KEY, JSON.stringify([{ id: 3, name: 'Type', actions: [
+      { type: 'text', value: 'calc.exe' },
+    ] }]));
+    const calls = [];
+    globalThis.window = { electronAPI: { execAction: async (action) => {
+      calls.push(action);
+      return { success: true };
+    } } };
+    try {
+      const res = await deck.executeMacroSlot(3);
+      assert.strictEqual(res.success, true);
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].category, 'text');
+      assert.deepStrictEqual(calls[0].payload, { text: 'calc.exe' });
+    } finally { delete globalThis.window; }
+  });
+
+  await check('Test Run and physical playback share step order and native route', async () => {
+    store.clear();
+    store.set(storage.MACRO_STORAGE_KEY, JSON.stringify([{ id: 7, name: 'Ready', actions: [
+      { type: 'text', value: 'hello' }, { type: 'delay', value: '1', delayMs: 1 },
+      { type: 'combo', value: 'Ctrl+C', keys: ['Ctrl', 'C'] },
+    ] }]));
+    const steps = [];
+    const calls = [];
+    globalThis.window = { electronAPI: { execAction: async action => {
+      calls.push(action); return { success: true };
+    } } };
+    try {
+      const res = await deck.executeMacroSlot(7, index => steps.push(index));
+      assert.strictEqual(res.success, true);
+      assert.deepStrictEqual(steps, [0, 1, 2]);
+      assert.deepStrictEqual(calls.map(x => x.category), ['text', 'hotkey']);
+    } finally { delete globalThis.window; }
   });
 
   console.log(`\n=== macroStorage: ${passed} checks, ${failed} failures ===`);

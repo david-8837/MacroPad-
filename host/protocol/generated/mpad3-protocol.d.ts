@@ -5,14 +5,24 @@ export const MAGIC_STRING = "MPAD3";
 export const MAGIC_U32 = 0x4D504144;
 export const CONFIG_MAGIC_U32 = 0x43464733;
 export const SECTOR_MAGIC_U32 = 0x53454331;
-export const PROTOCOL_VERSION = 1;
-export const CONFIG_FORMAT_VERSION = 1;
+export const PROTOCOL_VERSION = 3;
+export const CONFIG_FORMAT_VERSION = 3;
 export const MTU = 512;
 export const CHUNK_SIZE = 256;
-export const CHANNELS = 3;
+export const CHANNELS = 4;
 export const KEYS = 9;
 export const LEDS = 9;
+export const LED_TEST_HOLD_MS = 300;
 export const TEXT_MAX = 32;
+export const OLED_MODE_COUNT = 12;
+export const OLED_STREAM = {
+  FRAME_BYTES: 512,
+  CHUNK_BYTES: 256,
+  CHUNK_COUNT: 2,
+  HEADER_BYTES: 9,
+  STAGING_TIMEOUT_MS: 350,
+  TTL_MS: 1200,
+} as const;
 
 export const ACTION_TYPE = {
   NONE: 0,
@@ -65,6 +75,7 @@ export const STATUS = {
   BUSY: 6,
   UNKNOWN_CMD: 7,
   BAD_ARG: 8,
+  LED_DISABLED: 9,
 } as const;
 export type StatusValue =
   (typeof STATUS)[keyof typeof STATUS];
@@ -74,6 +85,8 @@ export const CAPABILITIES = {
   OLED: 0x02,
   FLASH: 0x04,
   EVENTS: 0x08,
+  OLED_STREAM: 0x10,
+  LED_OUTPUT: 0x20,
 } as const;
 export type CapabilitiesValue =
   (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -122,7 +135,7 @@ export interface Lighting {
   /** bit n set -> perKey[n] is used for key n instead of the base colour */
   perKeyMask: number;
   /** 9 x RGB */
-  perKey: Uint8Array;
+  perKey: Array<[number, number, number]>;
 }
 
 /** 560 bytes on the wire. */
@@ -137,7 +150,7 @@ export interface Channel {
   lighting: Lighting;
 }
 
-/** 16 bytes on the wire. */
+/** 20 bytes on the wire. */
 export interface Global {
   holdMs: number;
   /** 0 means double-tap is disabled, which makes a single tap fire on release with zero added latency. Do not set this to a non-zero value unless you actually bind a double tap: it delays every ordinary tap by that many milliseconds. */
@@ -149,23 +162,31 @@ export interface Global {
   knobBatch: number;
   holdRepeatMs: number;
   bootChannel: number;
-  /** 1 when a 74AHCT1G125 (or any inverting buffer) is in the LED data path */
+  /** legacy stored byte retained at default 1 for config compatibility; LED GPIO output-enable and data now always drive normally through the non-inverting 74AHCT1G125. This byte is ignored by the driver and must not be used to fix wiring */
   ledInvertOutput: number;
   usbReportEvents: number;
   /** seconds each screen stays up before the panel rotates; 0 disables rotation. The panel has no touchscreen, so this timer is the default way it changes. */
   oledAutoCycleS: number;
   /** bit i = screen i in the rotation, in OLED_MODES order; 0 means every screen, which is what a config saved before this field existed reads as. */
   oledPlaylist: number;
+  /** catalogue mode index to show on power-up (0..11) */
+  oledBootMode: number;
+  /** SSD1306 contrast register (0..255) */
+  oledContrast: number;
+  /** SSD1306 inverse pixels when 1 */
+  oledInverted: number;
+  /** reserved; must be zero */
+  oledPad: number;
 }
 
-/** 2268 bytes on the wire. */
+/** 2272 bytes on the wire. */
 export interface Config {
   magic: number;
   version: number;
   length: number;
   global: Global;
   channels: [Channel, Channel, Channel, Channel];
-  /** CRC-32/IEEE over bytes 0..1703 inclusive */
+  /** CRC-32/IEEE over bytes 0..2267 inclusive */
   crc32: number;
 }
 
@@ -177,6 +198,29 @@ export interface SectorHeader {
   blobCrc: number;
   /** CRC-32 over the 12 bytes above */
   hdrCrc: number;
+}
+
+/** 265 bytes on the wire. */
+export interface OledFrameChunk {
+  /** serial number modulo 65536; newer than last completed frame */
+  seq: number;
+  /** actual active runtime catalogue index; never baked */
+  mode: number;
+  /** chunk 0 followed by chunk 1 (no interleaving) */
+  index: number;
+  /** always 2 */
+  count: number;
+  /** IEEE CRC-32 of ALL 512 SSD1306 page-order bytes */
+  crc32: number;
+  /** 256 bytes: first or second half of 4 pages x 128 columns */
+  pages: Uint8Array;
+}
+
+/** 3 bytes on the wire. */
+export interface OledState {
+  mode: number;
+  /** increments on actual screen changes; compare modulo 65536; no request ID */
+  epoch: number;
 }
 
 /** What a configurator UI holds in memory. Same shape as Channel, but with
@@ -192,7 +236,7 @@ export interface ChannelConfig {
 
 export interface DeviceConfig {
   global: Global;
-  channels: [ChannelConfig, ChannelConfig, ChannelConfig];
+  channels: [ChannelConfig, ChannelConfig, ChannelConfig, ChannelConfig];
 }
 
 export interface Info {
@@ -212,7 +256,7 @@ export interface KeyEvent {
   index: number;
   event: number;
   channel: number;
-  /** detent count for rotation events */
+  /** rotation detents; key HOLD_RELEASE: held duration in ms (0 on older firmware, capped at 32767) */
   value: number;
   /** actionType that fired, 0 if the slot was empty */
   action: number;
@@ -224,6 +268,6 @@ export interface DecodedFrame {
   ver: number;
 }
 
-export type CommandId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 128 | 129 | 130 | 131 | 133 | 134 | 136 | 192 | 254 | 255;
-export type StatusCode = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export type CommandId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 128 | 129 | 130 | 131 | 133 | 134 | 136 | 140 | 141 | 192 | 193 | 254 | 255;
+export type StatusCode = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 

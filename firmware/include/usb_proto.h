@@ -1,5 +1,5 @@
 /*
- * usb_proto.h — config protocol endpoint over USB CDC.
+ * usb_proto.h — config, key events and volatile OLED frames over USB CDC.
  */
 #ifndef USB_PROTO_H
 #define USB_PROTO_H
@@ -10,6 +10,9 @@
 
 void usb_proto_init(void);
 void usb_proto_set_build(uint16_t build);
+/* Register with oled_playlist_set_listener(): report pad-originated selection,
+ * autoplay, or host selection; also evict any pixels for the old screen. */
+void usb_proto_oled_mode_changed(uint8_t screen);
 
 /* Service RX and TX. Call every main-loop iteration; `now_ms` drives the
  * stalled-SET_CONFIG timeout. */

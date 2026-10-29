@@ -1,156 +1,62 @@
-; ws2812minie.pio — SK6812MINI-E / WS2812B-compatible single-wire driver.
+; ws2812minie.pio — 9 SK6812MINI-E LEDs, GRB MSB first through a
+; NON-INVERTING 74AHCT1G125 (A -> Y, /OE tied LOW).
 ;
-; Bit period = 8 cycles at 8 MHz (1 cycle = 125 ns):
-;   T0H = 2 cycles = 250 ns   (spec 300 ns +/-150 -> 150..450, in range)
-;   T1H = 5 cycles = 625 ns   (spec 600 ns +/-150 -> 450..750, in range)
-;   T0L = 6 cycles = 750 ns   (spec 300 +/-150 -> in range)
-;   T1L = 3 cycles = 375 ns   (spec 600 +/-150 -> 450..750, 75 ns SHORT)
+; Timing is for Normand SK6812MINI-E Rev.02, section 12:
+; https://www.normandled.com/upload/202004/SK6812MINI-E%20LED%20Datasheet.pdf
+; At a 10 MHz PIO clock, each instruction cycle is 100 ns. BOTH bit paths
+; take 13 cycles = 1.30 us (datasheet minimum symbol period 1.20 us):
 ;
-; T1L is the one number outside the datasheet window, and it is deliberate: this
-; is the timing the official pico-sdk ws2812 driver uses, and it is the timing
-; real strips tolerate, because WS2812-family parts latch on the high pulse width
-; and treat anything above ~50 us of low as the reset. If a particular batch
-; misbehaves, the fix is to raise the clock divider (slower bit rate, longer
-; T1L in absolute terms), not to restructure the loop — see the note below the
-; .wrap for what each delay is actually doing.
+;   0: out 6c low, jmp 3c high, nop 4c low, then next out 6c low
+;      T0H = 300 ns (200..400); T0L = 1000 ns (>=800, <20000)
+;   1: out 6c low, jmp 3c high, jmp 4c high -> next out 6c low
+;      T1H = 700 ns (580..1000); T1L = 600 ns (>=200, <20000)
 ;
-; One 32-bit TX FIFO word per LED. Only the low 24 bits are used, so the caller
-; packs GRB (or RGB) into bits 23..0 and the top byte is ignored. That wastes
-; 25% of the DMA bandwidth and buys a much simpler packer on the C side.
+; The zero-bit branch skips the one-only high instruction. The one-bit jump
+; loops directly to the next out; the zero-bit nop reaches .wrap. Unlike the
+; previous loop, neither path uses an out-of-spec short zero-bit period.
+; A jmp's delay applies even when the branch is not taken, and the next bit's
+; initial low run belongs to the previous bit's measured T0L/T1L.
 ;
-; The `invert` parameter exists for the 74AHCT1G125 level shifter path: an
-; N-channel buffer with active-low /OE inverts the signal, and rather than
-; inverting every byte in software we let the PIO do it with one XOR. Set it to
-; 1 when a shifter is in the data path, 0 for a direct 3.3 V drive.
-;
-; Reset/latch code: the strip latches after >50 us (typically 280 us) of low.
-; We do not emit that here — the DMA simply stops and the pin stays low between
-; frames, which at 60 Hz is ~16 ms of low. That is the standard trick and it
-; means no extra state machine time is burned on the reset.
+; One 32-bit FIFO word per pixel. Shift LEFT 24 bits, so the caller must place
+; GRB in bits 31..8 (word GGRRBB00); the bottom byte is discarded on autopull.
+; With no next DMA word the out stalls with side 0: the pin idles LOW. The
+; datasheet requires >80 us of low to latch; leds.c waits for the FIFO to drain
+; and allows a final pixel plus a guarded reset interval before another frame.
+; Only a bench measurement can validate the actual output and LED variant.
 
 .program ws2812minie
 .side_set 1
 
-; ---- the two rules that decide the timing --------------------------------
-; Both are easy to get wrong, and this file got both wrong before it got them
-; right. tools/pio_timing.py simulates the loop and checks the result, so the
-; numbers below are derived, not hoped for.
-;
-;   RULE 1. An instruction drives its side-set value for its ENTIRE duration,
-;           including any [n] delay. Only the NEXT instruction changes the pin.
-;           A pulse is therefore the sum of the consecutive instructions that
-;           carry the same side value.
-;
-;   RULE 2. A `jmp`'s [n] delay applies WHETHER OR NOT THE BRANCH IS TAKEN. A
-;           taken branch does not shorten the instruction.
-;
-; Rule 2 is the one that makes this loop four instructions instead of three. The
-; high time a zero-bit gets is exactly the delay on the jmp, and the high time a
-; one-bit gets is that SAME delay plus the instruction the zero-bit skips. So the
-; jmp carries the shared part (T0H) and the skipped nop carries the difference
-; (T1H - T0H). Putting the difference on the jmp instead - the obvious thing to
-; do - inflates T0H along with T1H and leaves the two too close together.
-;
-; ---- the resulting waveform ----------------------------------------------
-; PIO clock 8 MHz (divisor in leds.c), so 1 cycle = 125 ns:
-;
-;   bit 0 : out(1c low) jmp TAKEN (2c high) do_zero nop(2c low)
-;             T0H = 2c = 250 ns
-;             T0L = 2c + the next bit's 1c out = 3c = 375 ns
-;             period 5c = 625 ns
-;   bit 1 : out(1c low) jmp not taken (2c high) nop(3c high, SKIPPED by bit 0)
-;             do_zero nop(2c low)
-;             T1H = 2c + 3c = 5c = 625 ns
-;             T1L = 3c = 375 ns
-;             period 8c = 1000 ns
-;
-;   T0H 250 ns   spec 300 +/-150 = 150..450   -> IN RANGE
-;   T1H 625 ns   spec 600 +/-150 = 450..750   -> IN RANGE
-;   T0L 375 ns   spec 300 +/-150 = 150..450   -> IN RANGE
-;   T1L 375 ns   spec 600 +/-150 = 450..750   -> 75 ns under the window
-;
-; Three of the four land inside the printed window and T1L is 75 ns under it. That
-; is not sloppiness, it is forced: no cycle time satisfies all four at once for
-; this loop shape. T0H and T0L cap the cycle at 225 ns and 150 ns respectively,
-; T1H needs >= 112.5 ns and T1L needs >= 150 ns, so the feasible band is
-; 112.5..150 ns and 125 ns is the exact 133 MHz / 16.625 point inside it. Every
-; WS2812 driver makes the same trade, because the part discriminates on the high
-; pulse and has no maximum low time below the ~50 us reset. T1H is 2.5x T0H with
-; 375 ns of separation, which is the margin that actually matters. leds.c carries
-; the same derivation next to the divisor.
-;
-; The two bit periods differ (625 ns vs 1000 ns). That is inherent to the shape -
-; a one-bit executes an extra instruction - and harmless, because nothing in the
-; protocol depends on a constant bit period. Mean bit rate is ~1231 kHz against
-; the family's nominal 800 kHz; a frame is 9 LEDs x 24 bits at ~812 ns average,
-; about 176 us, so a 60 Hz refresh leaves the DMA idle ~98.9% of the time.
-;
-; If a batch of LEDs misreads the data, change the divisor in leds.c and nothing
-; else. Dropping it to 6 MHz scales every pulse width by 1.25 and leaves the
-; ratios alone, which is the adjustment that helps.
-;
-; ---- the two bugs this file used to have ---------------------------------
-; Neither was visible to the unit tests. test_leds.c asserts on the packed DMA
-; buffer, and the buffer was correct throughout; both bugs were in the waveform
-; the PIO made from it. Only a logic analyser, or the simulator, sees them.
-;
-; (a) The loop was three instructions:
-;         out x,1 side 0 / jmp !x,do_zero side 1 [T1H-1] / do_zero: nop side 0 [T0H-1]
-;     The jmp's target was the nop immediately after it, so the branch skipped
-;     nothing. Both paths ran all three instructions, both held the pin high for
-;     the same number of cycles, T0H == T1H, and the strip would have latched one
-;     uniform colour whatever the firmware computed. No choice of delays can fix
-;     that shape - the not-taken path has to execute an instruction the taken path
-;     skips, which needs a fourth instruction.
-;
-; (b) The first repair kept the difference on the jmp as `side 1 [T1H-1]`. By
-;     RULE 2 that lengthened the zero bit's high pulse too: T0H came out at 500 ns
-;     and T1H at 700 ns. Distinguishable on paper, but T0H was past the point
-;     where the part reads a zero, and 200 ns of separation is not much margin.
-;
-; Reset/latch: the strip latches after >50 us of low. Not emitted here - the DMA
-; stops and the pin idles low, which at 60 Hz is ~16 ms. Standard trick.
-
 .wrap_target
 bitloop:
-    out x, 1          side 0      ; 1c low: shift out one bit, MSB first
-    jmp !x, do_zero   side 1 [1]  ; 2c high for BOTH bits - this delay IS T0H (RULE 2)
-    nop               side 1 [2]  ; bit 1 ONLY: 3c more high. This is the instruction bit 0 skips
+    out x, 1          side 0 [5]  ; 6c low; can stall LOW on an empty TX FIFO
+    jmp !x do_zero    side 1 [2]  ; 3c high for both bit values
+    jmp bitloop       side 1 [3]  ; bit 1: 4c more high, then next bit
 do_zero:
-    nop               side 0 [1]  ; both: 2c low, then wrap back to the out
+    nop               side 0 [3]  ; bit 0: 4c low, then wrap to next bit
 .wrap
 
 % c-sdk {
-#include "hardware/clocks.h"
-
 static inline void ws2812minie_program_init(PIO pio, uint sm, uint offset, uint pin,
-                                            float freq_div, int invert) {
+                                            float freq_div) {
     pio_gpio_init(pio, pin);
     pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
 
     pio_sm_config c = ws2812minie_program_get_default_config(offset);
     sm_config_set_sideset_pins(&c, pin);
     sm_config_set_out_shift(&c,
-                            /*shift_right=*/false,   // MSB first, matches the LED order
+                            /*shift_right=*/false,  // MSB first: bits 31..8 of each word
                             /*autopull=*/true,
-                            /*pull_threshold=*/24);  // 24 bits per LED
+                            /*pull_threshold=*/24);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
-
-    /* The invert knob. pio_sm_config has no native "invert output" for side-set,
-     * so we do it the documented way: drive the pin through an XOR by using the
-     * GPIO output-enable/invert controls, which the RP2040/RP2350 pads support
-     * natively and which cost zero PIO cycles. */
     sm_config_set_clkdiv(&c, freq_div);
     pio_sm_init(pio, sm, offset, &c);
 
-    if (invert) {
-        gpio_set_oeover(pin, GPIO_OVERRIDE_INVERT);
-        gpio_set_outover(pin, GPIO_OVERRIDE_INVERT);
-    } else {
-        gpio_set_oeover(pin, GPIO_OVERRIDE_NORMAL);
-        gpio_set_outover(pin, GPIO_OVERRIDE_NORMAL);
-    }
-
+    /* GP10 drives buffer A, and the 74AHCT1G125 passes A to Y without
+     * inversion. OE is a GPIO output-enable override, NOT the buffer's /OE:
+     * both GPIO overrides must be NORMAL. The buffer's /OE is hardwired LOW. */
+    gpio_set_oeover(pin, GPIO_OVERRIDE_NORMAL);
+    gpio_set_outover(pin, GPIO_OVERRIDE_NORMAL);
     pio_sm_set_enabled(pio, sm, true);
 }
 %}

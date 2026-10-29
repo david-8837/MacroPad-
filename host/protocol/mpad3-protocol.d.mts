@@ -18,6 +18,7 @@ export const MAGIC_STRING: string;
 export const MAGIC_U32: number;
 export const PROTOCOL_VERSION: number;
 export const CONFIG_FORMAT_VERSION: number;
+export const LED_TEST_HOLD_MS: number;
 export const MTU: number;
 export const CHUNK_SIZE: number;
 
@@ -33,7 +34,16 @@ export const STATUS: Record<string, number>;
 export const STATUS_NAME: Record<number, string>;
 export const ACTION_TYPE: Record<string, number>;
 export const LED_MODE: Record<string, number>;
-export const CAP: { ENCODER: number; OLED: number; FLASH: number; EVENTS: number };
+export const CAP: { ENCODER: number; OLED: number; FLASH: number; EVENTS: number; OLED_STREAM: number; LED_OUTPUT: number };
+export const OLED_MODE_COUNT: number;
+export const OLED_STREAM: {
+  readonly FRAME_BYTES: number;
+  readonly CHUNK_BYTES: number;
+  readonly CHUNK_COUNT: number;
+  readonly HEADER_BYTES: number;
+  readonly STAGING_TIMEOUT_MS: number;
+  readonly TTL_MS: number;
+};
 
 export const SIZES: Record<string, number>;
 export const OFFSETS: Record<string, Record<string, number>>;
@@ -88,6 +98,18 @@ export interface KeyEvent {
 
 export const EVENT_KIND: Record<string, number>;
 export function decodeKeyEvent(payload: Uint8Array): KeyEvent;
+export interface OledState { mode: number; epoch: number }
+export interface OledFrameAck { seq: number; mode: number }
+export interface OledFrameChunk extends OledFrameAck {
+  index: number;
+  count: number;
+  crc32: number;
+  pages: Uint8Array;
+}
+export function encodeOledFrameChunks(pages: Uint8Array, mode: number, seq: number): [Uint8Array, Uint8Array];
+export function decodeOledFrameChunk(payload: Uint8Array): OledFrameChunk;
+export function decodeOledState(payload: Uint8Array): OledState;
+export function decodeOledFrameAck(payload: Uint8Array): OledFrameAck;
 export function decodeInfo(payload: Uint8Array): Info;
 export function decodeLighting(payload: Uint8Array, offset?: number): Lighting;
 export function encodeLighting(channelIndex: number, L: Lighting): Uint8Array;
@@ -130,6 +152,9 @@ export interface CfgGlobal {
   usbReportEvents: number;
   oledAutoCycleS: number;
   oledPlaylist: number;
+  oledBootMode: number;
+  oledContrast: number;
+  oledInverted: number;
 }
 
 export interface Cfg {

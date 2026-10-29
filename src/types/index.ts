@@ -3,8 +3,11 @@ export type ActionCategory =
   | 'media' 
   | 'audio_session' 
   | 'midi' 
-  | 'script' 
+  | 'script'
+  | 'macro' // PC-owned M0–M15; the pad emits KEY_EVENT from an empty slot
+  | 'text'
   | 'navigation'
+  | 'oled' // on-pad OLED NEXT playlist step after upload
   | 'app_launch';
 
 // Discovered Application from the Electron main process
@@ -32,11 +35,17 @@ export interface ActionDefinition {
   payload: {
     // For hotkey
     keys?: string[];
-    /** A raw QMK/VIA keycode the pad sends itself (MO(1), KC_NO, …). The host
-     *  cannot type these, and says so instead of pretending. */
+    /** Legacy unsupported QMK/VIA code. New tray assignments never create one;
+     *  neither firmware nor the PC should pretend to execute it. */
     keycode?: string;
+    /** M0–M15 run on the desktop only after a firmware KEY_EVENT. */
+    macroId?: number;
+    /** Firmware channel to select with an on-pad CHANNEL action (0–3). */
+    targetChannel?: number;
+    /** Manual on-pad OLED playlist step; never sent to the PC native key injector. */
+    oledStep?: 'next';
     // For media
-    mediaAction?: 'play_pause' | 'next' | 'prev' | 'volume_up' | 'volume_down' | 'mute';
+    mediaAction?: 'play_pause' | 'stop' | 'next' | 'prev' | 'volume_up' | 'volume_down' | 'mute';
     // For audio_session (WASAPI)
     processName?: string; // 'spotify.exe', 'discord.exe', 'master', 'focus'
     audioDelta?: number; // +5, -5
@@ -47,9 +56,10 @@ export interface ActionDefinition {
     midiNote?: number;
     midiCC?: number;
     midiValue?: number;
-    // For script
+    // Explicit program launch (script) versus literal typed text (text).
     shellType?: 'powershell' | 'cmd' | 'bash';
     command?: string;
+    text?: string;
     // For navigation
     targetLayerId?: string;
     // For app_launch
@@ -120,6 +130,8 @@ export interface Layer {
 export interface Deck {
   id: string;
   name: string;
+  /** Persistent local editing guard for bindings, PC macro steps and deck uploads.
+   * Not a password, encryption, or a lock on the physical pad/global settings. */
   isLocked?: boolean;
   layers: Layer[];
   activeLayerId: string;

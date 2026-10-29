@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "protocol.h" /* crc32_ieee */
+#include "oled_playlist.h"
 
 static cfg_blob_t s_cfg;
 static bool s_loaded;
@@ -47,6 +48,10 @@ bool config_validate(const cfg_blob_t *cfg) {
         if (c->lighting.mode > LED_MODE_CHANNEL_TINT) return false;
     }
     if (cfg->global.boot_channel >= CFG_CHANNEL_COUNT) return false;
+    if (cfg->global.oled_boot_mode >= OLED_SCREEN_COUNT) return false;
+    if (cfg->global.oled_inverted > 1 || cfg->global._oled_pad != 0) return false;
+    if (cfg->global.oled_auto_cycle_s != 0 &&
+        cfg->global.oled_auto_cycle_s < OLED_AUTO_CYCLE_MIN_S) return false;
     return true;
 }
 
@@ -66,29 +71,70 @@ static uint32_t hdr_crc(const sector_header_t *h) {
     return crc32_ieee((const uint8_t *)h, SECTOR_HEADER_SIZE - 4);
 }
 
-static bool slot_read(uint8_t slot, sector_header_t *h, cfg_blob_t *blob, uint32_t *seq_out) {
-    uint8_t buf[SECTOR_HEADER_SIZE + sizeof(cfg_blob_t)];
-    if (!storage_flash_read_slot(slot, buf, sizeof(buf))) return false;
-    memcpy(h, buf, SECTOR_HEADER_SIZE);
-    memcpy(blob, buf + SECTOR_HEADER_SIZE, sizeof(cfg_blob_t));
-    if (h->magic != MAGIC_SECTOR) return false;
-    if (h->hdr_crc != hdr_crc(h)) return false;
-    if (!config_validate(blob)) return false;
-    if (seq_out) *seq_out = h->seq;
-    return true;
+/* v2's first 16 global bytes and all four channels are byte-for-byte the
+ * same as v3. Its CRC was at offset 2264, not v3's 2268. Keep the old layout
+ * pinned and validate BOTH old CRCs before copying any user bindings. */
+typedef struct __attribute__((packed)) {
+    uint32_t magic;
+    uint16_t version;
+    uint16_t length;
+    uint8_t global[16];
+    cfg_channel_t channels[CFG_CHANNEL_COUNT];
+    uint32_t crc32;
+} cfg_blob_v2_t;
+_Static_assert(sizeof(cfg_blob_v2_t) == 2268, "v2 migration layout changed");
+_Static_assert(offsetof(cfg_blob_v2_t, channels) == 24, "v2 channel offset changed");
+
+/* Keep large config buffers out of the core-0 boot stack. Calls are all on the
+ * single-threaded superloop; slot_write can reuse the read buffer after both
+ * reads have returned. */
+static uint8_t s_sector_bytes[SECTOR_HEADER_SIZE + sizeof(cfg_blob_t)];
+static cfg_blob_t s_second_slot;
+enum { SLOT_BAD = 0, SLOT_V2 = 2, SLOT_V3 = 3 };
+
+static int slot_read(uint8_t slot, cfg_blob_t *out, uint32_t *seq_out) {
+    if (!storage_flash_read_slot(slot, s_sector_bytes, sizeof(s_sector_bytes))) return SLOT_BAD;
+    sector_header_t h;
+    memcpy(&h, s_sector_bytes, sizeof(h));
+    if (h.magic != MAGIC_SECTOR || h.hdr_crc != hdr_crc(&h)) return SLOT_BAD;
+    const uint8_t *body = s_sector_bytes + SECTOR_HEADER_SIZE;
+    const cfg_blob_t *current = (const cfg_blob_t *)body;
+    if (current->version == CONFIG_FORMAT_VERSION && h.blob_crc == current->crc32 &&
+        config_validate(current)) {
+        memcpy(out, current, sizeof(*out));
+        if (seq_out) *seq_out = h.seq;
+        return SLOT_V3;
+    }
+
+    const cfg_blob_v2_t *old = (const cfg_blob_v2_t *)body;
+    if (old->magic != MAGIC_CONFIG || old->version != 2 || old->length != sizeof(*old) ||
+        h.blob_crc != old->crc32 ||
+        crc32_ieee(body, sizeof(*old) - sizeof(old->crc32)) != old->crc32) {
+        return SLOT_BAD;
+    }
+    config_defaults(out);
+    memcpy(&out->global, old->global, sizeof(old->global));
+    memcpy(out->channels, old->channels, sizeof(old->channels));
+    /* Older tools could store 1-2 s; v3 validates the 3 s floor. */
+    if (out->global.oled_auto_cycle_s > 0 &&
+        out->global.oled_auto_cycle_s < OLED_AUTO_CYCLE_MIN_S) {
+        out->global.oled_auto_cycle_s = OLED_AUTO_CYCLE_MIN_S;
+    }
+    config_reseal(out);
+    if (!config_validate(out)) return SLOT_BAD;
+    if (seq_out) *seq_out = h.seq;
+    return SLOT_V2;
 }
 
 static bool slot_write(uint8_t slot, uint32_t seq, const cfg_blob_t *blob) {
-    uint8_t buf[SECTOR_HEADER_SIZE + sizeof(cfg_blob_t)];
-    sector_header_t h;
-    memset(&h, 0, sizeof(h));
+    sector_header_t h = {0};
     h.magic = MAGIC_SECTOR;
     h.seq = seq;
     h.blob_crc = blob->crc32;
     h.hdr_crc = hdr_crc(&h);
-    memcpy(buf, &h, SECTOR_HEADER_SIZE);
-    memcpy(buf + SECTOR_HEADER_SIZE, blob, sizeof(cfg_blob_t));
-    return storage_flash_write_slot(slot, buf, sizeof(buf));
+    memcpy(s_sector_bytes, &h, SECTOR_HEADER_SIZE);
+    memcpy(s_sector_bytes + SECTOR_HEADER_SIZE, blob, sizeof(cfg_blob_t));
+    return storage_flash_write_slot(slot, s_sector_bytes, sizeof(s_sector_bytes));
 }
 
 /* ---- public ------------------------------------------------------------- */
@@ -96,45 +142,28 @@ bool storage_init(void) {
     memset(&s_stats, 0, sizeof(s_stats));
     s_loaded = false;
 
-    sector_header_t h;
-    cfg_blob_t blob;
     uint32_t seq_a = 0, seq_b = 0;
-    cfg_blob_t blob_a;
-    memset(&blob_a, 0, sizeof(blob_a));
-    bool ok_a = slot_read(0, &h, &blob, &seq_a);
-    if (!ok_a) s_stats.recoveries++;
-    if (ok_a) blob_a = blob;
+    int kind_a = slot_read(0, &s_cfg, &seq_a);
+    if (kind_a == SLOT_BAD) s_stats.recoveries++;
+    int kind_b = slot_read(1, &s_second_slot, &seq_b);
+    if (kind_b == SLOT_BAD) s_stats.recoveries++;
 
-    bool ok_b = slot_read(1, &h, &blob, &seq_b);
-    if (!ok_b) s_stats.recoveries++;
-
-    if (ok_a && ok_b) {
-        /* Higher sequence wins. Equal sequences should be impossible but if it
-         * happens prefer slot A so behaviour is deterministic. */
-        if (seq_b > seq_a) {
-            s_cfg = blob;
+    int selected_kind = SLOT_BAD;
+    if (kind_a != SLOT_BAD || kind_b != SLOT_BAD) {
+        /* Highest valid sequence wins; ties prefer A. A v2 slot stays intact
+         * until its upgraded v3 copy is fully programmed in the OTHER slot. */
+        if (kind_b != SLOT_BAD && (kind_a == SLOT_BAD || seq_b > seq_a)) {
+            s_cfg = s_second_slot;
             s_stats.seq = seq_b;
             s_stats.active_slot = 1;
+            selected_kind = kind_b;
         } else {
-            s_cfg = blob_a;
             s_stats.seq = seq_a;
             s_stats.active_slot = 0;
+            selected_kind = kind_a;
         }
         s_stats.valid = true;
-    } else if (ok_a) {
-        s_cfg = blob_a;
-        s_stats.seq = seq_a;
-        s_stats.active_slot = 0;
-        s_stats.valid = true;
-    } else if (ok_b) {
-        s_cfg = blob;
-        s_stats.seq = seq_b;
-        s_stats.active_slot = 1;
-        s_stats.valid = true;
     } else {
-        /* Both slots unusable: first boot, or someone flashed over the config
-         * region. Come up on factory defaults and write them immediately so the
-         * next boot has something valid. */
         config_defaults(&s_cfg);
         s_stats.seq = 1;
         s_stats.active_slot = 0;
@@ -143,9 +172,13 @@ bool storage_init(void) {
         (void)slot_write(0, s_stats.seq, &s_cfg);
     }
 
-    /* Clamp anything that could have come from a partially-written sector. */
-    if (s_cfg.global.boot_channel >= CFG_CHANNEL_COUNT) s_cfg.global.boot_channel = 0;
     s_loaded = true;
+    if (selected_kind == SLOT_V2) {
+        /* Failed write/brown-out leaves the original v2 sector bootable. Keep
+         * RAM marked dirty and retry migration on the next power cycle. */
+        s_stats.dirty = true;
+        (void)storage_commit();
+    }
     return s_stats.valid;
 }
 

@@ -18,8 +18,9 @@ export const MAGIC_STRING = 'MPAD3';
 export const MAGIC_U32 = 0x4d504144;
 export const CONFIG_MAGIC_U32 = 0x43464733;
 export const SECTOR_MAGIC_U32 = 0x53454331;
-export const PROTOCOL_VERSION = 1;
-export const CONFIG_FORMAT_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
+export const CONFIG_FORMAT_VERSION = 3;
+export const LED_TEST_HOLD_MS = 300; /* bench-only raw override, then normal mode resumes */
 
 export const SOF0 = 0xa5;
 export const SOF1 = 0x5a;
@@ -49,7 +50,13 @@ export const CMD = {
   SET_LIGHTING: 0x09,
   PREVIEW_LIGHTING: 0x0a,
   LED_TEST: 0x0b,
+  OLED_FRAME: 0x0c,
+  OLED_FRAME_ACK: 0x8c,
+  GET_OLED_STATE: 0x0d,
+  OLED_STATE: 0x8d,
+  SET_OLED_MODE: 0x0e,
   KEY_EVENT: 0xc0,
+  OLED_MODE_EVENT: 0xc1,
   BOOTLOADER: 0xfe,
   ERROR: 0xff,
 };
@@ -66,6 +73,7 @@ export const STATUS = {
   BUSY: 6,
   UNKNOWN_CMD: 7,
   BAD_ARG: 8,
+  LED_DISABLED: 9,
 };
 
 export const STATUS_NAME = Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [v, k]));
@@ -123,7 +131,15 @@ export const EVENT_KIND_NAME = Object.fromEntries(
   Object.entries(EVENT_KIND).map(([k, v]) => [v, k]),
 );
 
-export const CAP = { ENCODER: 0x01, OLED: 0x02, FLASH: 0x04, EVENTS: 0x08 };
+export const CAP = { ENCODER: 0x01, OLED: 0x02, FLASH: 0x04, EVENTS: 0x08, OLED_STREAM: 0x10,
+  LED_OUTPUT: 0x20 };
+
+/* Volatile 128x32 page-order streaming. No saved-config layout changes. */
+export const OLED_MODE_COUNT = 12;
+export const OLED_STREAM = Object.freeze({
+  FRAME_BYTES: 512, CHUNK_BYTES: 256, CHUNK_COUNT: 2, HEADER_BYTES: 9,
+  STAGING_TIMEOUT_MS: 350, TTL_MS: 1200,
+});
 
 /* Struct geometry. Offsets come from the compiled C via layout.json and are
  * asserted against these values by the test suite. */
@@ -133,11 +149,13 @@ export const SIZES = {
   action: 40,
   lighting: 40,
   channel: 560,
-  global: 16,
-  /* Derived, not typed twice: header (8) + global (16) + channels + crc (4). */
-  config: 8 + 16 + CHANNEL_COUNT * 560 + 4,
+  global: 20,
+  /* Derived, not typed twice: header (8) + global (20) + channels + crc (4). */
+  config: 8 + 20 + CHANNEL_COUNT * 560 + 4,
   sectorHeader: 16,
   keyEvent: 8,
+  oledFrameChunk: OLED_STREAM.HEADER_BYTES + OLED_STREAM.CHUNK_BYTES,
+  oledState: 3,
   info: 16,
 };
 
@@ -151,14 +169,17 @@ export const OFFSETS = {
   global: {
     holdMs: 0, doubleTapMs: 2, knobHoldMs: 4, knobIdleMs: 6, knobBatch: 8,
     holdRepeatMs: 9, bootChannel: 10, ledInvertOutput: 11, usbReportEvents: 12,
-    oledAutoCycleS: 13, oledPlaylist: 14,
+    oledAutoCycleS: 13, oledPlaylist: 14, oledBootMode: 16,
+    oledContrast: 17, oledInverted: 18, oledPad: 19,
   },
-  config: { magic: 0, version: 4, length: 6, global: 8, channels: 24, crc32: 8 + 16 + CHANNEL_COUNT * 560 },
+  config: { magic: 0, version: 4, length: 6, global: 8, channels: 28, crc32: 8 + 20 + CHANNEL_COUNT * 560 },
   /* The A/B flash sector header. The host never reads raw flash, but describing
    * it here is what makes the reverse coverage check meaningful: if firmware
    * adds a field to sector_header_t, this file has to acknowledge it. */
   sectorHeader: { magic: 0, seq: 4, blobCrc: 8, hdrCrc: 12 },
   keyEvent: { source: 0, index: 1, event: 2, channel: 3, value: 4, action: 6 },
+  oledFrameChunk: { seq: 0, mode: 2, index: 3, count: 4, crc32: 5, pages: 9 },
+  oledState: { mode: 0, epoch: 1 },
 };
 
 export const KEY_COUNT = 9;
@@ -404,6 +425,56 @@ export function decodeKeyEvent(p) {
   };
 }
 
+/* SSD1306 pages are [page0 x=0..127, page1, page2, page3]; bit y&7 is
+ * the pixel in a page byte. Keep the full-frame checksum in BOTH halves: a
+ * reordered, lost or mixed packet is never an image. */
+export function encodeOledFrameChunks(pages, mode, seq) {
+  if (!(pages instanceof Uint8Array) || pages.length !== OLED_STREAM.FRAME_BYTES) {
+    throw new RangeError('OLED canvas must contain exactly 512 page-order bytes');
+  }
+  if (!Number.isInteger(mode) || mode < 0 || mode >= OLED_MODE_COUNT ||
+      !Number.isInteger(seq) || seq < 0 || seq > 0xffff) {
+    throw new RangeError('invalid OLED mode or sequence');
+  }
+  const checksum = crc32(pages);
+  return [0, 1].map((index) => {
+    const p = new Uint8Array(SIZES.oledFrameChunk);
+    const v = new DataView(p.buffer);
+    v.setUint16(0, seq, true);
+    p[2] = mode;
+    p[3] = index;
+    p[4] = OLED_STREAM.CHUNK_COUNT;
+    v.setUint32(5, checksum, true);
+    p.set(pages.subarray(index * OLED_STREAM.CHUNK_BYTES,
+                         (index + 1) * OLED_STREAM.CHUNK_BYTES), OLED_STREAM.HEADER_BYTES);
+    return p;
+  });
+}
+
+export function decodeOledFrameChunk(p) {
+  if (!(p instanceof Uint8Array) || p.length !== SIZES.oledFrameChunk ||
+      p[2] >= OLED_MODE_COUNT || p[3] >= OLED_STREAM.CHUNK_COUNT ||
+      p[4] !== OLED_STREAM.CHUNK_COUNT) throw new RangeError('invalid OLED chunk');
+  const v = new DataView(p.buffer, p.byteOffset, p.byteLength);
+  return {
+    seq: v.getUint16(0, true), mode: p[2], index: p[3], count: p[4],
+    crc32: v.getUint32(5, true), pages: p.slice(OLED_STREAM.HEADER_BYTES),
+  };
+}
+
+export function decodeOledState(p) {
+  if (!(p instanceof Uint8Array) || p.length !== SIZES.oledState ||
+      p[0] >= OLED_MODE_COUNT) throw new RangeError('invalid OLED state');
+  return { mode: p[0], epoch: p[1] | (p[2] << 8) };
+}
+
+export function decodeOledFrameAck(p) {
+  if (!(p instanceof Uint8Array) || p.length !== 3 || p[2] >= OLED_MODE_COUNT) {
+    throw new RangeError('invalid OLED frame ACK');
+  }
+  return { seq: p[0] | (p[1] << 8), mode: p[2] };
+}
+
 export function decodeChunk(p) {
   const v = new DataView(p.buffer, p.byteOffset, p.byteLength);
   return { index: p[0], count: p[1], n: v.getUint16(2, true), bytes: p.subarray(4, 4 + v.getUint16(2, true)) };
@@ -452,6 +523,11 @@ export function defaultConfig() {
       bootChannel: 0,
       ledInvertOutput: 1,
       usbReportEvents: 1,
+      oledAutoCycleS: 30,
+      oledPlaylist: 0,
+      oledBootMode: 0,
+      oledContrast: 143,
+      oledInverted: 0,
     },
     channels: Array.from({ length: CHANNEL_COUNT }, (_, ch) => ({
       keys: Array.from({ length: KEY_COUNT }, () => emptyAction()),
@@ -554,6 +630,10 @@ export function encodeConfig(cfg) {
   // OLED rotation: seconds per screen (0 = off) and the playlist bitmask.
   v.setUint8(gb + OFFSETS.global.oledAutoCycleS, g.oledAutoCycleS ?? 30);
   v.setUint16(gb + OFFSETS.global.oledPlaylist, g.oledPlaylist ?? 0, true);
+  v.setUint8(gb + OFFSETS.global.oledBootMode, g.oledBootMode ?? 0);
+  v.setUint8(gb + OFFSETS.global.oledContrast, g.oledContrast ?? 143);
+  v.setUint8(gb + OFFSETS.global.oledInverted, g.oledInverted ?? 0);
+  /* oledPad remains zero in the newly allocated blob. */
 
   for (let ch = 0; ch < CHANNEL_COUNT; ch++) {
     const base = OFFSETS.config.channels + ch * SIZES.channel;
@@ -603,6 +683,9 @@ export function decodeConfig(bytes) {
     usbReportEvents: v.getUint8(gb + OFFSETS.global.usbReportEvents),
     oledAutoCycleS: v.getUint8(gb + OFFSETS.global.oledAutoCycleS),
     oledPlaylist: v.getUint16(gb + OFFSETS.global.oledPlaylist, true),
+    oledBootMode: v.getUint8(gb + OFFSETS.global.oledBootMode),
+    oledContrast: v.getUint8(gb + OFFSETS.global.oledContrast),
+    oledInverted: v.getUint8(gb + OFFSETS.global.oledInverted),
   };
 
   const channels = [];

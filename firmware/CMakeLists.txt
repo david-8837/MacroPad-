@@ -60,9 +60,11 @@ add_executable(mpad3
     src/core/events.c
     src/core/gesture.c
     src/core/oled_playlist.c
+    src/core/oled_stream.c
     src/core/protocol.c
     src/drivers/oled.c
     src/drivers/oled_frames.c
+    src/drivers/oled_runtime.c
     src/drivers/scan.c
     src/lighting/leds.c
     src/storage/config_defaults.c
@@ -87,6 +89,13 @@ target_compile_definitions(mpad3 PRIVATE
     CFG_TUSB_CONFIG_FILE="tusb_config.h"
 )
 
+# An unspecified LED strip and unbudgeted 5 V rail must not light on first
+# power-up. Bench-only opt-in is explicit and never stored in flash config.
+option(MPAD_BENCH_LED_OUTPUT "Enable LED output for a current-limited bench setup only" OFF)
+if(MPAD_BENCH_LED_OUTPUT)
+    target_compile_definitions(mpad3 PRIVATE BOARD_LED_OUTPUT_ENABLED=1)
+endif()
+
 # Generate the PIO header from the .pio source at configure time.
 pico_generate_pio_header(mpad3 ${CMAKE_CURRENT_LIST_DIR}/src/lighting/ws2812minie.pio)
 
@@ -98,6 +107,7 @@ target_link_libraries(mpad3 PRIVATE
     hardware_flash
     hardware_clocks
     hardware_gpio
+    hardware_i2c
     hardware_watchdog
     tinyusb_device
     tinyusb_board

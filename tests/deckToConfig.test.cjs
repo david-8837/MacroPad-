@@ -9,7 +9,7 @@
  *   · a binding the pad cannot run is refused *and named*, never silently
  *     dropped and never replaced by a guess
  *   · the pad's own settings and lighting survive the upload
- *   · the result encodes to the exact 2268-byte blob the firmware validates
+ *   · the result encodes to the exact 2272-byte v3 blob the firmware validates
  */
 const assert = require('node:assert');
 const { mkdtempSync, rmSync } = require('node:fs');
@@ -97,11 +97,19 @@ const hotkey = (keys, name = keys.join('+')) => ({
 
 async function run() {
   console.log('[deckToConfig] Starting upload mapping tests...');
-  const { deckToConfig } = await bundle('src/utils/deckToConfig.ts');
+  const { deckToConfig, hasOledNextAction } = await bundle('src/utils/deckToConfig.ts');
   const { defaultConfig, encodeConfig, decodeConfig, ACTION_TYPE, SIZES } =
     await bundle('host/protocol/mpad3-protocol.mjs');
 
   const base = defaultConfig();
+
+  await check('the shipped four-layer example has no inert key or knob action on upload', async () => {
+    const { defaultDeck } = await bundle('src/data/defaultDeck.ts');
+    const { normalizeDeckLayers } = await bundle('src/utils/channelLayers.ts');
+    const { unsupported } = deckToConfig(normalizeDeckLayers(defaultDeck), base);
+    assert.deepStrictEqual(unsupported.filter(u => u.route === 'unavailable'), [],
+      'the initial deck must not advertise example actions with no firmware or PC route');
+  });
 
   await check('Ctrl+C becomes one KEYCODE with the modifier in the high byte', () => {
     const { config, mapped, unsupported } = deckToConfig(deckWith(hotkey(['Ctrl', 'C'])), base);
@@ -135,6 +143,30 @@ async function run() {
     const { config } = deckToConfig(deckWith(action), base);
     assert.strictEqual(config.channels[0].keys[0].type, ACTION_TYPE.TEXT);
     assert.strictEqual(config.channels[0].keys[0].text, 'hello there');
+  });
+
+  await check('OLED NEXT is an on-pad manual playlist action, not desktop text', () => {
+    const action = { id: 'oled-next', category: 'oled', name: 'OLED Next', payload: { oledStep: 'next' } };
+    const { config, mapped, unsupported } = deckToConfig(deckWith(action), base);
+    assert.strictEqual(config.channels[0].keys[0].type, ACTION_TYPE.OLED_NEXT);
+    assert.strictEqual(config.channels[0].keys[0].code, 0);
+    assert.strictEqual(config.channels[0].keys[0].text, '');
+    assert.strictEqual(mapped, 1);
+    assert.deepStrictEqual(unsupported, []);
+    assert.strictEqual(hasOledNextAction(config), true);
+    const bad = deckToConfig(deckWith({ ...action, payload: { oledStep: 'reset' } }), base);
+    assert.strictEqual(hasOledNextAction(bad.config), false);
+    assert.strictEqual(bad.config.channels[0].keys[0].type, ACTION_TYPE.NONE);
+    assert.strictEqual(bad.unsupported[0].route, 'unavailable');
+  });
+
+  await check('a saved legacy VIA M0 macro is NEVER uploaded as the text macro:0', () => {
+    const action = { id: 'M0-0', category: 'script', name: 'Macro M0', payload: { command: 'macro:0' } };
+    const { config, mapped, unsupported } = deckToConfig(deckWith(action), base);
+    assert.strictEqual(config.channels[0].keys[0].type, ACTION_TYPE.NONE);
+    assert.strictEqual(config.channels[0].keys[0].text, '');
+    assert.strictEqual(mapped, 0);
+    assert.match(unsupported[0].reason, /desktop|PC/i);
   });
 
   await check('launching a program is refused, and the slot is named', () => {
@@ -246,7 +278,7 @@ async function run() {
     const { config } = deckToConfig(deckWith(hotkey(['Ctrl', 'C'])), base);
     const blob = encodeConfig(config);
     assert.strictEqual(blob.length, SIZES.config);
-    assert.strictEqual(blob.length, 2268);
+    assert.strictEqual(blob.length, 2272);
     const back = decodeConfig(blob); // validates magic, version, length and CRC
     assert.strictEqual(back.channels[0].keys[0].code, (0x01 << 8) | 0x06);
     assert.strictEqual(back.channels.length, 4);

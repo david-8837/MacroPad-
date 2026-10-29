@@ -114,65 +114,92 @@ int oled_play(oled_canvas_t *c, uint8_t mode, uint32_t ms) {
 #include "hardware/i2c.h"
 #include "pico/stdlib.h"
 
-static uint8_t contrast_level = 0x8f;
+#define OLED_I2C_HZ 400000u
+#define OLED_I2C_TIMEOUT_US 20000u /* finite even when the bus is stuck */
 
-static void oled_cmd(uint8_t cmd) {
-    uint8_t buf[2] = {0x00, cmd}; /* 0x00 = command stream */
-    i2c_write_blocking(BOARD_OLED_I2C_INST ? i2c1 : i2c0, BOARD_OLED_ADDR, buf, 2, false);
+static int s_ready;
+static i2c_inst_t *bus(void) { return BOARD_OLED_I2C_INST ? i2c1 : i2c0; }
+
+/* 0x00: command stream; 0x40: page data. Each transaction has its own
+ * control byte. No unbounded blocking I2C calls on the input-device loop. */
+static int send_commands(const uint8_t *cmd, unsigned n) {
+    if (n > 31) return 0;
+    uint8_t buf[32] = {0x00};
+    memcpy(buf + 1, cmd, n);
+    return i2c_write_timeout_us(bus(), BOARD_OLED_ADDR, buf, n + 1, false,
+                                OLED_I2C_TIMEOUT_US) == (int)(n + 1);
 }
 
-int oled_hw_present(void) { return 1; }
+int oled_hw_init(void) {
+    static const uint8_t init[] = {
+        0xAE,       /* off during setup */
+        0xD5, 0x80, /* clock divide */
+        0xA8, 0x1F, /* multiplex: 32 rows */
+        0xD3, 0x00, /* offset zero */
+        0x40,       /* start line zero */
+        0x8D, 0x14, /* internal charge pump (3V3 modules) */
+        0x20, 0x00, /* horizontal addressing */
+        0xA1, 0xC8, /* segment remap, COM scan reversed */
+        0xDA, 0x02, /* 128x32 COM pins */
+        0x81, 0x8F, /* default contrast */
+        0xD9, 0xF1, /* pre-charge */
+        0xDB, 0x40, /* VCOMH */
+        0xA4, 0xA6, /* display RAM, not inverted */
+        0xAF        /* on */
+    };
+    s_ready = 0;
+    i2c_init(bus(), OLED_I2C_HZ);
+    gpio_set_function(BOARD_OLED_SDA_PIN, GPIO_FUNC_I2C);
+    gpio_set_function(BOARD_OLED_SCL_PIN, GPIO_FUNC_I2C);
+    gpio_pull_up(BOARD_OLED_SDA_PIN);
+    gpio_pull_up(BOARD_OLED_SCL_PIN);
+    /* A missing module NACKs; expose that truth in CAP_OLED instead of claiming
+     * the display works simply because the firmware was compiled with I2C. */
+    s_ready = send_commands(init, sizeof(init));
+    return s_ready;
+}
+
+int oled_hw_present(void) { return s_ready; }
 
 void oled_set_contrast(uint8_t level) {
-    contrast_level = level;
-    oled_cmd(0x81); /* set contrast */
-    oled_cmd(level);
+    if (!s_ready) return;
+    const uint8_t cmd[] = {0x81, level};
+    if (!send_commands(cmd, sizeof(cmd))) s_ready = 0;
+}
+
+void oled_set_inverted(int inverted) {
+    if (!s_ready) return;
+    const uint8_t cmd = inverted ? 0xA7 : 0xA6;
+    if (!send_commands(&cmd, 1)) s_ready = 0;
 }
 
 void oled_flush(const oled_canvas_t *c) {
-    static const uint8_t init[] = {
-        0xAE,       /* display off */
-        0xD5, 0x80, /* clock divide */
-        0xA8, 0x1F, /* multiplex = 32 rows */
-        0xD3, 0x00, /* display offset */
-        0x40,       /* start line 0 */
-        0x8D, 0x14, /* charge pump on */
-        0x20, 0x00, /* horizontal addressing */
-        0xA1,       /* segment remap */
-        0xC8,       /* COM scan dec */
-        0xDA, 0x02, /* COM pins for 128x32 */
-        0x81, 0x8F, /* contrast */
-        0xD9, 0xF1, /* pre-charge */
-        0xDB, 0x40, /* VCOMH */
-        0xA4,       /* resume from RAM */
-        0xA6,       /* not inverted */
-        0xAF        /* display on */
-    };
-    static int initialised = 0;
-    if (!initialised) {
-        for (unsigned i = 0; i < sizeof(init); i++) oled_cmd(init[i]);
-        initialised = 1;
-    }
+    if (!s_ready || !c) return;
+    const uint8_t window[] = {0x21, 0x00, 0x7F, 0x22, 0x00, 0x03};
+    if (!send_commands(window, sizeof(window))) { s_ready = 0; return; }
 
-    oled_cmd(0x21); oled_cmd(0x00); oled_cmd(0x7F); /* column window 0..127 */
-    oled_cmd(0x22); oled_cmd(0x00); oled_cmd(0x03); /* page window 0..3 */
-
-    /* One 0x40-prefixed data write for the whole 512-byte frame. */
-    uint8_t chunk[17];
+    /* Four transactions of 128 data bytes, each with the SSD1306 0x40 control
+     * byte. The 400 kHz transfer takes ~12 ms; a NACK/stuck bus fails closed. */
+    uint8_t chunk[OLED_FRAME_W + 1];
     chunk[0] = 0x40;
-    i2c_inst_t *i2c = BOARD_OLED_I2C_INST ? i2c1 : i2c0;
-    for (unsigned off = 0; off < OLED_FRAME_BYTES; off += 16) {
-        memcpy(&chunk[1], &c->fb[off], 16);
-        i2c_write_blocking(i2c, BOARD_OLED_ADDR, chunk, sizeof(chunk), false);
+    for (unsigned page = 0; page < OLED_FRAME_PAGES; page++) {
+        memcpy(chunk + 1, c->fb + page * OLED_FRAME_W, OLED_FRAME_W);
+        if (i2c_write_timeout_us(bus(), BOARD_OLED_ADDR, chunk, sizeof(chunk), false,
+                                 OLED_I2C_TIMEOUT_US) != (int)sizeof(chunk)) {
+            s_ready = 0;
+            return;
+        }
     }
 }
 
-#else /* no panel fitted, or the host test build */
+#else /* SDK-free host test build */
 
-int oled_hw_present(void) { return 0; }
-
+static int s_host_present;
+int oled_hw_init(void) { return s_host_present; }
+int oled_hw_present(void) { return s_host_present; }
+void oled_host_set_present(int present) { s_host_present = !!present; }
 void oled_set_contrast(uint8_t level) { (void)level; }
-
+void oled_set_inverted(int inverted) { (void)inverted; }
 void oled_flush(const oled_canvas_t *c) { (void)c; }
 
 #endif

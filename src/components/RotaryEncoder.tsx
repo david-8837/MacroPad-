@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { DialBinding } from '../types';
+import { DialBinding, ActionDefinition } from '../types';
 import { playDetentClick, playKeyClick } from '../utils/soundEffects';
 import { RotateCw, RotateCcw } from 'lucide-react';
 import { DIAL_MODES } from '../utils/channelLayers';
@@ -7,7 +7,7 @@ import { DIAL_MODES } from '../utils/channelLayers';
 interface RotaryEncoderProps {
   dial: DialBinding;
   channelIndex?: number;
-  onTriggerAction: (actionId: string, actionName: string, category: string) => void;
+  onTriggerAction: (actionId: string, actionName: string, category: string, payload?: ActionDefinition['payload']) => void;
   onCycleMode: (channelIndex?: number) => void;
 }
 
@@ -66,10 +66,10 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
 
     if (direction === 'cw') {
       setRotationAngle(prev => prev + 15);
-      onTriggerAction(dial.cwAction.id, `${dial.cwAction.name} [CH ${currentChannelIdx}] (${mult}x)`, dial.cwAction.category);
+      onTriggerAction(dial.cwAction.id, `${dial.cwAction.name} [CH ${currentChannelIdx}] (${mult}x)`, dial.cwAction.category, dial.cwAction.payload);
     } else {
       setRotationAngle(prev => prev - 15);
-      onTriggerAction(dial.ccwAction.id, `${dial.ccwAction.name} [CH ${currentChannelIdx}] (${mult}x)`, dial.ccwAction.category);
+      onTriggerAction(dial.ccwAction.id, `${dial.ccwAction.name} [CH ${currentChannelIdx}] (${mult}x)`, dial.ccwAction.category, dial.ccwAction.payload);
     }
   };
 
@@ -143,14 +143,15 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
       setHoldProgress(progress);
 
       if (elapsed >= holdThresholdMs) {
-        // Threshold reached -> SWITCH CHANNEL via HOLD
+        // Simulator threshold reached -> preview next layer, not a pad command.
         didTriggerHoldRef.current = true;
         setIsHolding(false);
         setHoldProgress(100);
         setHoldSuccess(true);
         playDetentClick('cw');
 
-        // Hold is strictly reserved for cycling through the layers (0 → 1 → 2 → 3)
+        // Simulated hold cycles the editor preview (0 → 1 → 2 → 3).
+        // On a real pad, only a physical hold switches its channel.
         const nextChannel = (currentChannelIdx + 1) % channels.length;
         setSwitchedTo(nextChannel);
         onCycleMode(nextChannel);
@@ -186,7 +187,8 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
       onTriggerAction(
         dial.pressAction.id,
         `${dial.pressAction.name} [CH ${currentChannelIdx}]`,
-        dial.pressAction.category
+        dial.pressAction.category,
+        dial.pressAction.payload
       );
     }
 
@@ -200,14 +202,14 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
         {/* Floating Hold Progress Banner */}
         {isHolding && (
           <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-[#1351AA] text-[#E3E2DE] text-[8px] font-mono font-bold tracking-[0.1em] uppercase whitespace-nowrap z-30 flex items-center gap-1 pointer-events-none">
-            <span>HOLD TO SWITCH CH... {Math.round(holdProgress)}%</span>
+            <span>HOLD TO PREVIEW... {Math.round(holdProgress)}%</span>
           </div>
         )}
 
         {/* Floating Channel Switched Toast */}
         {holdSuccess && (
           <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-[#1351AA] text-[#E3E2DE] text-[8.5px] font-mono font-black whitespace-nowrap z-30 pointer-events-none">
-            ★ SWITCHED TO LAYER {switchedTo ?? currentChannelIdx}!
+            ★ PREVIEWING LAYER {switchedTo ?? currentChannelIdx}
           </div>
         )}
 
@@ -215,7 +217,7 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
         <div
           onWheel={handleWheel}
           onMouseDown={handleMouseDown}
-          title={`Scroll or Drag to rotate.\n• Tap switch: ${dial.pressAction.name}\n• Hold (${holdThresholdMs}ms): Switch Channel`}
+          title={`Scroll or Drag to rotate.\n• Tap switch: ${dial.pressAction.name}\n• Simulator hold (${holdThresholdMs}ms): preview next layer; physical knob hold switches pad`}
           className="w-[58px] h-[58px] p-0 bg-[#E3E2DE] border border-[#E3E2DE] cursor-grab active:cursor-grabbing transition-transform duration-300"
         >
           {/* Rotating Cap */}
@@ -268,7 +270,7 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
                 onMouseLeave={handleHoldEnd}
                 onTouchStart={handleHoldStart}
                 onTouchEnd={handleHoldEnd}
-                title={`Tap: ${dial.pressAction.name} | Hold ${holdThresholdMs}ms: Switch Layer`}
+                title={`Tap: ${dial.pressAction.name} | Simulator hold ${holdThresholdMs}ms: edit/preview next layer only`}
                 className={`w-7 h-7 flex items-center justify-center font-mono text-[8px] font-bold tracking-[0.06em] transition-colors z-20 ${
  isHolding
  ? 'bg-[#1351AA] text-[#E3E2DE]'

@@ -1,5 +1,6 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { OLEDMode, OLEDState } from '../types';
+import type { ConnectedDeviceInfo, HardwareConnectionState, PhysicalDisplaySettings } from '../utils/hardwareBridge';
 import { OLEDDisplay } from './OLEDDisplay';
 import { OLEDCanvas } from './OLEDCanvas';
 import { OLED_MODES } from '../oled/modes';
@@ -35,6 +36,9 @@ interface DisplayConfigDrawerProps {
   oledState: OLEDState;
   onUpdateOLEDState: (state: OLEDState) => void;
   onClose: () => void;
+  hardwareState: HardwareConnectionState;
+  deviceInfo: ConnectedDeviceInfo | null;
+  onSaveToPad: (settings: PhysicalDisplaySettings) => Promise<void>;
   deckName: string;
   activeLayerName: string;
   /** 0-based index of the active layer, so previews draw the real track. */
@@ -97,6 +101,9 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
   oledState,
   onUpdateOLEDState,
   onClose,
+  hardwareState,
+  deviceInfo,
+  onSaveToPad,
   deckName,
   activeLayerName,
   activeLayerIndex = 0,
@@ -111,7 +118,12 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
     autoCycleS: clampAutoCycleS(oledState.autoCycleS ?? AUTO_CYCLE_DEFAULT_S),
   });
   const [activeTab, setActiveTab] = useState<'modes' | 'appearance' | 'telemetry'>('modes');
-  const [hasSaved, setHasSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveOutcome, setSaveOutcome] = useState<'idle' | 'device' | 'pc' | 'error'>('idle');
+  const [saveMessage, setSaveMessage] = useState('');
+  const editRevision = useRef(0);
+  const canSaveToPad = hardwareState === 'connected' && !!deviceInfo?.protocolReady &&
+    !!deviceInfo.hasFlash && !!deviceInfo.hasOled;
 
   /* A mirror of `localState` that is always current.
    *
@@ -123,8 +135,28 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
   const latest = useRef(localState);
   latest.current = localState;
 
+  // A verified pad read may complete while this drawer is open. Show those
+  // stored settings instead of saving a stale, pre-connection local snapshot.
+  useEffect(() => {
+    const prefs = {
+      mode: oledState.mode,
+      brightness: oledState.brightness,
+      inverted: oledState.inverted,
+      playlist: normalizePlaylist(oledState.playlist ?? DEFAULT_PLAYLIST),
+      autoCycleS: clampAutoCycleS(oledState.autoCycleS ?? AUTO_CYCLE_DEFAULT_S),
+      customTitle: oledState.customTitle,
+      customSubtitle: oledState.customSubtitle,
+    };
+    latest.current = { ...latest.current, ...prefs };
+    setLocalState(prev => ({ ...prev, ...prefs }));
+  }, [oledState.mode, oledState.brightness, oledState.inverted, oledState.autoCycleS,
+      oledState.playlist, oledState.customTitle, oledState.customSubtitle]);
+
   const commit = useCallback(
     (updated: OLEDState) => {
+      editRevision.current += 1;
+      setSaveOutcome('idle');
+      setSaveMessage('');
       latest.current = updated;
       setLocalState(updated);
       onUpdateOLEDState(updated);
@@ -173,19 +205,60 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
     commit({ ...latest.current, autoCycleS: clampAutoCycleS(seconds) });
   };
 
-  const handleSave = () => {
-    onUpdateOLEDState(latest.current);
-    setHasSaved(true);
-    setTimeout(() => setHasSaved(false), 2000);
-    onTriggerAction?.('oled-save', 'OLED Display Settings Saved', 'system');
+  const handleSave = async () => {
+    if (saving) return;
+    const snapshot = latest.current;
+    const revision = editRevision.current;
+    onUpdateOLEDState(snapshot); // localStorage already follows edits; never imply a flash write here
+    if (!canSaveToPad) {
+      const reason = hardwareState === 'connected' && deviceInfo?.protocolReady && !deviceInfo.hasOled
+        ? 'The SSD1306 did not respond on this pad. No device write occurred.'
+        : hardwareState === 'connected'
+          ? 'This serial port has not verified an OLED-capable MPAD3 pad with flash. No device write occurred.'
+          : 'No compatible pad is connected. No device write occurred.';
+      setSaveOutcome('pc');
+      setSaveMessage(`Preferences are on this PC only. ${reason}`);
+      onTriggerAction?.('oled-save-pc', `Display settings: PC only. ${reason}`, 'info');
+      return;
+    }
+    setSaving(true);
+    setSaveOutcome('idle');
+    setSaveMessage('Reading pad config, staging, committing to flash and verifying readback…');
+    try {
+      await onSaveToPad({
+        mode: snapshot.mode,
+        brightness: snapshot.brightness ?? 56,
+        inverted: snapshot.inverted ?? false,
+        autoCycleS: clampAutoCycleS(snapshot.autoCycleS ?? AUTO_CYCLE_DEFAULT_S),
+        playlist: normalizePlaylist(snapshot.playlist ?? DEFAULT_PLAYLIST),
+      });
+      if (editRevision.current !== revision) {
+        setSaveOutcome('pc');
+        setSaveMessage('The earlier selection was verified on the pad; newer edits are on this PC only. Save again to store them.');
+      } else {
+        setSaveOutcome('device');
+        setSaveMessage(deviceInfo?.hasOledStream
+          ? 'Boot mode, contrast, inversion, playlist and dwell verified in pad flash. Custom labels and live readings remain stored on this PC; runtime pixels are sent to the panel only while connected.'
+          : 'Boot mode, contrast, inversion, playlist and dwell verified in pad flash. This device has no verified live-frame stream; custom labels and PC readings remain preview-only.');
+      }
+      onTriggerAction?.('oled-save-device', 'Display boot settings verified in pad flash; live pixels are volatile, not saved to flash', 'info');
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      setSaveOutcome('error');
+      setSaveMessage(`NOT SAVED TO PAD: ${reason}. Your edits remain on this PC; retry when the pad is ready.`);
+      onTriggerAction?.('oled-save-failed', `[OLED SAVE FAILED] ${reason}`, 'safety');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleResetDefaults = () => {
     const defaults: OLEDState = {
       ...localState,
+      mode: 'kadowaz',
       customTitle: 'KADOWAZ IND.',
       customSubtitle: 'ONLINE',
-      brightness: 100,
+      brightness: 56,
       inverted: false,
       autoCycleS: AUTO_CYCLE_DEFAULT_S,
       playlist: [...DEFAULT_PLAYLIST],
@@ -228,7 +301,8 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-[#646464] hover:text-[#141414] hover:bg-[#EDECE8] transition-colors"
+            disabled={saving}
+            className="p-2 text-[#646464] hover:text-[#141414] hover:bg-[#EDECE8] transition-colors disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
@@ -510,6 +584,11 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
               <label className="text-xs font-mono font-bold text-[#444343] block">
                 CUSTOM SCREEN LABELS (FOR DECK STATUS MODE)
               </label>
+              <p className="text-[10px] font-mono text-[#646464]">
+                {hardwareState === 'connected' && deviceInfo?.protocolReady && deviceInfo.hasOledStream
+                  ? 'Labels live on this PC, not in pad flash. Runtime screens receive rendered pixels while a verified OLED stream is active; baked modes run locally and stream loss restores the pad fallback.'
+                  : 'Labels live on this PC. Without a verified OLED stream, they affect the editor preview only; the pad uses its local fallback text.'}
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <span className="text-[10px] font-mono text-[#646464] block mb-1">
@@ -548,21 +627,21 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
                   </div>
                 </div>
                 <span className="text-xs font-mono font-bold text-[#444343]">
-                  {localState.brightness ?? 100}%
+                  {localState.brightness ?? 56}%
                 </span>
               </div>
               <input
                 type="range"
-                min="10"
+                min="0"
                 max="100"
-                step="5"
-                value={localState.brightness ?? 100}
+                step="1"
+                value={localState.brightness ?? 56}
                 onChange={(e) => commit({ ...latest.current, brightness: Number(e.target.value) })}
                 className="w-full accent-[#444343] cursor-pointer"
               />
               <div className="flex justify-between text-[10px] font-mono text-[#646464]">
-                <span>Dim (25%)</span>
-                <span>Normal (70%)</span>
+                <span>Minimum (0%)</span>
+                <span>Factory (56%)</span>
                 <span>Maximum (100%)</span>
               </div>
             </div>
@@ -679,43 +758,53 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
         )}
       </div>
 
-      {/* Footer Controls */}
-      <div className="p-6 border-t border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => handleSelectMode(nextInPlaylist(localState.mode, playlist))}
-          className="flex items-center gap-2 px-4 py-2.5 border border-[#C7C7C7] text-xs font-mono font-bold text-[#141414] hover:bg-[#EDECE8] transition-colors"
-        >
-          <Zap className="w-3.5 h-3.5 text-[#1351AA]" />
-          <span>CYCLE NEXT MODE</span>
-        </button>
-
-        <div className="flex items-center gap-3">
+      {/* Edits already persist as PC preferences. Only a verified flash
+          transaction below is allowed to display SAVED TO PAD. */}
+      <div className="p-6 border-t border-[#E3E2DE] bg-[#FFFFFF] space-y-3">
+        <div className="flex items-center justify-between gap-2">
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 border border-[#E3E2DE] text-xs font-mono font-bold text-[#444343] hover:text-[#141414] hover:bg-[#F4F3F0] transition-colors"
+            onClick={() => handleSelectMode(nextInPlaylist(localState.mode, playlist))}
+            className="flex items-center gap-2 px-4 py-2.5 border border-[#C7C7C7] text-xs font-mono font-bold text-[#141414] hover:bg-[#EDECE8] transition-colors"
           >
-            CANCEL
+            <Zap className="w-3.5 h-3.5 text-[#1351AA]" />
+            <span>CYCLE NEXT MODE</span>
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="flex items-center gap-2 px-5 py-2.5  text-[#141414] text-xs font-mono font-black tracking-wider hover:brightness-110 active:scale-95 transition-all"
-          >
-            {hasSaved ? (
-              <>
-                <Check className="w-4 h-4 text-[#141414]" />
-                <span>SAVED!</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-[#141414]" />
-                <span>SAVE DISPLAY</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-4 py-2.5 border border-[#E3E2DE] text-xs font-mono font-bold text-[#444343] hover:text-[#141414] hover:bg-[#F4F3F0] transition-colors disabled:opacity-50"
+            >
+              CLOSE
+            </button>
+            <button
+              type="button"
+              onClick={() => { void handleSave(); }}
+              disabled={saving}
+              className="flex items-center gap-2 px-5 py-2.5 text-[#141414] text-xs font-mono font-black tracking-wider hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {saving ? <span>VERIFYING PAD…</span> : saveOutcome === 'device' ? (
+                <><Check className="w-4 h-4" /><span>SAVED TO PAD</span></>
+              ) : saveOutcome === 'pc' ? (
+                <><Check className="w-4 h-4" /><span>SAVED ON PC ONLY</span></>
+              ) : (
+                <><Sparkles className="w-4 h-4" />
+                  <span>{canSaveToPad ? 'SAVE DISPLAY TO PAD' : 'SAVE DISPLAY (PC ONLY)'}</span></>
+              )}
+            </button>
+          </div>
         </div>
+        <p role="status" aria-live="polite" className={`text-[10px] font-mono leading-relaxed ${saveOutcome === 'error' ? 'text-red-700 font-bold' : 'text-[#646464]'}`}>
+          {saveMessage || (canSaveToPad
+            ? deviceInfo?.hasOledStream
+              ? 'Ready: save boot settings to pad flash. Live PC-rendered pixels (including labels, metrics, media and clock) reach runtime screens while connected; baked loops run locally. On stream loss the pad reverts to its offline screen.'
+              : 'Ready: save boot settings to pad flash. Live PC data is preview-only on this device; no verified OLED stream.'
+            : hardwareState === 'connected' && deviceInfo?.protocolReady && !deviceInfo.hasOled
+              ? 'OLED not detected at 0x3C; check GP28/GP29 wiring. Settings remain PC-only.'
+              : 'Settings remain on this PC until a compatible OLED-capable pad with flash is connected.')}
+        </p>
       </div>
     </div>
   );

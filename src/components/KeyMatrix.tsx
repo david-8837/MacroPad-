@@ -66,7 +66,8 @@ export const KeyMatrix: React.FC<KeyMatrixProps> = ({
           onTriggerAction(
             keyBinding.safetyConfirmAction.id,
             `[SAFETY UNLOCKED] ${keyBinding.safetyConfirmAction.name}`,
-            keyBinding.safetyConfirmAction.category
+            keyBinding.safetyConfirmAction.category,
+            keyBinding.safetyConfirmAction.payload
           );
         }
         clearInterval(holdIntervalRef.current!);
@@ -82,7 +83,8 @@ export const KeyMatrix: React.FC<KeyMatrixProps> = ({
           onTriggerAction(
             keyBinding.holdAction.id,
             `[HOLD] ${keyBinding.holdAction.name}`,
-            keyBinding.holdAction.category
+            keyBinding.holdAction.category,
+            keyBinding.holdAction.payload
           );
         }
       }, 250);
@@ -107,7 +109,7 @@ export const KeyMatrix: React.FC<KeyMatrixProps> = ({
     // If it was a safety hold that was released prematurely
     if (holdingKeyIndex === idx) {
       if (holdProgress < 100) {
-        onTriggerAction('safety-aborted', 'Hold cancelled (Threshold not met)', 'hotkey');
+        onTriggerAction('safety-aborted', 'Hold cancelled (Threshold not met)', 'info');
       }
       setHoldingKeyIndex(null);
       setHoldProgress(0);

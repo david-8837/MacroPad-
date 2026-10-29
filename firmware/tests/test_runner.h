@@ -22,5 +22,6 @@ extern const test_case_t protocol_tests[];
 extern const test_case_t oled_tests[];
 extern const test_case_t ascii_cmd_tests[];
 extern const test_case_t oled_playlist_tests[];
+extern const test_case_t oled_stream_tests[];
 
 #endif /* TEST_RUNNER_H */

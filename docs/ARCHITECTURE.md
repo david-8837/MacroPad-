@@ -134,22 +134,25 @@ refusing to start.
 
 ## Lighting
 
-`led_compute_frame()` is pure: config + state in, 27 bytes out, no hardware. That
-means the same function can drive the pad and a browser preview, and means the unit
-tests assert exact RGB values instead of eyeballing a photo.
+`led_compute_frame()` is pure: config + state in, 27 bytes out, no hardware. The
+browser simulates its result, but **default firmware does not drive any strip**:
+GP10 is held LOW only after initialization, `CAP_LED_OUTPUT` is absent and physical
+preview/raw commands return `LED_DISABLED`. A bench-enabled build restores the
+PIO/DMA path under an external current-limited supply; this compile flag is not a
+power-budget or startup-darkness guarantee. The strip has not been selected yet.
 
 Colour space is HSV with hue as a 16-bit value, so a hue ramp is an integer
 increment and there is no floating point anywhere in the frame path. Gamma is a
 256-byte table in flash — without it a linear 0–255 ramp looks like "off, off, off,
 ON" and `BREATH` stalls at the bottom then snaps.
 
-The PIO program is 4 instructions at an 8 MHz bit clock (1 cycle = 125 ns), giving
-T0H = 250 ns, T1H = 625 ns, T0L = 375 ns, T1L = 375 ns. Three of those four are
-inside the SK6812MINI-E's printed ±150 ns window and T1L is 75 ns under it, which
-is forced rather than careless — the four windows have no common solution for this
-loop shape, and `leds.c` carries the arithmetic next to the divisor. One 32-bit
-FIFO word per LED, low 24 bits used: it wastes a quarter of the DMA bandwidth and
-buys a much simpler packer.
+The four-instruction PIO program runs at 10 MHz (100 ns/cycle). Each of the
+zero- and one-bit paths takes 13 cycles = 1.30 µs, within the named Normand
+SK6812MINI-E Rev.02 minimum 1.20 µs symbol period. Simulated pulses are
+T0H/T0L = 300/1000 ns and T1H/T1L = 700/600 ns; each satisfies its separate
+datasheet limit. A 32-bit FIFO word carries one pixel with the GRB bytes in
+bits **31..8**, because the PIO shifts MSB-first and autopulls after 24 bits.
+Actual GP10 and buffered DIN timing still require scope measurement.
 
 The bit loop needs **four** instructions and the reason is worth stating because the
 three-instruction version looks obviously correct. A `jmp`'s `[n]` delay applies
@@ -160,9 +163,11 @@ to go. With only a `jmp` to the immediately-following instruction, both paths ru
 the same instructions for the same duration and T0H equals T1H: the wire carries no
 data at all. `tools/pio_timing.py` simulates the loop and fails on exactly that.
 
-The reset/latch code (>50 µs low) is not emitted at all. DMA stops, the pin stays
-low between frames, and at 60 Hz that is ~16 ms of low — the standard trick, and it
-burns no state machine time.
+The reset/latch requirement is **>80 µs LOW** for the named LED. When DMA ends,
+the PIO stalls LOW on an empty TX FIFO; the driver waits for that FIFO to empty,
+then allows up to one final pixel plus a guarded 100 µs LOW interval before
+starting another frame. This also protects back-to-back raw LED test commands;
+the normal 60 Hz animation has much more time between frames.
 
 ## USB
 
@@ -183,6 +188,29 @@ Report payloads carry **no** leading report-ID byte. `tud_hid_n_report()` prepen
 it (`hid_device.c`: `if (report_id) epin[0] = report_id`), so `mpad_kbd_report_t`
 stays the plain 8-byte boot-keyboard layout. Adding the ID by hand sends 9 bytes
 for an 8-byte report and the host discards all of them.
+
+HID delivery has a **separate bounded FIFO for each interface** (64 keyboard
+reports, 16 consumer reports). Each TEXT action is at most 31 characters, hence
+62 keyboard down/up reports fit even while the action's inter-character delay
+blocks the superloop. `hid_dev_task()` services USB and submits the head of each
+ready interface; the queue advances only on TinyUSB's successful INPUT completion
+callback. Submission rejection or transfer failure leaves that head available for
+retry; a busy keyboard endpoint does not stall consumer release. If a queue fills,
+intermediate taps are sacrificed: preserve an already in-flight report, insert a
+neutral all-up/consumer-zero barrier, then retain the latest requested state.
+The last release must survive until USB recovers. On disconnect/suspend, old
+queued presses are discarded; remount/resume starts with neutral reports instead
+of replaying stale downs. BOOTSEL supersedes unsent presses with zeros and waits
+up to 100 ms for completions before detaching. A permanently busy or disconnected
+host **cannot be guaranteed** to receive a report; no firmware queue changes
+that hardware fact. Test this policy on a real OS/USB host before release.
+
+The normal `HID_DEV_NO_HW` test recorder cannot reproduce endpoint stalls, so
+`tests/test_hid_hw.c` also compiles the **production** HID, actions and channel
+paths with controllable fake TinyUSB endpoints. It checks sustained busy states,
+rejected submissions, successful/failed callbacks, per-interface ordering,
+overflow, channel-switch releases, disconnect/resume and the bounded BOOTSEL path.
+This is transport-logic validation, **not** an ARM build or a physical USB trace.
 
 The CDC port is addressed by TinyUSB **instance** index (`CDC_INSTANCE` = 0), which
 is not the USB interface number (`ITF_NUM_CDC` = 2). Both are correct and they are
@@ -218,10 +246,11 @@ every direction except the OLED settings:
 
 | What | Frames | Code |
 | :--- | :--- | :--- |
-| Upload the deck | `GET_CONFIG` (one per chunk) → `SET_CONFIG` ×9 → `COMMIT` | `App.handleSyncEEPROM` → `hardwareBridge.uploadDeck` → `src/utils/deckToConfig.ts` |
-| Lighting | `GET_LIGHTING`, `PREVIEW_LIGHTING`, `SET_LIGHTING`, `LED_TEST` | `ViaLightingPanel` → `Mpad3Link` |
-| Physical input | unsolicited `KEY_EVENT` (0xC0) | `Mpad3Link.dispatch` → `hardwareBridge.handleLinkEvent` → `notifyInput` / `notifyChannel` |
-| OLED settings | ASCII lines: `OLED:NEXT`, `OLED:MODE:<n>`, `OLED:AUTO:<s>`, `OLED:PL:<mask>`, `OLED:CH:<n>` | `firmware/src/core/ascii_cmd.c` |
+| Upload the deck | `GET_CONFIG` (one per chunk) → `SET_CONFIG` ×9 → `COMMIT` | `App.handleSyncEEPROM` → `hardwareBridge.uploadDeck` → `src/utils/deckToConfig.ts`; locked decks and OLED NEXT without a detected panel fail before writes |
+| Lighting | `GET_LIGHTING`, gated `PREVIEW_LIGHTING`, `SET_LIGHTING` | `ViaLightingPanel` → `hardwareBridge` → `Mpad3Link`; Save persists even with output off |
+| Raw LED bench test | `LED_TEST` requires `CAP_LED_OUTPUT`, returns `SET_ACK`/`LED_DISABLED` and auto-expires in 300 ms | Explicit diagnostic API, **not** a "Clear" button |
+| Physical input | unsolicited `KEY_EVENT` (0xC0) | `Mpad3Link.dispatch` → `hardwareBridge.handleLinkEvent` → `notifyInput` / `notifyChannel`; non-empty firmware `OLED_NEXT` actions are not replayed on PC |
+| Legacy/diagnostic OLED ASCII | `OLED:NEXT`, `OLED:MODE:<n>`, `OLED:AUTO:<s>`, `OLED:PL:<mask>`, `OLED:CH:<n>` (no application-level channel ACK) | `firmware/src/core/ascii_cmd.c`; editor layer clicks **never** send `OLED:CH` |
 
 Two paths used to exist and no longer do:
 
@@ -234,10 +263,9 @@ Two paths used to exist and no longer do:
   editor. Those notifications now come from `KEY_EVENT` frames. The line parser is
   kept only because `ascii_cmd.c` still answers the `OLED:` family.
 
-Not every binding can be uploaded, and the ones that cannot are named rather than
-dropped: an app launcher, a WASAPI volume move, a MIDI note or a raw VIA keycode
-runs on the PC, not on an RP2040. A shortcut like Ctrl+C does fit — one
-`cfg_action_t` with the HID modifier mask in the high byte of `code`.
+Only reviewed MPAD3 quick assignments are offered: keyboard taps, consumer HID media, absolute `CHANNEL` keys, clearing a slot, and **PC-owned M0–M15**. A macro uploads as firmware `NONE`, so an unsolicited `KEY_EVENT` (with the event's own channel and `firmwareAction=NONE`) runs its saved PC steps through the native desktop executor. Firmware `CAP_EVENTS` reports support independently of `global.usbReportEvents` (the current on/off setting is in `GET_CONFIG`). The upload preflight rejects missing/unsupported macro steps, absent native shell or event capability, and an event-disabled pad unless the user explicitly enables `usbReportEvents` in the same verified transaction. The PC must remain open and connected. Shortcuts like Ctrl+C still fit one firmware `cfg_action_t` (HID modifier mask in `code`'s high byte).
+
+The upload report distinguishes **desktop** actions (apps, PC macros, long text, safety confirmations) from **unavailable** legacy QMK keycodes or unmappable actions. It never claims raw `MO(1)`/RESET/mouse codes or unimplemented MIDI run on this pad or the PC. Editor/sidebar/palette/twin layer clicks only select an editing preview. Only an actual `CHANNEL_CHANGE` event can update the separate *device-reported* channel (unknown until received); a physical knob hold or uploaded `CHANNEL` key changes the pad.
 
 ## Scheduling
 
@@ -249,12 +277,13 @@ stack sizing, and priority inversion on the flash write in exchange for nothing.
 | scan + debounce | ~3 µs | 1 ms |
 | gesture engine | ~5 µs | 1 ms |
 | dispatch | ~10 µs | on gesture |
-| LED frame | ~25 µs | 16 ms (60 Hz) |
+| LED frame | ~150 µs source estimate, including a conservative 132 µs latch wait | 16 ms (60 Hz) |
 | USB pump | ~20 µs | every loop |
 | flash commit | ~50 ms | on save only |
 
-Idle load is well under 5%. The OLED, when you add it, is what will eat the budget:
-I²C at 400 kHz for a 128×32 frame is ~1.5 ms, so render at 10 Hz, not 60.
+These are source-side estimates, not measured CPU load. The required OLED's
+512-byte I²C frame at 400 kHz takes about 12 ms on the bus; local animations
+use a lower refresh rate rather than competing with the 1 ms scan tick.
 
 Timing uses signed comparison against a target — `(int32_t)(now - next) >= 0` —
 which is correct across the 32-bit ms wraparound at ~49.7 days of uptime. There is a
@@ -275,9 +304,8 @@ would need a C parser or a template engine. Instead:
   test vectors (`"123456789"` → `0x29B1` and `0xCBF43926`). Two independent
   implementations agreeing is evidence; one agreeing with itself is not.
 - `make -C firmware -f Makefile.host defaults` dumps the firmware's factory config
-  as 2268 raw bytes, and the JS builds its own and they are compared **byte for
-  byte**, with a `describeOffset()` helper that names the field in the failure
-  message.
+  as 2272 raw bytes (format v3). The JS builds its own; they are compared **byte
+  for byte**, with a `describeOffset()` helper that names the field in failures.
 - Neither dump is committed: `firmware/build-host/` is build output, so
   `npm test` starts with `node scripts/host-artifacts.mjs`, which runs
   `make -C firmware -f Makefile.host hostartifacts` when either file is missing.
@@ -288,18 +316,20 @@ actually ships bugs.
 
 ## What the tests cannot reach
 
-The module split buys a lot, and it is worth being precise about what it does not
-buy. Every `#ifndef *_NO_HW` block is compiled out of the host build, so the tests
-never execute it. That is roughly 300 lines, and it is where the hardware-specific
-bugs live, because the logic around it is the part that got tested.
+The normal host build compiles out `#ifndef *_NO_HW` branches. Separate fake-SDK
+host tests now compile and execute the production OLED I²C path, LED PIO/DMA
+initialization/packing path, and TinyUSB HID delivery branch; the PIO instruction
+loop has its own source simulator. These are stronger source checks, **not** proof
+of signal voltage, clock accuracy, USB behavior on a real host, soldering or power
+draw on the RP2040-Zero.
 
-Five real bugs were found in those blocks after the suite was green at 946
-assertions. None of them could have been caught by a C unit test:
+Five real bugs were found in those blocks after the original suite was green at
+946 assertions. None of them was exercised by that recorder-only host suite:
 
 | Bug | Symptom on hardware | Why the tests could not see it |
 |---|---|---|
 | `XIP_BASE + 0x10000000 + off` | config never survived a reboot | `XIP_BASE` *is* `0x10000000`, so the read came from the far end of SRAM, and the verify-after-write always mismatched so every save reported failure. The host build has no `XIP_BASE` and the path is `#ifndef STORAGE_NO_HW`. |
-| PIO bit loop with T0H == T1H | every LED one uniform colour | the tests assert on the packed DMA buffer, which was correct |
+| Original PIO bit loop with T0H == T1H | every LED one uniform colour | old host tests exercised colour maths only, not actual PIO instructions or MSB-aligned DMA words |
 | one report descriptor shared by two HID interfaces | keyboard or knob silently dead, OS-dependent | `HID_DEV_NO_HW` replaces the whole file with a recording array |
 | all parse errors reported as `BAD_CRC` | app misdiagnoses a version mismatch as line noise | the reply is built inside the CDC pump, which is `#ifndef USB_PROTO_NO_HW` |
 | pin map documented against a 22-pin header | you solder every key from GP10 down to the wrong pin | not firmware at all — a documentation error, and the tests only ever check code |
@@ -307,13 +337,21 @@ assertions. None of them could have been caught by a C unit test:
 Three of those are now machine-checked rather than merely commented on, because a
 comment is not a test:
 
-- **`tools/pio_timing.py`** parses `ws2812minie.pio`, resolves labels, and walks the
-  bit loop once as a 0 and once as a 1 — treating the timeline as circular, because
-  the datasheet's low time spans the bit boundary. It fails on T0H == T1H, on a high
-  pulse outside 80–750 ns, on T1H < 2× T0H, on a low period near the 50 µs reset, on
-  a mean bit rate far from 800 kHz, and on the divisor in `leds.c` no longer matching
-  the loop. Reintroducing the original three-instruction loop makes it fail with a
-  message naming the cause.
+- **`tools/pio_timing.py`** follows both conditional and unconditional PIO
+  branches, counts each 0/1 symbol's exact instruction cycles, and treats the
+  timeline as circular so low time includes the following bit's leading LOW.
+  It fails on any named Normand Rev.02 high/low or 1.20 µs symbol-period limit,
+  unequal path lengths, an out-of-range delay, or a C clock/reset guard that
+  disagrees with the PIO program. `tools/test_pio_timing.py` mutates known-bad
+  paths to prove the checker rejects them. The fake-SDK `test_led_hw.c` compiles
+  the real `% c-sdk` init block and DMA driver and checks normal GPIO polarity,
+  MSB-aligned GRB words, source-buffer lifetime and the inter-frame reset wait.
+  `test_led_locked.c` compiles the other real target branch: it checks GP10's
+  output latch is LOW before enabling output and that full-white frame requests
+  cannot touch PIO/DMA. Firmware protocol tests run in **both** gated and bench
+  builds, checking capability, rejected preview/raw commands, saved settings and
+  a 300-ms wrap-safe raw expiry. These are source tests; boot/reset level, strip
+  5 V waveform, latched pixels and current still need physical instruments.
 - **`tools/check_usb_descriptors.py`** verifies that each HID interface names its own
   descriptor array, that the callback actually switches on `itf`, that every
   `wDescriptorLength` is `sizeof()` of the array that interface returns, that report
@@ -346,11 +384,11 @@ That is normally not something you automate, and here it is the highest-value ch
 in the repository per line, because a wrong pin number is the one defect that is
 invisible until you have a soldering iron in your hand and a multimeter in the other.
 
-What would close the remaining gap properly is hardware-in-the-loop: flash the board, drive
-`CMD_LED_TEST`, and photograph or instrument the result. That is a real option for
-this project — the protocol already has a command whose only purpose is to put known
-bytes on known LEDs — but it needs a board on a runner, which this repository does
-not assume.
+What would close the gap is physical commissioning **after** choosing a cuttable
+strip and 5 V supply, deriving the LED-only budget and measuring startup/reset
+levels, waveforms and current. Only a deliberately bench-enabled firmware build
+may accept a short `CMD_LED_TEST` on a current-limited supply; the normal build
+rejects it. The required board and instruments are not available to these tests.
 
 ### The desktop side's Windows calls
 

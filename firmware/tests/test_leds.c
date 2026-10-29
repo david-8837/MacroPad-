@@ -332,6 +332,25 @@ static void test_pixel_buffer_is_grb_ordered(void) {
     ASSERT_EQ((int)sizeof(led_pixel_t), 3);
 }
 
+static void test_pio_words_are_msb_aligned_grb(void) {
+    g_current = __func__;
+    /* PIO shifts LEFT, consuming bits 31..8, not bits 23..0. The first three
+     * bytes sent must be G, R, B and the discarded low byte must be zero. */
+    ASSERT_EQ(BOARD_LED_RGB_ORDER, 0);
+    ASSERT_EQ(led_pack_pio_word(0x12, 0x34, 0x56), 0x34125600u);
+    ASSERT_EQ(led_pack_pio_word(0, 0, 0), 0u);
+    ASSERT_EQ(led_pack_pio_word(255, 0, 0), 0x00FF0000u);
+    ASSERT_EQ(led_pack_pio_word(0, 255, 0), 0xFF000000u);
+    ASSERT_EQ(led_pack_pio_word(0, 0, 255), 0x0000FF00u);
+    for (int r = 0; r <= 255; r += 17) {
+        uint32_t word = led_pack_pio_word((uint8_t)r, (uint8_t)(255 - r), 0xA5);
+        ASSERT_EQ((word >> 24) & 255u, (uint8_t)(255 - r));
+        ASSERT_EQ((word >> 16) & 255u, (uint8_t)r);
+        ASSERT_EQ((word >> 8) & 255u, 0xA5u);
+        ASSERT_EQ(word & 255u, 0u);
+    }
+}
+
 const test_case_t leds_tests[] = {
     {"off_mode_is_all_zero", test_off_mode_is_all_zero},
     {"static_mode_passes_colour_through_gamma", test_static_mode_passes_colour_through_gamma},
@@ -350,5 +369,6 @@ const test_case_t leds_tests[] = {
     {"unknown_mode_is_dark_not_garbage", test_unknown_mode_is_dark_not_garbage},
     {"hsv_primary_colours", test_hsv_primary_colours},
     {"pixel_buffer_is_grb_ordered", test_pixel_buffer_is_grb_ordered},
+    {"pio_words_are_msb_aligned_grb", test_pio_words_are_msb_aligned_grb},
     {NULL, NULL},
 };

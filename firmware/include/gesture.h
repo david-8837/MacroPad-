@@ -64,7 +64,7 @@ typedef enum {
 typedef struct {
     gesture_kind_t kind;
     uint8_t index;  /* key 0..8, or 255 for the knob */
-    int16_t steps;  /* detent count for rotation gestures */
+    int16_t steps;  /* rotation detents, or key HOLD_RELEASE duration (ms, capped at 32767) */
     uint32_t at_ms; /* timestamp it resolved at, for the event log */
 } gesture_t;
 

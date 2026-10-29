@@ -71,13 +71,13 @@ An interactive 3D / pseudo-3D representation of the physical 9-key macropad:
      8. **Starfield** (24 @ 12) · 9. **Digital Rain** (24 @ 12) · 10. **Clock** (live) ·
      11. **Radar Sweep** (24 @ 12) · 12. **Heartbeat** (12 @ 12).
    - Mode cards: title top-left, technical tag top-right (`ACTIVE` / `NN FPS` / `STATIC` / `SKIPPED`), live animated preview underneath, a footprint line (`24 FR · 12.0 KiB` or `RUNTIME · 0 B`) and an **IN ROTATION / SKIPPED** toggle in the card footer. No icons and no body copy.
-   - **The panel is not a touchscreen.** Nothing advances by clicking the screen. The drawer drives the rotation: **AUTO SWITCH** (0 = stay put, 3–255 s, default 30) and the per-card rotation toggle, plus **CYCLE NEXT MODE** for a manual step. The firmware mirrors this with `cfg_global_t.oled_auto_cycle_s` / `oled_playlist`, `ACTION_TYPE_OLED_NEXT` and the `OLED:NEXT` / `OLED:AUTO:<s>` / `OLED:PL:<mask>` commands.
+   - **The panel is not a touchscreen.** Nothing advances by clicking the screen. The drawer drives the rotation: **AUTO SWITCH** (0 = stay put, 3–255 s, default 30) and the per-card rotation toggle, plus **CYCLE NEXT MODE** for a manual host selection. The MPAD3 Quick Assignments tray also offers **OLED NEXT** for an on-pad switch after verified upload to a pad with a detected SSD1306. The firmware mirrors this with `cfg_global_t.oled_auto_cycle_s` / `oled_playlist`, `ACTION_TYPE_OLED_NEXT` and the `OLED:NEXT` / `OLED:AUTO:<s>` / `OLED:PL:<mask>` commands.
    - **Frame store readout:** `63.5 KiB / 120.0 KiB · 113 / 240 frames free · 6 loops headroom`, with a bar. The 120 KiB limit is derived from the flash map (`src/oled/capacity.ts`), not chosen: 2 MiB part − 8 KiB config sectors − a 1.87 MiB application ceiling, aligned to the 4 KiB erase sector and exact in 512 B frames.
 
 ---
 
 ### B. Deck & Multi-Layer System
-1. **Single Deck:** One deck per install (no profile switching). It holds all 4 layers and can be locked to prevent edits.
+1. **Single Deck:** One deck per install (no profile switching). It holds all 4 layers; its local lock prevents assignment and PC macro edits and deck upload until explicitly unlocked. It does not secure the device or separate display/lighting settings.
 2. **Layers (0–3):** The deck contains 4 distinct layers:
    - **Layer 0 (Edit):** Timeline scrub dial, cut, split, mark, render-out.
    - **Layer 1 (Tools):** Copy / paste / cut / undo / find / save.
@@ -129,10 +129,10 @@ Configure the 3 distinct interactions of the rotary dial per layer:
    - Validates 512-byte block structures and Raspberry Pi UF2 Family ID (`0xe48dba04`).
    - One-click flash button with animated percentage progress bar.
 
-3. **VIA Physical Key Matrix Tester:**
-   - Visual 3x3 switch grid.
-   - Actuating a physical switch on the real hardware lights up the corresponding switch tile in white with a persistent "Tested" badge.
-   - Quick latency counter and reset button.
+3. **Key Tester (current implementation: OS event visualizer, NOT a hardware matrix tester):**
+   - Displays a conventional keyboard layout using DOM `KeyboardEvent.code` delivered to the focused app from any keyboard.
+   - Counts observed fresh keydowns separately from auto-repeat; the reset control clears the view.
+   - Does not identify the macropad or measure its scan/USB latency or switch chatter. Physical certification requires an independent device/USB test.
 
 4. **Per-App Windows Audio Mixer Panel:**
    - Lists active audio-producing processes (Spotify, Discord, Chrome, Game).

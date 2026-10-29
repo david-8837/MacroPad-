@@ -11,6 +11,9 @@ for (const [key, vk] of Object.entries(punctuation)) assert.strictEqual(resolveV
 
 assert.strictEqual(resolveVk('MediaTrackNext'), 0xb0);
 assert.strictEqual(resolveVk('MediaTrackPrevious'), 0xb1);
+assert.strictEqual(resolveVk('MediaStop'), 0xb2);
+assert.strictEqual(resolveVk('RightArrow'), 0x27);
+assert.strictEqual(resolveVk('LeftArrow'), 0x25);
 assert.strictEqual(resolveVk('Numpad .'), 0x6e);
 assert.strictEqual(resolveVk('KC_A'), 65);
 

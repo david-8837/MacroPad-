@@ -17,12 +17,14 @@ multimeter.
 This checks board.h against protocol.json (both machine-readable) and then checks
 that every GPIO named in the HARDWARE.md pin table matches too. It also verifies
 the header pin numbers against the RP2040-Zero's physical header layout, so a
-transposed row/column shows up here rather than on the bench.
+transposed row/column shows up here rather than on the bench. A small textual
+regression guard checks that BOTH key diagrams show GPIO -> switch -> GND and
+rejects the earlier 3V3-to-GND short sketch. It is not a netlist/continuity test.
 
 It additionally enforces the constraint that motivated this whole pin map: every
 pin used must be one the RP2040-Zero brings out on its castellated **headers**.
-GP11-GP15 and GP17-GP25 exist on the chip but only as underside solder pads, and
-GP16 is already spent on the board's own WS2812.
+GP11-GP15 are on those headers; GP17-GP25 are on the rear headers/solder pads,
+not the main castellated header. GP16 drives the onboard WS2812.
 
 Usage
 -----
@@ -82,6 +84,23 @@ def _derive_header_pins() -> dict:
 
 HEADER_PIN = _derive_header_pins()
 
+# A pin-table comparison alone passed while the soldering sketch shorted 3V3
+# directly to GND. This guard catches the specific unsafe regression in both
+# physical descriptions; it does NOT prove an arbitrary new circuit is safe.
+SAFE_KEY_SKETCH = "GPIO(n) ── [normally-open switch] ── GND"
+UNSAFE_OLD_SKETCH = re.compile(r"(?m)^\s*(?:\*\s*)?(?:3\.3V|3V3)\s*─+┬─+\s*key\b")
+
+
+def key_sketch_issues(md: str, board_src: str) -> list[str]:
+    issues = []
+    for name, text in (("docs/HARDWARE.md", md), ("firmware/include/board.h", board_src)):
+        if SAFE_KEY_SKETCH not in text:
+            issues.append(f"{name} lacks the GPIO(n) -> switch -> GND key diagram")
+        if UNSAFE_OLD_SKETCH.search(text):
+            issues.append(f"{name} still contains the old 3V3-to-GND short key sketch")
+    return issues
+
+
 # Pins 1-3 are 5V / GND / 3V3 and carry no GPIO.
 POWER_PINS = {1: "5V", 2: "GND", 3: "3V3"}
 
@@ -112,6 +131,8 @@ def board_h_pins(src: str) -> dict:
     out["flash_mb"] = int(mm.group(1)) if mm else None
     mm = re.search(r"#define\s+BOARD_OLED_PRESENT\s+(\d+)", src)
     out["oled_present"] = int(mm.group(1)) if mm else None
+    mm = re.search(r"#define\s+BOARD_OLED_ADDR\s+(0x[0-9a-fA-F]+|\d+)", src)
+    out["oled_addr"] = int(mm.group(1), 0) if mm else None
     mm = re.search(r"#define\s+BOARD_SYS_CLOCK_KHZ\s+(\d+)", src)
     out["clock_khz"] = int(mm.group(1)) if mm else None
     return out
@@ -123,7 +144,8 @@ def main(argv: list[str]) -> int:
     notes: list[str] = []
 
     try:
-        pins = board_h_pins(BOARD_H.read_text())
+        board_src = BOARD_H.read_text()
+        pins = board_h_pins(board_src)
         spec = json.loads(SPEC.read_text())["layout"]
     except (OSError, ValueError, json.JSONDecodeError) as e:
         print(f"FAIL cannot read the pin map: {e}")
@@ -220,6 +242,16 @@ def main(argv: list[str]) -> int:
             f"{spec.get('leds', {}).get('count')}"
         )
 
+    oled = spec.get("oled", {})
+    if oled.get("present") != bool(pins["oled_present"]):
+        problems.append("BOARD_OLED_PRESENT and protocol.json OLED presence disagree")
+    if pins["oled_addr"] is None or str(oled.get("address", "")).lower() != f"0x{pins['oled_addr']:02x}":
+        problems.append("BOARD_OLED_ADDR and protocol.json OLED address disagree")
+    for label, pin_name in (("sda", "oled_sda"), ("scl", "oled_scl")):
+        node = oled.get(label, {})
+        if node.get("gpio") != pins[pin_name] or node.get("headerPin") != HEADER_PIN.get(pins[pin_name]):
+            problems.append(f"OLED {label.upper()} pin disagrees between board.h and protocol.json")
+
     # ── flash size must match what the spec documents ─────────────────────
     if pins["flash_mb"] and board.get("flash"):
         got = re.search(r"(\d+)\s*MB", str(board["flash"]))
@@ -229,8 +261,9 @@ def main(argv: list[str]) -> int:
                 f"{board['flash']!r}"
             )
 
-    # ── HARDWARE.md's solder table ────────────────────────────────────────
+    # ── HARDWARE.md's solder table and key-safety sketch ──────────────────
     md = HARDWARE_MD.read_text() if HARDWARE_MD.exists() else ""
+    problems.extend(key_sketch_issues(md, board_src))
     rows = re.findall(r"^\|\s*([^|]+?)\s*\|\s*GP(\d+)\s*\|\s*(\d+)\s*\|", md, re.M)
     if not rows:
         notes.append("HARDWARE.md has no recognisable pin table (| Function | GPn | pin |)")

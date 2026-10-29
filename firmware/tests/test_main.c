@@ -40,6 +40,7 @@ int main(void) {
     run_suite("leds", leds_tests);
     run_suite("oled", oled_tests);
     run_suite("oled playlist", oled_playlist_tests);
+    run_suite("oled stream", oled_stream_tests);
     run_suite("protocol", protocol_tests);
     run_suite("ascii cmd", ascii_cmd_tests);
 

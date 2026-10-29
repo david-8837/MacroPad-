@@ -170,6 +170,7 @@ void action_reset_state(void) {
 void action_release_all(void) {
     uint8_t empty[6] = {0};
     bool need_clear = s_held.keyboard_down || s_sticky_active || s_latched_mods || s_latched_key;
+    bool need_consumer_clear = s_held.consumer_down;
 
     /* Clear every latch FIRST. send_keyboard() ORs s_latched_mods into the
      * report it sends, so releasing before clearing would put the modifier back
@@ -183,7 +184,7 @@ void action_release_all(void) {
     /* Then one all-clear report. Only one: several in a row are wasted USB
      * traffic and make the report log hard to read. */
     if (need_clear) send_keyboard(0, empty);
-    if (s_held.consumer_down) send_consumer(0);
+    if (need_consumer_clear) send_consumer(0);
 }
 
 bool action_fire(const action_t *a, bool press) {

@@ -1,8 +1,9 @@
 /*
  * hid_dev.c — USB composite device: keyboard + consumer + CDC.
  *
- * Target-only file. Everything here is guarded by HID_DEV_NO_HW so the host
- * build can compile the rest of the firmware against hid_dev.h.
+ * HID_DEV_NO_HW replaces the real USB implementation with a recorder for the
+ * normal host suite. test_hid_hw.c also compiles the real branch against a fake
+ * per-interface TinyUSB transport so busy/failure behavior is exercised.
  */
 #include "hid_dev.h"
 
@@ -14,6 +15,7 @@
 #include "hardware/flash.h"
 #include "hardware/watchdog.h"
 #include "pico/bootrom.h"
+#include "pico/stdlib.h"
 #include "tusb.h"
 
 #include "actions.h"
@@ -145,9 +147,100 @@ static const char *desc_strings[] = {
 
 static char s_serial[24];
 
+/* A full 31-character TEXT action makes at most 62 down/up keyboard reports
+ * before main.c next services TinyUSB. Leave room for all of them; two separate
+ * FIFOs let media release proceed even if the keyboard endpoint is busy.
+ *
+ * A report stays at the head until TinyUSB reports TRANSFER SUCCESS, not merely
+ * until tud_hid_n_report() accepts it. Rejected submissions and failed transfers
+ * are retried on later main-loop tasks without reordering down/up pairs.
+ *
+ * An indefinitely busy USB host cannot be forced to accept a release. On finite
+ * queue overflow, preserve an already-in-flight head, discard intermediate
+ * transitions, and queue a zero report BEFORE the newest requested state. This
+ * sacrifices some taps under overload, but never discards the eventual all-up.
+ * Disconnect/suspend cancels old presses; mount/resume begins with neutral reports
+ * on both interfaces so old downs cannot replay in a new USB session. */
+enum { KBD_PENDING_CAP = 64, CONSUMER_PENDING_CAP = 16, BOOT_RELEASE_WAIT_MS = 100 };
+static mpad_kbd_report_t s_kbd_pending[KBD_PENDING_CAP];
+static uint16_t s_consumer_pending[CONSUMER_PENDING_CAP];
+static uint8_t s_kbd_head, s_kbd_count, s_consumer_head, s_consumer_count;
+static bool s_kbd_inflight, s_consumer_inflight;
+/* Logical state for GET_REPORT; a pending release is already logically up. */
 static mpad_kbd_report_t s_last_kbd;
 static uint16_t s_last_consumer;
 static bool s_mounted;
+
+static void kbd_append(const mpad_kbd_report_t *report) {
+    s_kbd_pending[(s_kbd_head + s_kbd_count) % KBD_PENDING_CAP] = *report;
+    s_kbd_count++;
+}
+
+static void consumer_append(uint16_t usage) {
+    s_consumer_pending[(s_consumer_head + s_consumer_count) % CONSUMER_PENDING_CAP] = usage;
+    s_consumer_count++;
+}
+
+static void kbd_enqueue(const mpad_kbd_report_t *report) {
+    if (s_kbd_count &&
+        memcmp(&s_kbd_pending[(s_kbd_head + s_kbd_count - 1) % KBD_PENDING_CAP],
+               report, sizeof(*report)) == 0) return;
+    if (s_kbd_count == KBD_PENDING_CAP) {
+        /* Do not remove a report TinyUSB has already accepted: its completion
+         * callback still needs that head. A neutral barrier clears any skipped
+         * intermediate key state before the newest report is sent. */
+        s_kbd_count = s_kbd_inflight ? 1 : 0;
+        mpad_kbd_report_t zero = {0};
+        kbd_append(&zero);
+    }
+    if (!s_kbd_count ||
+        memcmp(&s_kbd_pending[(s_kbd_head + s_kbd_count - 1) % KBD_PENDING_CAP],
+               report, sizeof(*report)) != 0) kbd_append(report);
+}
+
+static void consumer_enqueue(uint16_t usage) {
+    if (s_consumer_count &&
+        s_consumer_pending[(s_consumer_head + s_consumer_count - 1) % CONSUMER_PENDING_CAP] == usage) return;
+    if (s_consumer_count == CONSUMER_PENDING_CAP) {
+        s_consumer_count = s_consumer_inflight ? 1 : 0;
+        consumer_append(0); /* neutral barrier before the newest consumer usage */
+    }
+    if (!s_consumer_count ||
+        s_consumer_pending[(s_consumer_head + s_consumer_count - 1) % CONSUMER_PENDING_CAP] != usage)
+        consumer_append(usage);
+}
+
+static void delivery_reset(bool enqueue_neutral) {
+    s_kbd_head = s_kbd_count = s_consumer_head = s_consumer_count = 0;
+    s_kbd_inflight = s_consumer_inflight = false;
+    memset(&s_last_kbd, 0, sizeof(s_last_kbd));
+    s_last_consumer = 0;
+    if (enqueue_neutral) {
+        kbd_append(&s_last_kbd);
+        consumer_append(0);
+    }
+}
+
+static void delivery_force_release(void) {
+    /* BOOTSEL must not replay old queued presses on its way out. Preserve only
+     * a transfer that has already been accepted by TinyUSB, then send zero. */
+    s_kbd_count = s_kbd_inflight && s_kbd_count ? 1 : 0;
+    s_consumer_count = s_consumer_inflight && s_consumer_count ? 1 : 0;
+    memset(&s_last_kbd, 0, sizeof(s_last_kbd));
+    s_last_consumer = 0;
+    kbd_enqueue(&s_last_kbd);
+    consumer_enqueue(0);
+}
+
+static bool kbd_inflight_matches(const uint8_t *report) {
+    return s_kbd_inflight && s_kbd_count && report && report[0] == RPT_ID_KEYBOARD &&
+           memcmp(report + 1, &s_kbd_pending[s_kbd_head], sizeof(mpad_kbd_report_t)) == 0;
+}
+
+static bool consumer_inflight_matches(const uint8_t *report) {
+    return s_consumer_inflight && s_consumer_count && report && report[0] == RPT_ID_CONSUMER &&
+           memcmp(report + 1, &s_consumer_pending[s_consumer_head], sizeof(uint16_t)) == 0;
+}
 
 /* ---- TinyUSB callbacks -------------------------------------------------- */
 const uint8_t *tud_descriptor_device_cb(void) {
@@ -194,17 +287,51 @@ const uint16_t *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
     return buf;
 }
 
-void tud_mount_cb(void) { s_mounted = true; }
+void tud_mount_cb(void) {
+    delivery_reset(true);
+    s_mounted = true;
+}
 void tud_umount_cb(void) {
     s_mounted = false;
-    /* Host went away: release every key. Without this, a macro that was holding
-     * Shift leaves Shift held in the last report the OS saw, and the OS keeps
-     * applying it to whatever you type next on your real keyboard. */
-    memset(&s_last_kbd, 0, sizeof(s_last_kbd));
-    s_last_consumer = 0;
+    delivery_reset(false);
 }
-void tud_suspend_cb(bool remote_wakeup_en) { (void)remote_wakeup_en; s_mounted = false; }
-void tud_resume_cb(void) { s_mounted = true; }
+void tud_suspend_cb(bool remote_wakeup_en) {
+    (void)remote_wakeup_en;
+    s_mounted = false;
+    delivery_reset(false);
+}
+void tud_resume_cb(void) {
+    delivery_reset(true);
+    s_mounted = true;
+}
+
+/* TinyUSB's accepted report may still fail on the bus. Pop only a successfully
+ * completed INPUT transfer; a failed transfer leaves its head in place to retry
+ * on the next hid_dev_task(). OUTPUT (keyboard LED) failures are unrelated. */
+void tud_hid_report_complete_cb(uint8_t instance, uint8_t const *report, uint16_t len) {
+    if (instance == ITF_NUM_HID_KBD && kbd_inflight_matches(report)) {
+        s_kbd_inflight = false;
+        if (len == sizeof(mpad_kbd_report_t) + 1) {
+            s_kbd_head = (uint8_t)((s_kbd_head + 1) % KBD_PENDING_CAP);
+            s_kbd_count--;
+        } /* an unexpected short completion is retried, never acknowledged */
+    } else if (instance == ITF_NUM_HID_CONSUMER && consumer_inflight_matches(report)) {
+        s_consumer_inflight = false;
+        if (len == sizeof(uint16_t) + 1) {
+            s_consumer_head = (uint8_t)((s_consumer_head + 1) % CONSUMER_PENDING_CAP);
+            s_consumer_count--;
+        }
+    }
+}
+
+void tud_hid_report_failed_cb(uint8_t instance, hid_report_type_t report_type,
+                              uint8_t const *report, uint16_t xferred_bytes) {
+    (void)xferred_bytes; /* may be zero even though the endpoint buffer is intact */
+    if (report_type != HID_REPORT_TYPE_INPUT) return;
+    if (instance == ITF_NUM_HID_KBD && kbd_inflight_matches(report)) s_kbd_inflight = false;
+    else if (instance == ITF_NUM_HID_CONSUMER && consumer_inflight_matches(report))
+        s_consumer_inflight = false;
+}
 
 /* HID get-report: the host rarely asks, but answering correctly matters —
  * Windows queries it on resume and a wrong answer makes the device look dead. */
@@ -258,8 +385,7 @@ void hid_dev_init(void) {
     desc_strings[3] = s_serial;
 
     s_mounted = false;
-    memset(&s_last_kbd, 0, sizeof(s_last_kbd));
-    s_last_consumer = 0;
+    delivery_reset(false);
 
     /* Board init before tusb_init: the USB PHY and the 1.1 V supply must be up
      * first or enumeration fails in a way that looks like a bad cable. */
@@ -269,38 +395,44 @@ void hid_dev_init(void) {
 
 bool hid_dev_mounted(void) { return s_mounted && tud_mounted(); }
 
-void hid_dev_task(void) { tud_task(); }
+void hid_dev_task(void) {
+    tud_task(); /* completion/failure callbacks may free each interface's head */
+    if (!hid_dev_mounted()) return;
+    if (s_kbd_count && !s_kbd_inflight && tud_hid_n_ready(ITF_NUM_HID_KBD) &&
+        tud_hid_n_report(ITF_NUM_HID_KBD, RPT_ID_KEYBOARD,
+                         &s_kbd_pending[s_kbd_head], sizeof(mpad_kbd_report_t))) {
+        s_kbd_inflight = true;
+    }
+    if (s_consumer_count && !s_consumer_inflight && tud_hid_n_ready(ITF_NUM_HID_CONSUMER) &&
+        tud_hid_n_report(ITF_NUM_HID_CONSUMER, RPT_ID_CONSUMER,
+                         &s_consumer_pending[s_consumer_head], sizeof(uint16_t))) {
+        s_consumer_inflight = true;
+    }
+}
 
 void hid_dev_keyboard(const mpad_kbd_report_t *report) {
-    if (!report) return;
+    if (!report || !hid_dev_mounted()) return;
     s_last_kbd = *report;
-    if (!hid_dev_mounted()) return;
-    /* tud_hid_n_report blocks-free: if the endpoint is busy it returns false and
-     * the report is lost. For a macropad that is acceptable — but retrying once
-     * after a short yield fixes the common case of two actions resolving in the
-     * same tick (e.g. a TEXT macro's down/up pair). */
-    if (!tud_hid_n_report(ITF_NUM_HID_KBD, RPT_ID_KEYBOARD, report, sizeof(*report))) {
-        tud_task();
-        tud_hid_n_report(ITF_NUM_HID_KBD, RPT_ID_KEYBOARD, report, sizeof(*report));
-    }
+    kbd_enqueue(report);
 }
 
 void hid_dev_consumer(uint16_t usage) {
-    s_last_consumer = usage;
     if (!hid_dev_mounted()) return;
-    if (!tud_hid_n_report(ITF_NUM_HID_CONSUMER, RPT_ID_CONSUMER, &usage, sizeof(usage))) {
-        tud_task();
-        tud_hid_n_report(ITF_NUM_HID_CONSUMER, RPT_ID_CONSUMER, &usage, sizeof(usage));
-    }
+    s_last_consumer = usage;
+    consumer_enqueue(usage);
 }
 
 void hid_dev_enter_bootloader(void) {
-    /* Release keys first so the host does not see a stuck modifier through the
-     * reboot, then hand off to the bootrom's USB bootloader entry. */
-    mpad_kbd_report_t empty = {0};
-    hid_dev_keyboard(&empty);
-    hid_dev_consumer(0);
-    tud_task();
+    /* Drop unsent presses; if an endpoint already owns a report, wait for its
+     * completion and then send zero. Never block forever on a dead USB host. */
+    if (hid_dev_mounted()) {
+        delivery_force_release();
+        for (unsigned i = 0; i < BOOT_RELEASE_WAIT_MS; i++) {
+            hid_dev_task();
+            if (!s_kbd_count && !s_consumer_count) break;
+            sleep_ms(1);
+        }
+    }
 
     /* reset_usb_boot(gpio_activity_pin_mask, disable_interface_mask) reboots
      * into the bootrom's USB mass-storage bootloader. 0 for both: no GPIO is

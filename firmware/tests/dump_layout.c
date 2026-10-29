@@ -14,8 +14,11 @@
 #include <stdio.h>
 
 #include "config.h"
+#include "leds.h"
 #include "events.h"
 #include "magic.h"
+#include "oled_playlist.h"
+#include "oled_stream.h"
 #include "protocol.h"
 #include "storage.h"
 
@@ -38,6 +41,8 @@ int main(void) {
     printf("    \"config\": %zu,\n", sizeof(cfg_blob_t));
     printf("    \"sectorHeader\": %zu,\n", sizeof(sector_header_t));
     printf("    \"keyEvent\": %zu,\n", sizeof(key_event_t));
+    printf("    \"oledFrameChunk\": %zu,\n", sizeof(oled_stream_chunk_t));
+    printf("    \"oledState\": %zu,\n", sizeof(oled_state_t));
     printf("    \"info\": %d,\n", INFO_SIZE);
     printf("    \"chunkSize\": %d,\n", CFG_CHUNK_SIZE);
     printf("    \"chunkCount\": %d\n", (int)CFG_CHUNK_COUNT);
@@ -80,6 +85,10 @@ int main(void) {
     FIELD(cfg_global, "usbReportEvents", usb_report_events);
     FIELD(cfg_global, "oledAutoCycleS", oled_auto_cycle_s);
     FIELD(cfg_global, "oledPlaylist", oled_playlist);
+    FIELD(cfg_global, "oledBootMode", oled_boot_mode);
+    FIELD(cfg_global, "oledContrast", oled_contrast);
+    FIELD(cfg_global, "oledInverted", oled_inverted);
+    FIELD(cfg_global, "oledPad", _oled_pad);
     /* config */
     FIELD(cfg_blob, "magic", magic);
     FIELD(cfg_blob, "version", version);
@@ -99,6 +108,15 @@ int main(void) {
     FIELD(key_event, "channel", channel);
     FIELD(key_event, "value", value);
     FIELD(key_event, "action", action);
+    /* volatile OLED transfer + mode sync; also checked against protocol.json */
+    FIELD(oled_stream_chunk, "seq", seq);
+    FIELD(oled_stream_chunk, "mode", mode);
+    FIELD(oled_stream_chunk, "index", index);
+    FIELD(oled_stream_chunk, "count", count);
+    FIELD(oled_stream_chunk, "crc32", crc32);
+    FIELD(oled_stream_chunk, "pages", pages);
+    FIELD(oled_state, "mode", mode);
+    FIELD(oled_state, "epoch", epoch);
 
     /* The last entry has no trailing comma, so close with a sentinel that the
      * JSON reader tolerates: emit a real final field instead. */
@@ -118,6 +136,20 @@ int main(void) {
     printf("    \"mtu\": %d,\n", CFG_PROTOCOL_MTU);
     printf("    \"textMax\": %d,\n", CFG_TEXT_MAX);
     printf("    \"frameHeaderSize\": %d,\n", FRAME_HEADER_SIZE);
+    printf("    \"oledStreamHeaderBytes\": %d,\n", OLED_STREAM_HEADER_BYTES);
+    printf("    \"oledStreamChunkBytes\": %d,\n", OLED_STREAM_CHUNK_BYTES);
+    printf("    \"oledFrameBytes\": %d,\n", OLED_FRAME_BYTES);
+    printf("    \"oledModes\": %d,\n", OLED_SCREEN_COUNT);
+    printf("    \"oledStreamTtlMs\": %d,\n", OLED_STREAM_TTL_MS);
+    printf("    \"oledStageTimeoutMs\": %d,\n", OLED_STREAM_STAGING_TIMEOUT_MS);
+    printf("    \"capOledStream\": %d,\n", CAP_OLED_STREAM);
+    printf("    \"capLedOutput\": %d,\n", CAP_LED_OUTPUT);
+    printf("    \"statusLedDisabled\": %d,\n", STATUS_LED_DISABLED);
+    printf("    \"ledOutputDefault\": %d,\n", BOARD_LED_OUTPUT_ENABLED);
+    printf("    \"ledTestHoldMs\": %u,\n", LED_TEST_HOLD_MS);
+    printf("    \"cmdOledFrame\": %d,\n", CMD_OLED_FRAME);
+    printf("    \"cmdOledFrameAck\": %d,\n", CMD_OLED_FRAME_ACK);
+    printf("    \"cmdOledModeEvent\": %d,\n", CMD_OLED_MODE_EVENT);
     printf("    \"frameOverhead\": %d\n", FRAME_OVERHEAD);
     printf("  }\n");
     printf("}\n");

@@ -9,18 +9,23 @@
 #   USB_PROTO_NO_HW -> usb_proto.c skips CDC; inject/drain drive it directly
 #
 # Nothing here needs pico-sdk, cmake, or an ARM toolchain. That is deliberate:
-# `make -f Makefile.host test` must work in a plain container so CI can run it.
+# `make -f Makefile.host test-both` checks gated + bench variants in a plain
+# container. Both firmware variants and both target LED driver branches run.
 #
-#   make -f Makefile.host test     build and run the unit tests
+#   make -f Makefile.host test-both   build and run gated + bench unit tests
 #   make -f Makefile.host clean
 # ─────────────────────────────────────────────────────────────────────────────
 
 CC      ?= gcc
 BUILD   := build-host
+LED_BENCH ?= 0
 CFLAGS  := -std=gnu11 -g -O1 -Wall -Wextra -Wno-unused-parameter -Wshadow \
            -Ifirmware/include -Iinclude -Itests -Ifirmware/tests \
            -DSCAN_NO_HW -DLEDS_NO_HW -DSTORAGE_NO_HW -DHID_DEV_NO_HW \
            -DUSB_PROTO_NO_HW -DOLED_NO_HW
+ifeq ($(LED_BENCH),1)
+CFLAGS += -DBOARD_LED_OUTPUT_ENABLED=1
+endif
 LDFLAGS :=
 
 SRC := \
@@ -32,9 +37,11 @@ SRC := \
   src/core/events.c \
   src/core/gesture.c \
   src/core/oled_playlist.c \
+  src/core/oled_stream.c \
   src/core/protocol.c \
   src/drivers/oled.c \
   src/drivers/oled_frames.c \
+  src/drivers/oled_runtime.c \
   src/drivers/scan.c \
   src/lighting/leds.c \
   src/storage/config_defaults.c \
@@ -53,11 +60,17 @@ TEST_SRC := \
   tests/test_leds.c \
   tests/test_protocol.c \
   tests/test_oled.c \
-  tests/test_oled_playlist.c
+  tests/test_oled_playlist.c \
+  tests/test_oled_stream.c
 
 OBJ      := $(addprefix $(BUILD)/,$(SRC:.c=.o))
 TEST_OBJ := $(addprefix $(BUILD)/,$(TEST_SRC:.c=.o))
 BIN      := $(BUILD)/run_tests
+OLED_HW_BIN := $(BUILD)/test_oled_hw
+LED_HW_BIN := $(BUILD)/test_led_hw
+LED_HW_LOCKED_BIN := $(BUILD)/test_led_locked
+HID_HW_BIN := $(BUILD)/test_hid_hw
+LED_HW_PIO_HEADER := $(BUILD)/ws2812minie.pio.h
 LEDVEC_BIN := $(BUILD)/dump_leds
 LEDVEC_OUT := $(BUILD)/led-vectors.json
 LAYOUT_BIN := $(BUILD)/dump_layout
@@ -65,7 +78,7 @@ LAYOUT_JSON := $(BUILD)/layout.json
 DEFAULTS_BIN := $(BUILD)/dump_defaults
 DEFAULTS_OUT := $(BUILD)/defaults.bin
 
-.PHONY: all test layout defaults ledvectors hostartifacts clean
+.PHONY: all test test-both layout defaults ledvectors hostartifacts clean
 all: $(BIN)
 
 $(BIN): $(OBJ) $(TEST_OBJ)
@@ -85,8 +98,58 @@ ledvectors: $(LEDVEC_BIN)
 	$(LEDVEC_BIN) > $(LEDVEC_OUT)
 	@echo "wrote $(LEDVEC_OUT)"
 
-test: $(BIN)
+# Compile the production I2C half without OLED_NO_HW against a fake Pico SDK.
+# This catches pin/init/byte-order/NACK mistakes that canvas-only tests cannot.
+$(OLED_HW_BIN): src/drivers/oled.c src/drivers/oled_frames.c tests/test_oled_hw.c \
+                 tests/stubs/hardware/i2c.h tests/stubs/pico/stdlib.h
+	@mkdir -p $(dir $@)
+	$(CC) -std=gnu11 -Wall -Wextra -Werror -Itests/stubs -Iinclude \
+	  src/drivers/oled.c src/drivers/oled_frames.c tests/test_oled_hw.c -o $@
+
+# Host test of the *production* LED hardware branch, without LEDS_NO_HW. The
+# header is generated from the actual .pio % c-sdk block, not a copied init:
+# the Python timing simulator checks the PIO instructions separately.
+$(LED_HW_PIO_HEADER): src/lighting/ws2812minie.pio ../tools/gen_led_pio_test_header.py
+	@mkdir -p $(dir $@)
+	@python3 ../tools/gen_led_pio_test_header.py > $@
+
+$(LED_HW_BIN): src/lighting/leds.c tests/test_led_hw.c $(LED_HW_PIO_HEADER) \
+               tests/stubs/hardware/pio.h tests/stubs/hardware/dma.h \
+               tests/stubs/hardware/clocks.h tests/stubs/hardware/irq.h \
+               tests/stubs/pico/stdlib.h
+	@mkdir -p $(dir $@)
+	$(CC) -std=gnu11 -Wall -Wextra -Werror -Wshadow -DBOARD_LED_OUTPUT_ENABLED=1 \
+	  -I$(BUILD) -Itests/stubs -Iinclude \
+	  src/lighting/leds.c tests/test_led_hw.c -o $@
+
+# This compiles the *target* default GPIO gate without LEDS_NO_HW. Fail if
+# show ever clocks PIO or raises data; even a nominal black frame isn't enough.
+$(LED_HW_LOCKED_BIN): src/lighting/leds.c tests/test_led_locked.c \
+                     tests/stubs/pico/stdlib.h
+	@mkdir -p $(dir $@)
+	$(CC) -std=gnu11 -Wall -Wextra -Werror -Wshadow -DBOARD_LED_OUTPUT_ENABLED=0 \
+	  -Itests/stubs -Iinclude src/lighting/leds.c tests/test_led_locked.c -o $@
+
+# Compile the production TinyUSB HID path (not HID_DEV_NO_HW) against a fake
+# per-interface endpoint, including complete/failed callbacks and BOOTSEL drain.
+$(HID_HW_BIN): src/usb/hid_dev.c src/core/actions.c src/core/channel.c tests/test_hid_hw.c tests/stubs/tusb.h \
+               tests/stubs/bsp/board_api.h tests/stubs/hardware/flash.h \
+               tests/stubs/hardware/watchdog.h tests/stubs/pico/bootrom.h \
+               tests/stubs/pico/stdlib.h
+	@mkdir -p $(dir $@)
+	$(CC) -std=gnu11 -Wall -Wextra -Werror -Wshadow -Itests/stubs -Iinclude \
+	  src/usb/hid_dev.c src/core/actions.c src/core/channel.c tests/test_hid_hw.c -o $@
+
+test: $(BIN) $(OLED_HW_BIN) $(LED_HW_BIN) $(LED_HW_LOCKED_BIN) $(HID_HW_BIN)
 	@./$(BIN)
+	@./$(OLED_HW_BIN)
+	@./$(LED_HW_BIN)
+	@./$(LED_HW_LOCKED_BIN)
+	@./$(HID_HW_BIN)
+
+# A separate object tree avoids silently linking stale default-mode objects.
+test-both: test
+	@$(MAKE) -f Makefile.host BUILD=build-host-bench LED_BENCH=1 test
 
 # Emit the real compiled struct layout for host/tests/run.mjs to check the
 # protocol spec against. See tests/dump_layout.c for why this exists.

@@ -7,8 +7,8 @@
  * updated the pad and nothing else. Two halves are checked here:
  *
  *   1. Mpad3Link decodes the frame into a KeyEvent and emits it.
- *   2. hardwareBridge turns that into the same two notifications the simulator
- *      uses, so every downstream handler works unchanged.
+ *   2. hardwareBridge preserves the actual gesture, source channel, action
+ *      ownership, and detent/duration value for safe host routing.
  */
 const assert = require('node:assert');
 const { mkdtempSync, rmSync } = require('node:fs');
@@ -52,6 +52,9 @@ const KNOB = 1;
 const PRESS = 1;
 const RELEASE = 2;
 const TAP = 3;
+const HOLD = 4;
+const HOLD_RELEASE = 5;
+const DOUBLE_TAP = 6;
 const ENC_CW = 7;
 const ENC_CCW = 8;
 const CHANNEL_CHANGE = 9;
@@ -117,11 +120,12 @@ async function run() {
     assert.strictEqual(seen[0].statusName, 'BAD_ARG');
   });
 
-  /* ── 2. the bridge turns that into the simulator's own notifications ───── */
+  /* ── 2. preserve semantic events and firmware action ownership ───────── */
 
   const inputs = [];
+  const metas = [];
   const channels = [];
-  hardwareBridge.onInputEvent((k, t) => inputs.push(`${k}:${t}`));
+  hardwareBridge.onInputEvent((k, t, m) => { inputs.push(`${k}:${t}`); metas.push(m); });
   hardwareBridge.onChannelSwitch((c) => channels.push(c));
 
   const send = (key) => hardwareBridge.handleLinkEvent({ kind: 'key', key: { channel: 0, value: 0, action: 1, ...key } });
@@ -133,17 +137,26 @@ async function run() {
     assert.deepStrictEqual(inputs, ['4:down', '4:up']);
   });
 
-  check('a tap reports both edges', () => {
+  check('tap, hold and double tap remain distinct and carry action ownership', () => {
     inputs.length = 0;
-    send({ source: KEY, index: 0, event: TAP, eventName: 'TAP' });
-    assert.deepStrictEqual(inputs, ['0:down', '0:up']);
+    metas.length = 0;
+    send({ source: KEY, index: 0, event: TAP, eventName: 'TAP', action: 1, channel: 2 });
+    send({ source: KEY, index: 1, event: HOLD, eventName: 'HOLD', action: 0 });
+    send({ source: KEY, index: 1, event: HOLD_RELEASE, eventName: 'HOLD_RELEASE', action: 0, value: 1650 });
+    send({ source: KEY, index: 2, event: DOUBLE_TAP, eventName: 'DOUBLE_TAP', action: 0 });
+    assert.deepStrictEqual(inputs, ['0:tap', '1:hold', '1:hold_release', '2:double_tap']);
+    assert.deepStrictEqual(metas[0], { channel: 2, firmwareAction: 1, value: 0 });
+    assert.strictEqual(metas[2].value, 1650);
   });
 
-  check('knob rotation uses the dial channel the UI already listens to', () => {
+  check('knob tap and batched rotations retain event kind and detent count', () => {
     inputs.length = 0;
-    send({ source: KNOB, event: ENC_CW, eventName: 'ENC_CW' });
-    send({ source: KNOB, event: ENC_CCW, eventName: 'ENC_CCW' });
-    assert.deepStrictEqual(inputs, ['9:dial_cw', '9:dial_ccw']);
+    metas.length = 0;
+    send({ source: KNOB, event: TAP, eventName: 'TAP', action: 0 });
+    send({ source: KNOB, event: ENC_CW, eventName: 'ENC_CW', action: 0, value: 4 });
+    send({ source: KNOB, event: ENC_CCW, eventName: 'ENC_CCW', action: 0, value: 2 });
+    assert.deepStrictEqual(inputs, ['9:dial_tap', '9:dial_cw', '9:dial_ccw']);
+    assert.deepStrictEqual(metas.map(m => m.value), [0, 4, 2]);
   });
 
   check('a layer change on the pad moves the app with it', () => {

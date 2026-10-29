@@ -42,21 +42,25 @@ typedef struct __attribute__((packed)) {
 
 void hid_dev_init(void);
 
-/* Send a full keyboard report. Passing an all-zero report releases every key,
+/* Queue a full keyboard report. Passing an all-zero report releases every key,
  * which is the correct and only way to do it — do not try to send "the key that
- * changed". */
+ * changed". The target branch delivers queued reports in order and retains an
+ * uncompleted release while USB is busy. No host can receive reports while
+ * physically disconnected or indefinitely unresponsive. */
 void hid_dev_keyboard(const mpad_kbd_report_t *report);
 
-/* Send a consumer (media) report. 0 releases. */
+/* Queue a consumer (media) report on its separate USB interface. 0 releases. */
 void hid_dev_consumer(uint16_t usage);
 
-/* TinyUSB must be serviced often or the host sees the device drop off the bus.
- * Call from the main loop. */
+/* Service TinyUSB, retry rejected/failed submissions and advance each queue
+ * after its transfer-complete callback. Call regularly from the main loop. If a
+ * queue fills, intermediate taps may be coalesced behind a neutral report so a
+ * final release is never silently evicted. */
 void hid_dev_task(void);
 
-/* True once the host has finished enumeration and set the configuration. Do not
- * send reports before this; they are silently dropped and you will spend an
- * evening wondering why the first macro does nothing. */
+/* True once the host has finished enumeration and set the configuration.
+ * Offline presses are intentionally discarded rather than replayed on remount;
+ * mount/resume queues neutral reports on both HID interfaces. */
 bool hid_dev_mounted(void);
 
 /* Reboot into the RP2040's USB bootloader (BOOTSEL mass storage). Does not

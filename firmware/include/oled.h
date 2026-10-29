@@ -62,13 +62,23 @@ int oled_play(oled_canvas_t *c, uint8_t mode, uint32_t ms);
 
 /* ---- hardware -------------------------------------------------------------- */
 
-/* SSD1306 contrast register, 0..255. */
-void oled_set_contrast(uint8_t level);
-
-/* Push the canvas out over I2C. A no-op on builds without the panel fitted. */
-void oled_flush(const oled_canvas_t *c);
-
-/* True when this build actually talks to a panel. */
+/* Configure I2C0 on GP28/GP29 and send the SSD1306 128x32 init sequence.
+ * Returns 1 only after a real ACK; safe to retry if a panel is plugged in later.
+ * Host tests compiled with OLED_NO_HW return 0. */
+int oled_hw_init(void);
+/* True only while the physical panel acknowledges writes (not a build flag). */
 int oled_hw_present(void);
+#ifdef OLED_NO_HW
+/* SDK-free endpoint tests: simulate I2C ACK/loss without a physical panel. */
+void oled_host_set_present(int present);
+#endif
+
+/* SSD1306 contrast and polarity. Errors mark the panel offline for retry. */
+void oled_set_contrast(uint8_t level);
+void oled_set_inverted(int inverted);
+
+/* Push all 512 page-order bytes at 400 kHz; a failed write marks it offline.
+ * No-op in host-only builds or until oled_hw_init() succeeds. */
+void oled_flush(const oled_canvas_t *c);
 
 #endif /* OLED_H */

@@ -1,7 +1,7 @@
 /*
  * protocol.h — USB CDC framing.
  *
- * Binary, not JSON. Reason: the config blob is ~1.7 kB and you want the whole
+ * Binary, not JSON. Reason: the config blob is 2,272 bytes and you want the whole
  * thing to survive a flaky cable in one shot, with corruption detected rather
  * than silently half-applied. A JSON parser on a microcontroller is also a
  * 10 kB dependency and a heap allocator you would have to defend.
@@ -19,7 +19,8 @@
  *   6       len   payload
  *   6+len   2     crc16 CCITT-FALSE over bytes [2 .. 6+len) i.e. cmd..payload
  *
- * Total overhead = 8 bytes. A 1696-byte config goes out as 4 frames of <=512.
+ * Total overhead = 8 bytes. A 2,272-byte config uses 9 indexed 256-byte chunks.
+ * One volatile OLED frame uses two 265-byte payloads with a full-frame CRC-32.
  *
  * ── Why CRC covers cmd and len but not the SOF ────────────────────────────
  * The SOF is for resynchronisation only; if it is corrupt the receiver is

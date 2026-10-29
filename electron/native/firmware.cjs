@@ -26,6 +26,11 @@ const RP2040_FAMILY = 0xe48bff56;
 const RP2350_ARM_FAMILY = 0xe48bff59;
 const BLOCK_SIZE = 512;
 const PAYLOAD_PER_BLOCK = 256;
+const FLASH_BASE = 0x10000000;
+const IMAGE_LIMIT = 0x1e0000; // keep clear of OLED frames and the config sectors
+const SRAM_START = 0x20000000;
+const SRAM_END = 0x20042000; // RP2040: 264 KiB
+const VECTOR_OFFSET = 0x100; // the 256-byte boot2 precedes the ARM vector table
 
 /* ------------------------------------------------------- uf2 inspection */
 
@@ -70,8 +75,11 @@ function inspectUf2(filePath) {
   if (blockCount === 0 || buf.length / BLOCK_SIZE !== blockCount) {
     return fail(`That file says it holds ${blockCount} block(s) but contains ${buf.length / BLOCK_SIZE}. It is incomplete or damaged.`);
   }
-  if (payloadSize > PAYLOAD_PER_BLOCK) {
-    return fail(`That file claims a ${payloadSize}-byte payload per block; the maximum is ${PAYLOAD_PER_BLOCK}. It is not a valid RP2040 UF2.`);
+  if (payloadSize !== PAYLOAD_PER_BLOCK) {
+    return fail(`That file claims a ${payloadSize}-byte payload per block; this pad requires ${PAYLOAD_PER_BLOCK}-byte RP2040 flash blocks.`);
+  }
+  if (seqNo !== 0 || targetAddr !== FLASH_BASE) {
+    return fail('The image must start at RP2040 flash address 0x10000000 with block zero and a boot2 loader.');
   }
   if (!(flags & UF2_FLAG_FAMILY)) {
     return fail('That UF2 has no family id, so the bootloader cannot tell which chip it is for. Rebuild it with the family id enabled.');
@@ -88,6 +96,9 @@ function inspectUf2(filePath) {
   }
   if (familyId !== RP2040_FAMILY) {
     return fail(`That UF2 is built for ${familyName}. This pad uses an RP2040, so it needs a file built for RP2040.`);
+  }
+  if (blockCount < 2 || blockCount * PAYLOAD_PER_BLOCK > IMAGE_LIMIT) {
+    return fail('The image is too short to contain boot2 and a vector table, or overlaps the reserved OLED/config flash region.');
   }
 
   // Verify every block, not just the first: a partially corrupt file passes a
@@ -108,7 +119,28 @@ function inspectUf2(filePath) {
     if (buf.readUInt32LE(off + 24) !== blockCount) {
       return fail(`Block ${i + 1} says the file holds ${buf.readUInt32LE(off + 24)} blocks; the first said ${blockCount}. The file is inconsistent.`);
     }
-    dataBytes += buf.readUInt32LE(off + 16);
+    if (buf.readUInt32LE(off + 8) !== flags || buf.readUInt32LE(off + 28) !== RP2040_FAMILY) {
+      return fail(`Block ${i + 1} has inconsistent UF2 flags or chip family.`);
+    }
+    if (buf.readUInt32LE(off + 16) !== PAYLOAD_PER_BLOCK ||
+        buf.readUInt32LE(off + 12) !== FLASH_BASE + i * PAYLOAD_PER_BLOCK) {
+      return fail(`Block ${i + 1} has an unexpected flash address or payload size; the image must be contiguous.`);
+    }
+    dataBytes += PAYLOAD_PER_BLOCK;
+  }
+
+  // RP2040 executes boot2 from the first 256 bytes, then takes its initial SP
+  // and Thumb reset handler from the vectors at XIP + 0x100. A banner wrapped
+  // in valid UF2 blocks used to pass this inspector and leave pads unbootable.
+  const boot2 = buf.subarray(32, 32 + PAYLOAD_PER_BLOCK);
+  const vectorBlock = BLOCK_SIZE + 32;
+  const stack = buf.readUInt32LE(vectorBlock);
+  const reset = buf.readUInt32LE(vectorBlock + 4);
+  if (!boot2.subarray(0, PAYLOAD_PER_BLOCK - 4).some((byte) => byte !== 0 && byte !== 0xff) ||
+      stack <= SRAM_START || stack > SRAM_END || (stack & 3) !== 0 ||
+      (reset & 1) === 0 || (reset & ~1) < FLASH_BASE + VECTOR_OFFSET ||
+      (reset & ~1) >= FLASH_BASE + dataBytes) {
+    return fail('The RP2040 boot2/vector table is missing or invalid. Do not flash this file; rebuild a real firmware UF2.');
   }
 
   const version = guessVersion(filePath, buf);
@@ -253,7 +285,7 @@ async function flash(uf2Path, onProgress) {
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-/** Everything the Diagnostics page shows about firmware. */
+/** BOOTSEL drive status shown by the inline firmware sidebar. */
 function status() {
   const drive = findBootloaderDrive();
   return {

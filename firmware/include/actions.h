@@ -195,9 +195,9 @@ typedef struct {
     void (*request_bootloader)(void);
     void (*request_config_reset)(void);
     /* Blocking pause in milliseconds. Used between characters of a TEXT macro
-     * and between repeated hold actions. On the target this is sleep_ms; in
-     * tests it is a counter, which is how test_actions.c asserts the gap exists
-     * without actually waiting. Set to NULL for no gap. */
+     * and between repeated hold actions. On the target this is busy_wait_ms,
+     * so USB is serviced after the action; the HID queue holds the resulting
+     * down/up reports until then. In tests it is a counter. */
     void (*delay_ms)(uint32_t ms);
     void *user;
 } action_backend_t;
@@ -218,8 +218,8 @@ bool action_is_set(const action_t *a);
 bool action_fire(const action_t *a, bool press);
 
 /* Release everything an action may still be holding (sticky, hold-down).
- * Sends the all-clear report. Called on channel change and before sleeping so a
- * modifier never sticks. */
+ * Sends a keyboard all-up and/or consumer zero when those interfaces were held.
+ * Called on channel change so neither a modifier nor media usage sticks. */
 void action_release_all(void);
 
 /* Clear the same state WITHOUT sending anything. For boot-time init and for

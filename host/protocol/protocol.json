@@ -24,14 +24,21 @@
     "magicU32": "0x4D504144",
     "configMagicU32": "0x43464733",
     "sectorMagicU32": "0x53454331",
-    "protocolVersion": 1,
-    "configFormatVersion": 1,
-    "channels": 3,
+    "protocolVersion": 3,
+    "configFormatVersion": 3,
+    "channels": 4,
     "keys": 9,
     "leds": 9,
+    "ledTestHoldMs": 300,
     "mtu": 512,
     "chunkSize": 256,
-    "textMax": 32
+    "textMax": 32,
+    "oledModes": 12,
+    "oledFrameBytes": 512,
+    "oledStreamChunkBytes": 256,
+    "oledStreamHeaderBytes": 9,
+    "oledStageTimeoutMs": 350,
+    "oledStreamTtlMs": 1200
   },
   "frame": {
     "sof": [
@@ -225,7 +232,7 @@
       "request": [],
       "payload": "channelIndex + lighting",
       "response": "SET_ACK",
-      "note": "persists: marks the config dirty so COMMIT writes it"
+      "note": "marks config dirty for COMMIT even when physical LED drive is disabled; saved settings alone do not imply illuminated or current-approved hardware"
     },
     "0x0A": {
       "name": "PREVIEW_LIGHTING",
@@ -233,7 +240,7 @@
       "request": [],
       "payload": "channelIndex + lighting",
       "response": "SET_ACK",
-      "note": "identical to SET_LIGHTING but does NOT mark dirty, so a colour-picker drag does not survive a power cycle"
+      "note": "volatile preview only when CAP_LED_OUTPUT is advertised; otherwise ERROR/LED_DISABLED without changing lighting. CAP_LED_OUTPUT is a bench compile flag, not a current or safety certification"
     },
     "0x0B": {
       "name": "LED_TEST",
@@ -241,7 +248,45 @@
       "request": [],
       "payload": "rawRgb24",
       "response": "SET_ACK",
-      "note": "9 x 3 bytes pushed straight to the strip, bypassing gamma, brightness and the lighting engine. This is the 'is my soldering right' command."
+      "note": "bench-only 9 x 3 exact RGB bytes, accepted only when CAP_LED_OUTPUT; otherwise ERROR/LED_DISABLED. Even when enabled it bypasses brightness and gamma and auto-expires after 300 ms; use a current-limited bench supply, not an unchecked USB rail"
+    },
+    "0x0C": {
+      "name": "OLED_FRAME",
+      "dir": "host",
+      "request": [],
+      "payload": "oledFrameChunk",
+      "response": "OLED_FRAME_ACK on chunk 1 only",
+      "note": "Exactly two 265-byte payloads (index 0 then 1). The first half never replies; the final half alone yields a three-byte OLED_FRAME_ACK or one application ERROR. Parser-corrupt OLED packets have no reply and time out. A full-frame CRC-32 and per-packet framing CRC-16 prevent partial or mixed pixels. Baked screens reject frames."
+    },
+    "0x8C": {
+      "name": "OLED_FRAME_ACK",
+      "dir": "device",
+      "request": [],
+      "payload": "oledFrameAck",
+      "response": null,
+      "note": "Only after BOTH halves and the full-frame CRC pass; acknowledges seq and mode."
+    },
+    "0x0D": {
+      "name": "GET_OLED_STATE",
+      "dir": "host",
+      "request": [],
+      "response": "OLED_STATE",
+      "note": "Read current physical screen and mode epoch after handshake; do not assume saved boot mode is the active mode."
+    },
+    "0x8D": {
+      "name": "OLED_STATE",
+      "dir": "device",
+      "request": [],
+      "payload": "oledState",
+      "response": null
+    },
+    "0x0E": {
+      "name": "SET_OLED_MODE",
+      "dir": "host",
+      "request": [],
+      "payload": "oledModeIndex",
+      "response": "OLED_STATE",
+      "note": "Select a physical screen (0..11); starts full dwell; rejected when no SSD1306 ACK; reply includes mode and epoch. Not a flash write."
     },
     "0xC0": {
       "name": "KEY_EVENT",
@@ -250,6 +295,14 @@
       "response": null,
       "payload": "keyEvent",
       "note": "streamed unsolicited when global.usbReportEvents is 1"
+    },
+    "0xC1": {
+      "name": "OLED_MODE_EVENT",
+      "dir": "device",
+      "request": [],
+      "payload": "oledState",
+      "response": null,
+      "note": "Unsolicited on actual physical mode change (manual, OLED_NEXT, auto timer, or host selection); coalesced under congestion, independent of KEY_EVENT setting."
     },
     "0xFE": {
       "name": "BOOTLOADER",
@@ -302,7 +355,8 @@
         {
           "name": "capabilities",
           "type": "u8",
-          "offset": 11
+          "offset": 11,
+          "note": "CAP_EVENTS means KEY_EVENT support even if global.usbReportEvents=0; read GET_CONFIG for the current stream setting."
         },
         {
           "name": "configSize",
@@ -402,13 +456,97 @@
           "name": "value",
           "type": "i16",
           "offset": 4,
-          "note": "detent count for rotation events"
+          "note": "rotation detents; key HOLD_RELEASE: held duration in ms (0 on older firmware, capped at 32767)"
         },
         {
           "name": "action",
           "type": "u16",
           "offset": 6,
           "note": "actionType that fired, 0 if the slot was empty"
+        }
+      ]
+    },
+    "oledFrameChunk": {
+      "size": 265,
+      "fields": [
+        {
+          "name": "seq",
+          "type": "u16",
+          "offset": 0,
+          "note": "serial number modulo 65536; newer than last completed frame"
+        },
+        {
+          "name": "mode",
+          "type": "u8",
+          "offset": 2,
+          "note": "actual active runtime catalogue index; never baked"
+        },
+        {
+          "name": "index",
+          "type": "u8",
+          "offset": 3,
+          "note": "chunk 0 followed by chunk 1 (no interleaving)"
+        },
+        {
+          "name": "count",
+          "type": "u8",
+          "offset": 4,
+          "note": "always 2"
+        },
+        {
+          "name": "crc32",
+          "type": "u32",
+          "offset": 5,
+          "note": "IEEE CRC-32 of ALL 512 SSD1306 page-order bytes"
+        },
+        {
+          "name": "pages",
+          "type": "bytes",
+          "offset": 9,
+          "length": 256,
+          "note": "256 bytes: first or second half of 4 pages x 128 columns"
+        }
+      ]
+    },
+    "oledFrameAck": {
+      "size": 3,
+      "fields": [
+        {
+          "name": "seq",
+          "type": "u16",
+          "offset": 0
+        },
+        {
+          "name": "mode",
+          "type": "u8",
+          "offset": 2
+        }
+      ]
+    },
+    "oledState": {
+      "size": 3,
+      "fields": [
+        {
+          "name": "mode",
+          "type": "u8",
+          "offset": 0
+        },
+        {
+          "name": "epoch",
+          "type": "u16",
+          "offset": 1,
+          "note": "increments on actual screen changes; compare modulo 65536; no request ID"
+        }
+      ]
+    },
+    "oledModeIndex": {
+      "size": 1,
+      "fields": [
+        {
+          "name": "mode",
+          "type": "u8",
+          "offset": 0,
+          "note": "catalogue index 0..11; no flash commit"
         }
       ]
     }
@@ -551,7 +689,7 @@
       ]
     },
     "global": {
-      "size": 16,
+      "size": 20,
       "fields": [
         {
           "name": "holdMs",
@@ -603,7 +741,7 @@
           "type": "u8",
           "offset": 11,
           "default": 1,
-          "note": "1 when a 74AHCT1G125 (or any inverting buffer) is in the LED data path"
+          "note": "legacy stored byte retained at default 1 for config compatibility; LED GPIO output-enable and data now always drive normally through the non-inverting 74AHCT1G125. This byte is ignored by the driver and must not be used to fix wiring"
         },
         {
           "name": "usbReportEvents",
@@ -624,12 +762,40 @@
           "offset": 14,
           "default": 0,
           "note": "bit i = screen i in the rotation, in OLED_MODES order; 0 means every screen, which is what a config saved before this field existed reads as."
+        },
+        {
+          "name": "oledBootMode",
+          "type": "u8",
+          "offset": 16,
+          "default": 0,
+          "note": "catalogue mode index to show on power-up (0..11)"
+        },
+        {
+          "name": "oledContrast",
+          "type": "u8",
+          "offset": 17,
+          "default": 143,
+          "note": "SSD1306 contrast register (0..255)"
+        },
+        {
+          "name": "oledInverted",
+          "type": "u8",
+          "offset": 18,
+          "default": 0,
+          "note": "SSD1306 inverse pixels when 1"
+        },
+        {
+          "name": "oledPad",
+          "type": "u8",
+          "offset": 19,
+          "default": 0,
+          "note": "reserved; must be zero"
         }
       ]
     },
     "config": {
-      "size": 2268,
-      "note": "The whole saved configuration. This is what SET_CONFIG streams and what lives in flash.",
+      "size": 2272,
+      "note": "The v3 saved configuration streamed by SET_CONFIG. On boot firmware validates both CRCs of any older v2 A/B sectors, chooses the newest valid sequence and migrates into the other slot without erasing bindings; the host serial probe requires the matching v3 format before any write.",
       "fields": [
         {
           "name": "magic",
@@ -646,7 +812,7 @@
           "name": "length",
           "type": "u16",
           "offset": 6,
-          "value": 2268
+          "value": 2272
         },
         {
           "name": "global",
@@ -656,13 +822,13 @@
         {
           "name": "channels",
           "type": "channel[4]",
-          "offset": 24
+          "offset": 28
         },
         {
           "name": "crc32",
           "type": "u32",
-          "offset": 1704,
-          "note": "CRC-32/IEEE over bytes 0..1703 inclusive"
+          "offset": 2268,
+          "note": "CRC-32/IEEE over bytes 0..2267 inclusive"
         }
       ],
       "crc": {
@@ -674,7 +840,7 @@
         "refOut": true,
         "xorOut": "0xFFFFFFFF",
         "check": "0xCBF43926",
-        "coveredBytes": 1704
+        "coveredBytes": 2268
       }
     },
     "sectorHeader": {
@@ -703,6 +869,64 @@
           "type": "u32",
           "offset": 12,
           "note": "CRC-32 over the 12 bytes above"
+        }
+      ]
+    },
+    "oledFrameChunk": {
+      "size": 265,
+      "fields": [
+        {
+          "name": "seq",
+          "type": "u16",
+          "offset": 0,
+          "note": "serial number modulo 65536; newer than last completed frame"
+        },
+        {
+          "name": "mode",
+          "type": "u8",
+          "offset": 2,
+          "note": "actual active runtime catalogue index; never baked"
+        },
+        {
+          "name": "index",
+          "type": "u8",
+          "offset": 3,
+          "note": "chunk 0 followed by chunk 1 (no interleaving)"
+        },
+        {
+          "name": "count",
+          "type": "u8",
+          "offset": 4,
+          "note": "always 2"
+        },
+        {
+          "name": "crc32",
+          "type": "u32",
+          "offset": 5,
+          "note": "IEEE CRC-32 of ALL 512 SSD1306 page-order bytes"
+        },
+        {
+          "name": "pages",
+          "type": "bytes",
+          "offset": 9,
+          "length": 256,
+          "note": "256 bytes: first or second half of 4 pages x 128 columns"
+        }
+      ]
+    },
+    "oledState": {
+      "size": 3,
+      "fields": [
+        {
+          "name": "mode",
+          "type": "u8",
+          "offset": 0
+        },
+        {
+          "name": "epoch",
+          "type": "u16",
+          "offset": 1,
+          "note": "increments on actual screen changes; compare modulo 65536; no request ID"
         }
       ]
     }
@@ -749,13 +973,16 @@
       "5": "FLASH_FAIL",
       "6": "BUSY",
       "7": "UNKNOWN_CMD",
-      "8": "BAD_ARG"
+      "8": "BAD_ARG",
+      "9": "LED_DISABLED"
     },
     "capabilities": {
       "0x01": "ENCODER",
       "0x02": "OLED",
       "0x04": "FLASH",
-      "0x08": "EVENTS"
+      "0x08": "EVENTS",
+      "0x10": "OLED_STREAM",
+      "0x20": "LED_OUTPUT"
     },
     "eventSource": {
       "0": "KEY",
@@ -778,6 +1005,10 @@
     "status": [
       "A malformed frame is reported with the status that says *why*, not a single catch-all. `BAD_CRC` means the frame arrived intact in shape but the checksum did not match, which points at line noise or a byte dropped in transit. `BAD_LENGTH` means the declared payload length could not be satisfied, which points at a truncated write or a host encoder bug. `BAD_VERSION` means the frame was well formed and its `ver` byte is not one this firmware accepts, which points at an app built against a different protocol revision. The three have three different fixes, so an app should surface them differently rather than printing \"bad frame\".",
       "Bytes that never formed a frame at all are dropped silently while the parser hunts for the `A5 5A` start-of-frame magic. The device does not reply to them: answering garbage would let one line glitch generate a flood of error frames."
+    ],
+    "capabilities": [
+      "OLED_STREAM is advertised only while a physical SSD1306 ACKs on I2C. A compatible v3 app sends volatile runtime canvases at most 5 Hz, leaving baked loops autonomous. After 1200 ms without a complete frame the device renders its truthful offline screen. A partial frame expires after 350 ms; no frame writes flash.",
+      "LED_OUTPUT is advertised only for an explicitly bench-enabled firmware build. It means GPIO/PIO LED data is allowed; it does NOT attest to the actual cuttable strip, 5 V current budget, or electrical safety. Default firmware leaves GP10 LOW after initialization and rejects PREVIEW_LIGHTING/LED_TEST; this does NOT switch off LED 5 V, guarantee boot/reset levels, or clear a previously latched pixel. The strip and LED-only current budget remain unknown."
     ]
   },
   "layout": {
@@ -878,7 +1109,7 @@
       "headerPins": "23 on the main castellated header: 5V, GND, 3V3, then 20 GPIO (GP0-GP15 and GP26-GP29)",
       "notOnMainHeader": "GP16 drives the board's own onboard WS2812. GP17-GP25 are on two 5-pin headers on the back and on solder pads, and are unused here",
       "headerNumbering": "USB-C up, front/component side facing you, pin 1 = 5V at top-left, counter-clockwise: left column 1-11 top to bottom (5V, GND, 3V3, GP29, GP28, GP27, GP26, GP15, GP14, GP13, GP12), right column 12-23 bottom to top (GP11, GP10, GP9, GP8, GP7, GP6, GP5, GP4, GP3, GP2, GP1, GP0)",
-      "spareHeaderGpio": "GP13, GP14, GP15, GP26, GP27 - and GP26-GP29 are the ADC-capable pins, left free on purpose",
+      "spareHeaderGpio": "GP13, GP14, GP15, GP26, GP27. GP28/GP29 carry required OLED I2C; only GP26/GP27 remain free as ADC inputs",
       "configSectors": "0x1FE000 and 0x1FF000 - the last two 4 KiB sectors of the 2 MB flash"
     },
     "oled": {
@@ -890,9 +1121,16 @@
         "gpio": 29,
         "headerPin": 4
       },
-      "present": false,
+      "present": true,
       "bus": "i2c0",
       "address": "0x3C"
     }
-  }
+  },
+  "oledTransport": [
+    "Version 2 added volatile OLED frame streaming; version 3 adds the fail-closed LED output capability and LED_DISABLED status. The saved config format remains version 3 (2,272 bytes). The host must verify PING/INFO plus CAP_OLED and CAP_OLED_STREAM before streaming. CAP_OLED_STREAM is advertised only while the SSD1306 ACKs at 0x3C. Older protocol-v1/v2 firmware is not compatible with this v3 app; update app and firmware together.",
+    "After handshake the app requests GET_OLED_STATE: [mode:u8, epoch:u16 LE]. OLED_MODE_EVENT (0xC1) carries the same payload whenever the physical playlist changes by timer, gesture, legacy text or host selection. Unlike OLED_STATE (0x8D), the unsolicited event cannot steal a pending reply. Epochs compare modulo 65536; stale events are ignored. The host does **not** send a mode command back in response to a device event, so the autonomous dwell is not restarted. SET_OLED_MODE selects a screen immediately and replies with OLED_STATE; only an explicit config Save persists its boot selection.",
+    "A runtime 128x32 frame is **512 bytes** in SSD1306 page order: byte page*128+x, bit y&7. The host sends two OLED_FRAME packets (265-byte payload each): seq:u16 LE, mode:u8, index:u8 (0 then 1), count:u8 (always 2), full-frame CRC-32/IEEE:u32 LE, pages[256]. Both have the ordinary MPAD3 CRC-16. Firmware bounds the first-half stage to 350 ms, checks current runtime mode and the full-frame CRC, then atomically publishes all 512 bytes and ACKs [seq:u16 LE, mode:u8]. No flash writes. If a packet is corrupt or an ACK is absent, the host skips/backoffs; it never reports a completed physical frame without the final ACK.",
+    "The host renders at **most 5 complete frames/second**, on a timer independent of the canvas preview or drawer visibility. Browsers can throttle a suspended tab; in that case the pad falls back offline. Frames are low priority: they do not queue behind a config/lighting request, and a user Save/mode selection waits for a short current stream slot. The pad locally plays all seven baked animations even with a PC attached. A layer-change overlay temporarily wins over live pixels. If complete frames stop, the last expires after **1,200 ms**, then the next 200-ms runtime refresh draws the truthful local fallback (uptime rather than fabricated wall time, -- for unknown metrics, NO MEDIA). On disconnect the host producer stops and no pixel data survives reboot.",
+    "Clock uses the connected PC wall clock; telemetry and media use the desktop OS integrations when available. Missing native data renders --/NO MEDIA, not invented readings. Custom labels stay stored on the PC, but are included in volatile Deck Status pixels while the app is connected. Source/fake-CDC tests are not proof of assembled-pad performance or a bootable UF2."
+  ]
 }

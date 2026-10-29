@@ -138,6 +138,11 @@ bool storage_flash_write_slot(uint8_t slot, const uint8_t *buf, uint32_t len) {
     if (!buf || slot > 1 || len > STORE_LEN) return false;
     if (s_fail_next_write) {
         s_fail_next_write = false;
+        /* Brown-out after erasing/programming part of the TARGET sector. The
+         * other A/B slot must still boot; a no-op failure would not exercise
+         * CRC rejection of a plausible but truncated sector header/blob. */
+        memset(s_slots[slot], 0xFF, sizeof(s_slots[slot]));
+        memcpy(s_slots[slot], buf, len / 2u);
         return false;
     }
     /* Model the erase: anything not written reads as 0xFF. */
