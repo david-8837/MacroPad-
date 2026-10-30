@@ -34,8 +34,10 @@ assert.doesNotMatch(palette, /\bonSyncEEPROM\b/);
 assert.match(app, /if \(!isUploadSheetOpen\) setIsCommandPaletteOpen/,
   'a second panel must not obscure an in-progress upload or readback');
 
+assert.match(sheet, /aria-hidden="true"[\s\S]*?onClick=\{closeSheet\}[\s\S]*?backdrop-blur-\[6px\]/,
+  'the dismissible backdrop must blur the page behind the upload sheet');
 assert.match(sheet, /justify-end/);
-assert.match(sheet, /transition-transform duration-300/);
+assert.match(sheet, /transition-transform duration-\[440ms\]/);
 assert.match(sheet, /visible \? 'translate-y-0' : 'translate-y-full'/);
 assert.match(sheet, /if \(!isFlashing\) onClose\(\)/,
   'an in-flight upload and readback cannot be dismissed');

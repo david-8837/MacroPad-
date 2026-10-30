@@ -1,16 +1,10 @@
 import React, { useState } from 'react';
 import { ConnectedDeviceInfo, HardwareConnectionState } from '../utils/hardwareBridge';
 import {
-  Sliders,
   Minus,
   Square,
   X,
-  Radio,
-  Video,
-  Music,
-  Terminal,
   ChevronDown,
-  Plus,
   Usb,
   Cpu,
   Power,
@@ -54,16 +48,15 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   const [showConnectMenu, setShowConnectMenu] = useState(false);
 
   const connected = hardwareState === 'connected';
-  const compact = typeof window !== 'undefined' && window.innerWidth < 1500;
 
   return (
-    <header className="h-16 shrink-0 border-b border-[#C7C7C7] bg-[#E3E2DE] select-none z-50">
+    <header className="app-header h-16 shrink-0 border-b border-[#C7C7C7] bg-[#E3E2DE] select-none z-50">
       <div className="h-full flex items-stretch min-w-0">
 
         {/* ── identity · brand + deck ───────────────────────────── */}
         <div className="flex items-center gap-3 pl-4 pr-4 border-r border-[#C7C7C7] shrink-0 min-w-0">
           <div className="flex items-center gap-2 shrink-0">
-            <span className="w-6 h-6 bg-[#141414] text-[#E3E2DE] font-mono text-[11px] font-bold flex items-center justify-center">
+            <span className="brand-mark w-6 h-6 bg-[#141414] text-[#E3E2DE] font-mono text-[11px] font-bold flex items-center justify-center">
               K
             </span>
             <span className="text-[13px] font-bold uppercase tracking-[-0.02em] text-[#141414] leading-none">
@@ -81,7 +74,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                 key={t.id}
                 onClick={() => onChangeTab(t.id)}
                 aria-current={on ? 'true' : undefined}
-                className={`group relative px-3 flex items-center gap-1.5 border-b-2 transition-colors duration-300 shrink-0 ${
+                className={`premium-nav-link group relative px-3 flex items-center gap-1.5 border-b-2 transition-colors duration-300 shrink-0 ${
                   on
                     ? 'border-[#1351AA] text-[#1351AA]'
                     : 'border-transparent text-[#646464] hover:text-[#141414]'

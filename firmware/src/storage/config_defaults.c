@@ -33,18 +33,6 @@ static void set_action(cfg_action_t *a, uint8_t type, uint8_t flags, uint16_t co
     a->code = code;
 }
 
-static void set_text(cfg_action_t *a, const char *s) {
-    memset(a, 0, sizeof(*a));
-    a->type = ACTION_TYPE_TEXT;
-    a->flags = ACTION_FLAG_NONE;
-    a->code = 0;
-    if (s) {
-        size_t n = strlen(s);
-        if (n > CFG_TEXT_MAX - 1) n = CFG_TEXT_MAX - 1; /* always leave the NUL */
-        memcpy(a->text, s, n);
-    }
-}
-
 /* Four distinct base colours, chosen to stay distinguishable at low
  * brightness and through a translucent keycap: cool blue, magenta, warm amber.
  * Hue spacing of roughly 90 degrees is the minimum for four-way
@@ -117,7 +105,3 @@ void config_defaults(cfg_blob_t *out) {
 
     config_reseal(out);
 }
-
-/* Silence the unused-function warning for set_text when the defaults do not use
- * it: it is part of this file's API for whoever adds their own defaults. */
-void config_defaults_helper_set_text(cfg_action_t *a, const char *s) { set_text(a, s); }

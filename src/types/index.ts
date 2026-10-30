@@ -177,12 +177,3 @@ export interface OLEDState {
    */
   playlist?: OLEDModeId[];
 }
-
-export interface OSDNotification {
-  id: string;
-  title: string;
-  subtitle: string;
-  type: 'layer_switch' | 'action_toast' | 'warning';
-  icon?: string;
-  durationMs?: number;
-}

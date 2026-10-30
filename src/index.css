@@ -253,3 +253,149 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ============================================================
+   PREMIUM INTERACTION LAYER
+   Soft depth and deliberate motion, without changing state or
+   suggesting that the simulator is a connected physical device.
+   ============================================================ */
+.app-shell {
+  background: linear-gradient(145deg, #e9e8e4 0%, #e3e2de 55%, #dddedb 100%);
+}
+.app-header {
+  background: linear-gradient(180deg, #f0efec 0%, #e4e3df 100%);
+  box-shadow: 0 3px 16px rgba(20, 20, 20, 0.06);
+}
+.brand-mark {
+  background: linear-gradient(145deg, #35383c, #141414 65%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 5px rgba(20, 20, 20, 0.16);
+}
+.premium-nav-link {
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+.premium-nav-link[aria-current='true'] { background-color: rgba(19, 81, 170, 0.045); }
+@media (hover: hover) {
+  .premium-nav-link:hover { background-color: rgba(255, 255, 255, 0.45); }
+  .premium-nav-link[aria-current='true']:hover { background-color: rgba(19, 81, 170, 0.07); }
+}
+
+.panel {
+  box-shadow: 0 2px 8px rgba(20, 20, 20, 0.035), 0 1px 2px rgba(20, 20, 20, 0.035);
+}
+.chassis {
+  background: linear-gradient(145deg, #292b2e 0%, #141414 50%, #0c0d0e 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 12px 28px rgba(20, 20, 20, 0.19), 0 3px 8px rgba(20, 20, 20, 0.14);
+}
+.macropad-key {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -3px 0 rgba(20, 20, 20, 0.08), 0 2px 3px rgba(0, 0, 0, 0.18);
+  transition: transform 100ms ease, background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+@media (hover: hover) {
+  .macropad-key:hover:not(.active-down) {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -3px 0 rgba(19, 81, 170, 0.13), 0 3px 7px rgba(0, 0, 0, 0.24);
+  }
+}
+.macropad-key:active, .macropad-key.active-down {
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.32);
+}
+
+.btn, .premium-action {
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 3px 7px rgba(19, 81, 170, 0.16);
+}
+@media (hover: hover) {
+  .btn:not(:disabled):hover, .premium-action:not(:disabled):hover {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 5px 14px rgba(19, 81, 170, 0.2);
+    transform: translateY(-1px);
+  }
+  .premium-action:not(:disabled):hover { background-color: #103f84; }
+}
+.btn:not(:disabled):active, .premium-action:not(:disabled):active { transform: translateY(1px); box-shadow: none; }
+.preset-card {
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background-color 180ms ease;
+  box-shadow: 0 1px 3px rgba(20, 20, 20, 0.04);
+}
+.preset-card[aria-pressed='true'] { box-shadow: inset 3px 0 0 #1351aa, 0 4px 14px rgba(19, 81, 170, 0.09); }
+@media (hover: hover) {
+  .preset-card:hover { transform: translateY(-2px); box-shadow: 0 7px 18px rgba(20, 20, 20, 0.09); }
+  .preset-card[aria-pressed='true']:hover { box-shadow: inset 3px 0 0 #1351aa, 0 7px 18px rgba(19, 81, 170, 0.12); }
+}
+.premium-preview { box-shadow: 0 8px 24px rgba(20, 20, 20, 0.07); }
+.premium-dialog { box-shadow: 0 18px 60px rgba(20, 20, 20, 0.22); }
+.premium-sheet { box-shadow: 0 -18px 60px rgba(20, 20, 20, 0.2); }
+
+@keyframes workspace-arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-arrival { animation: workspace-arrive 280ms ease-out; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-arrival { animation: none; }
+  .preset-card:hover, .btn:hover, .premium-action:hover { transform: none; }
+}
+
+/* Drawers slide within their clipped column; the preset dialog moves separately
+   from its fixed overlay so that the backdrop stays in place. */
+@keyframes editor-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes preset-slide-in {
+  from { opacity: 0.75; transform: translateY(64px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .editor-slide-in { animation: editor-slide-in 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .preset-slide-in { animation: preset-slide-in 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+}
+
+/* Natural-height disclosure animation; contents are clipped, not scaled. */
+.disclosure-body {
+  display: grid;
+  grid-template-rows: minmax(0, 0fr);
+  transition: grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.disclosure-body--open { grid-template-rows: minmax(0, 1fr); }
+.disclosure-body-inner { min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .disclosure-body { transition: none; }
+}
+
+/* Shortcut reference: tactile keycaps and quiet interaction feedback. */
+.shortcut-header-icon { box-shadow: 0 3px 8px rgba(20, 20, 20, 0.07); }
+.shortcut-guide { box-shadow: inset 3px 0 0 #1351aa, 0 2px 8px rgba(20, 20, 20, 0.035); }
+.shortcut-category { border-left: 2px solid transparent; transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease; }
+.shortcut-category:hover { background: #f4f3f0; color: #141414; }
+.shortcut-category--active, .shortcut-category--active:hover { background: #edf3fc; border-left-color: #1351aa; color: #1351aa; font-weight: 700; }
+.shortcut-search { transition: border-color 180ms ease, box-shadow 180ms ease; }
+.shortcut-search:focus { box-shadow: 0 0 0 2px rgba(19, 81, 170, 0.12); }
+.shortcut-search::-webkit-search-cancel-button { display: none; }
+.shortcut-card { transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.shortcut-keycap { background: linear-gradient(#fff, #f4f3f0); box-shadow: inset 0 -2px 0 rgba(20, 20, 20, 0.08); }
+.shortcut-copy { transition: color 180ms ease, border-color 180ms ease, background-color 180ms ease; }
+@media (hover: hover) {
+  .shortcut-card:hover { border-color: #b4c6e0; box-shadow: 0 7px 18px rgba(20, 20, 20, 0.08); transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shortcut-card:hover { transform: none; }
+}
+
+/* OS event tester: depth without suggesting a live hardware connection. */
+.tester-header-icon, .tester-stat, .tester-panel { box-shadow: 0 3px 12px rgba(20, 20, 20, 0.05); }
+.tester-guide { box-shadow: inset 3px 0 0 #1351aa, 0 2px 8px rgba(20, 20, 20, 0.035); }
+.tester-option, .tester-reset { transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }
+.tester-keyboard-scroll { background: linear-gradient(145deg, #2b2d30, #141414 60%); border: 1px solid #141414; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 20px rgba(20, 20, 20, 0.14); }
+.tester-keyboard { padding: 18px; min-width: max-content; }
+.tester-key { color: #444343; background: linear-gradient(#fff, #eae9e5); border-color: #c7c7c7; box-shadow: inset 0 1px 0 #fff, inset 0 -2px 0 rgba(20, 20, 20, 0.12), 0 2px 3px rgba(0, 0, 0, 0.25); transition: background 100ms ease, color 100ms ease, border-color 100ms ease, box-shadow 100ms ease; }
+.tester-key[data-state='tested'] { background: #dce9fa; border-color: #83a7d6; color: #103f84; }
+.tester-key[data-state='held'] { background: #1351aa; border-color: #a1c2ef; color: white; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25); }
+.tester-sublabel, .tester-count { color: #646464; }
+.tester-key[data-state='held'] .tester-sublabel, .tester-key[data-state='held'] .tester-count { color: #e3eefe; }
+.tester-legend { display: inline-block; width: 10px; height: 10px; border: 1px solid #c7c7c7; background: #f4f3f0; }
+.tester-legend--tested { background: #dce9fa; border-color: #83a7d6; }
+.tester-legend--held { background: #1351aa; border-color: #1351aa; }
+/* Keep event updates from changing the height or scrollbar of the page. */
+.tester-page { scrollbar-gutter: stable; }
+.tester-readout { height: 128px; overflow-y: auto; scrollbar-gutter: stable; }

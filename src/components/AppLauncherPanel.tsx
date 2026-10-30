@@ -18,7 +18,6 @@ import {
   ChevronRight,
   AlertCircle,
   Code,
-  Play,
   X,
   Sparkles,
   Plus,

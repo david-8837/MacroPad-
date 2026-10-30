@@ -1,12 +1,14 @@
 # DESIGN.md — Reality-First UI System (Deck Studio)
 
 **Version** 1.0 · **Applies to** `src/**` (Kadowaz Deck Studio renderer) · **Primitive layer** `src/index.css`
-**Status** Implemented. The renderer no longer contains a dark theme, an orange accent, a gradient, a shadow, or a rounded corner.
+**Status** Updated with a restrained premium interaction layer. The grid, cream and ink palette, cobalt accent, and square geometry remain the foundation.
 
-> Poster-modernist, "reality-first": a strict grid, a cream paper surface, one cobalt accent,
-> flat colour blocks and 1px rules. Depth is never faked with shadow. This document is the
-> contract for any UI work in this repo — desktop app shell, panels, drawers, modals and the
-> hardware simulation all follow the same rules.
+> Poster-modernist, "reality-first": a strict grid and clear controls. The premium
+> interaction layer in `src/index.css` adds subtle surface depth, key-press feedback,
+> hover transitions and an unobtrusive entrance animation. Upload review uses a
+> blurred backdrop. Effects never imply hardware connection or alter assignments,
+> and motion respects the system's reduced-motion setting. Where older rules below
+> say no shadow, gradient, blur or motion, this update supersedes those restrictions.
 
 ---
 

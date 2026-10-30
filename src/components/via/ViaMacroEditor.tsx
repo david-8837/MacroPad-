@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Code, 
   Play, 
@@ -8,15 +8,9 @@ import {
   Clock, 
   Check, 
   Type, 
-  Terminal, 
   Sparkles, 
-  Layers, 
-  RotateCcw, 
   Keyboard as KeyboardIcon,
-  Copy,
-  ArrowRight,
   ChevronRight,
-  AlertCircle
 } from 'lucide-react';
 import { executeMacroSlot } from '../../utils/executeDeckAction';
 import { isMacroReady, MACRO_STORAGE_KEY } from '../../utils/macroStorage';

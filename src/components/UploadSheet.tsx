@@ -17,11 +17,8 @@ import {
   CheckCircle2,
   Cpu,
   Layers,
-  Sliders,
-  Keyboard,
   Info,
   ArrowRight,
-  ShieldCheck,
   RefreshCw
 } from 'lucide-react';
 
@@ -69,7 +66,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
     } else {
       setVisible(false);
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      timer = window.setTimeout(() => setRendered(false), reducedMotion ? 0 : 320);
+      timer = window.setTimeout(() => setRendered(false), reducedMotion ? 0 : 460);
     }
     return () => {
       window.cancelAnimationFrame(firstFrame);
@@ -222,14 +219,14 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
       <div
         aria-hidden="true"
         onClick={closeSheet}
-        className={`absolute inset-0 bg-[#141414]/35 transition-opacity duration-300 motion-reduce:transition-none ${visible ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-[#141414]/35 backdrop-blur-[6px] transition-opacity duration-[440ms] motion-reduce:transition-none ${visible ? 'opacity-100' : 'opacity-0'}`}
       />
       <section
         id="upload-sheet"
         ref={sheetRef}
         tabIndex={-1}
         data-state={visible ? 'open' : 'closed'}
-        className={`relative z-10 w-full h-[min(82vh,760px)] max-h-[calc(100dvh-16px)] border-t-2 border-[#1351AA] bg-[#FFFFFF] shadow-[0_-18px_60px_rgba(0,0,0,0.20)] overflow-hidden flex flex-col transform-gpu transition-transform duration-300 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0' : 'translate-y-full'}`}
+        className={`premium-sheet relative z-10 w-full h-[min(82vh,760px)] max-h-[calc(100dvh-16px)] border-t-2 border-[#1351AA] bg-[#FFFFFF] shadow-[0_-18px_60px_rgba(0,0,0,0.20)] overflow-hidden flex flex-col transform-gpu transition-transform duration-[440ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${visible ? 'translate-y-0' : 'translate-y-full'}`}
       >
         <div className="w-full max-w-5xl mx-auto min-h-0 h-full flex flex-col">
           <div className="h-3 shrink-0 flex items-center justify-center" aria-hidden="true">

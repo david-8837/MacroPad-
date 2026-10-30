@@ -11,6 +11,7 @@
 
 #include "oled.h"
 #include "oled_runtime.h"
+#include "oled_font.h"
 #include "test.h"
 #include "test_runner.h"
 
@@ -132,6 +133,16 @@ static void offline_runtime_screens_show_something_real(void) {
     for (int mode = 0; mode < OLED_MODE_COUNT; mode++) {
         oled_render_local(&C, (uint8_t)mode, 4523000, 2);
         ASSERT(oled_ink(&C) > 0); /* no PC data must not produce a blank panel */
+    }
+    /* The local layer display is zero-based, and agrees with the app. */
+    for (uint8_t layer = 0; layer < 4; layer++) {
+        oled_render_local(&C, OLED_MODE_CHANNEL, 2000, layer);
+        const uint8_t *glyph = OLED_FONT_5X7['0' + layer - 32];
+        for (int x = 0; x < 5; x++) for (int y = 0; y < 7; y++) {
+            int px = 95 + x * 2, py = 12 + y * 2;
+            int actual = (C.fb[(py / 8) * OLED_FRAME_W + px] >> (py % 8)) & 1;
+            ASSERT_EQ(actual, (glyph[x] >> y) & 1);
+        }
     }
     oled_render_local(&C, OLED_MODE_CHANNEL, 2000, 0);
     memcpy(earlier, C.fb, sizeof(earlier));

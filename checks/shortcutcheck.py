@@ -20,7 +20,7 @@ async def main():
         check("shortcuts page renders", "SHORTCUTS VAULT" in body.upper())
         check("no assign button", "Assign to Key" not in body and "ASSIGNED" not in body)
         check("no target switch selector", "Target Switch" not in body)
-        check("read-only framing", "VIA Quick Keycode Tray" in body and "Copy one or remember it" in body)
+        check("read-only framing", "A reference, not a binding tool" in body and "Copy only copies the text" in body)
         n = await pg.evaluate("""() => Array.from(document.querySelectorAll('button')).filter(b => /^Copy$/i.test((b.textContent||'').trim())).length""")
         check("each card has a Copy button", n > 10, f"{n} copy buttons")
         # copy really writes the combo to the clipboard

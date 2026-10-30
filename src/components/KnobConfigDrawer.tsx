@@ -7,21 +7,9 @@ import {
   Check,
   RotateCw,
   RotateCcw,
-  Sliders,
-  Volume2,
-  VolumeX,
   Sparkles,
-  Command,
-  Disc3,
-  Layers,
   Zap,
-  Play,
-  Keyboard as KeyboardIcon,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
-  ShieldAlert,
-  Gauge
 } from 'lucide-react';
 import {
   DRAWER_MEDIA_KEYS,
@@ -33,7 +21,6 @@ interface KnobConfigDrawerProps {
   onSave: (updatedDial: DialBinding) => void;
   onClose: () => void;
   onTriggerAction: (actionId: string, actionName: string, category: string, payload?: ActionDefinition['payload']) => void;
-  onSelectChannel?: (channelIndex: number) => void;
 }
 
 export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
@@ -41,7 +28,6 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   onSave,
   onClose,
   onTriggerAction,
-  onSelectChannel,
 }) => {
   /* Four modes, one per layer, straight from the deck. */
   const channelList = dial?.availableModes?.length ? [...dial.availableModes] : [...DIAL_MODES];
@@ -51,9 +37,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     channelList.findIndex(m => m === dial?.activeModeName)
   );
 
-  const [activeChannel, setActiveChannel] = useState<number>(
-    initialChannelIdx === -1 ? 0 : initialChannelIdx
-  );
+  const [activeChannel, setActiveChannel] = useState<number>(initialChannelIdx);
   const [channelNames, setChannelNames] = useState<string[]>([...channelList]);
 
   // 4 Rotary Actions
@@ -129,12 +113,6 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     setAccelerationCurve(dial.accelerationCurve || 'exponential');
     setSensitivity(dial.sensitivity || 5);
   }, [dial]);
-
-  const handleChannelChange = (idx: number) => {
-    setActiveChannel(idx);
-    onSelectChannel?.(idx);
-    playDetentClick('cw');
-  };
 
   // Get active Action Definition and Setter based on selected rotary key
   const getActiveAction = (): ActionDefinition => {
@@ -433,7 +411,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   const contextualPresets = getContextualPresets();
 
   return (
-    <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden animate-in slide-in-from-right duration-200">
+    <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden editor-slide-in">
       
       {/* DRAWER TOP BAR: Switch Navigator & Direct Switch Selector */}
       <div className="px-4 py-2.5 border-b border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between gap-3 shrink-0">

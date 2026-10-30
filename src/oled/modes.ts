@@ -147,25 +147,26 @@ const deckStatus: OLEDModeSpec = {
   fps: 2,
   runtime: true,
   render(fb, ctx) {
-    const title = trunc((ctx.state.customTitle || 'KADOWAZ IND.').toUpperCase(), 14);
-    const subtitle = trunc((ctx.state.customSubtitle || 'ONLINE').toUpperCase(), 9);
-    const badgeW = textWidth(subtitle) + 3;
-    const badgeX = PANEL_W - badgeW;
-
-    // Title with a slow status dot.
-    if (blink(ctx.time, 1000)) fb.fillRect(2, 3, 3, 3);
-    fb.text(8, 1, title);
-
-    // Status badge, knocked out of a lit block.
-    fb.fillRect(badgeX, 0, badgeW, 9);
-    fb.text(badgeX + 1, 1, subtitle, { invert: true });
-
-    // Hero: the active layer.
-    centre(fb, 10, trunc(ctx.layerName.toUpperCase(), 10), 2);
-
-    // Footer: which deck this is, with the layer count on the right.
-    fb.text(1, 24, trunc(ctx.deckName.toUpperCase(), 17));
-    flushRight(fb, 24, `${ctx.layerIndex + 1}/${ctx.layerCount}`);
+    // Reserve separate regions so a long user title cannot collide with the badge.
+    const title = (ctx.state.customTitle || 'MACROPAD').toUpperCase();
+    const subtitle = trunc((ctx.state.customSubtitle || 'READY').toUpperCase(), 8);
+    const badgeW = textWidth(subtitle) + 4;
+    const badgeX = PANEL_W - badgeW - 1;
+    if (blink(ctx.time, 1000)) fb.fillRect(1, 2, 3, 3);
+    fb.clip({ x: 7, y: 0, w: Math.max(0, badgeX - 9), h: 8 });
+    fb.text(7, 0, trunc(title, Math.max(0, Math.floor((badgeX - 9) / 6))));
+    fb.noClip();
+    fb.fillRect(badgeX, 0, badgeW, 8);
+    fb.text(badgeX + 2, 0, subtitle, { invert: true });
+    fb.hline(0, 9, PANEL_W);
+    centre(fb, 12, `LAYER ${ctx.layerIndex}`, 2);
+    const count = Math.max(1, Math.min(4, ctx.layerCount));
+    const width = count * 12 - 3;
+    const start = Math.floor((PANEL_W - width) / 2);
+    for (let i = 0; i < count; i += 1) {
+      if (i === ctx.layerIndex) fb.fillRect(start + i * 12, 29, 9, 2);
+      else fb.hline(start + i * 12, 30, 9);
+    }
   },
 };
 
@@ -180,7 +181,7 @@ const system: OLEDModeSpec = {
     const pctOf = (v: number | null): number | null =>
       v === null || v === undefined || !Number.isFinite(v) ? null : Math.round(clampPct(v));
 
-    const temp = ctx.state.cpuTemp === null || ctx.state.cpuTemp === undefined
+    const temp = ctx.state.cpuTemp == null || !Number.isFinite(ctx.state.cpuTemp)
       ? '--'
       : `${Math.round(ctx.state.cpuTemp)}°C`;
     fb.text(0, 0, 'SYSTEM');
@@ -214,33 +215,33 @@ const nowPlaying: OLEDModeSpec = {
   runtime: true,
   render(fb, ctx) {
     const title = (ctx.state.nowPlayingTrack || '').trim();
-
-    // Nothing playing is a state the panel has to be able to say out loud —
-    // silence beats an invented track name.
     if (!title) {
       fb.text(1, 0, 'NOW PLAYING');
       centre(fb, 12, 'NO MEDIA', 2);
       return;
     }
 
-    const glyph = ctx.state.isPlaying ? PAUSE_GLYPH : PLAY_GLYPH;
-    fb.sprite(glyph, 1, 0);
-    fb.text(9, 0, 'NOW PLAYING');
+    fb.sprite(ctx.state.isPlaying ? PLAY_GLYPH : PAUSE_GLYPH, 1, 0);
+    fb.text(10, 0, 'NOW PLAYING');
+    const rawPct = ctx.state.trackProgress;
+    const pct = rawPct == null || !Number.isFinite(rawPct) ? null : Math.round(clampPct(rawPct));
+    if (pct !== null) flushRight(fb, 0, `${pct}%`);
 
-    const pct = ctx.state.trackProgress;
-    if (pct !== null && pct !== undefined) flushRight(fb, 0, `${Math.round(pct)}%`);
-
-    // Marquee for the title (it is the part that runs long), artist on its own line.
+    // Short titles stay still. Long titles pause before scrolling and wrap with
+    // a second copy so the title never disappears for a whole marquee cycle.
     const upper = title.toUpperCase();
-    const loop = textWidth(upper) + 24;
-    const offset = Math.round((ctx.time / 45) % loop);
-    fb.clip({ x: 0, y: 8, w: PANEL_W, h: 7 });
-    fb.text(-offset, 8, `${upper}${' '.repeat(4)}`);
+    const titleWidth = textWidth(upper);
+    fb.clip({ x: 0, y: 9, w: PANEL_W, h: 7 });
+    if (titleWidth <= PANEL_W) fb.text(0, 9, upper);
+    else {
+      const period = titleWidth + 24;
+      const offset = Math.floor(Math.max(0, ctx.time - 900) / 55) % period;
+      fb.text(-offset, 9, upper);
+      fb.text(period - offset, 9, upper);
+    }
     fb.noClip();
-
-    fb.text(0, 16, trunc((ctx.state.nowPlayingArtist || '').toUpperCase(), 21));
-    // A progress bar without a duration is a bar with no meaning: draw none.
-    if (pct !== null && pct !== undefined) meter(fb, 0, 25, PANEL_W, 5, clampPct(pct) / 100);
+    fb.text(0, 18, trunc((ctx.state.nowPlayingArtist || 'UNKNOWN ARTIST').toUpperCase(), 21));
+    if (pct !== null) meter(fb, 0, 27, PANEL_W, 4, pct / 100);
   },
 };
 
@@ -248,10 +249,12 @@ const nowPlaying: OLEDModeSpec = {
 
 const KEYCAP_W = KEYCAP[0].length;
 const SQUARE_W = ROUNDED_SQUARE[0].length;
-const SQUARE_H = ROUNDED_SQUARE.length;
 
 function drawTrack(fb: Frame, ctx: RenderContext, track: TrackState) {
   const slots = Math.max(2, ctx.layerCount);
+  fb.text(1, 1, 'LAYER');
+  flushRight(fb, 1, `${ctx.layerIndex} / ${Math.max(0, ctx.layerCount - 1)}`);
+  fb.hline(0, 10, PANEL_W);
   const slotW = PANEL_W / slots;
   const centreOf = (n: number, w: number) => Math.round(slotW * (n + 0.5) - w / 2);
 
@@ -268,7 +271,7 @@ function drawTrack(fb: Frame, ctx: RenderContext, track: TrackState) {
   if (keycapsVisible) {
     for (let s = 0; s < slots; s += 1) {
       if (s === track.to) continue;
-      fb.sprite(KEYCAP, centreOf(s, KEYCAP_W), Math.round((PANEL_H - KEYCAP.length) / 2));
+      fb.sprite(KEYCAP, centreOf(s, KEYCAP_W), 19);
     }
   }
 
@@ -276,7 +279,7 @@ function drawTrack(fb: Frame, ctx: RenderContext, track: TrackState) {
     centreOf(track.from, SQUARE_W) +
       (centreOf(track.to, SQUARE_W) - centreOf(track.from, SQUARE_W)) * slide,
   );
-  const y = Math.round((PANEL_H - SQUARE_H) / 2);
+  const y = 16;
   fb.sprite(ROUNDED_SQUARE, x, y);
 
   // The layer number is knocked out of the square. A 7 px tall roll cannot be
@@ -300,242 +303,164 @@ const layerIndicator: OLEDModeSpec = {
 // ── the new collection ──────────────────────────────────────────────────────
 
 const loader: OLEDModeSpec = {
-  id: 'loader',
-  label: 'Progress Loader',
-  frames: 12,
-  fps: 8,
-  runtime: false,
+  id: 'loader', label: 'Progress Loader', frames: 12, fps: 8, runtime: false,
   render(fb, ctx) {
-    centre(fb, 1, 'LOADING', 2);
-    const blocks = 8;
-    const bw = 12;
-    const gap = 2;
-    const total = blocks * bw + (blocks - 1) * gap;
-    const x0 = Math.round((PANEL_W - total) / 2);
-    const step = ctx.frame % (blocks + 4);
-    for (let i = 0; i < blocks; i += 1) {
-      const x = x0 + i * (bw + gap);
-      if (i < step) {
-        fb.fillRect(x, 20, bw, 7);
-      } else {
-        fb.rect(x, 20, bw, 7);
-      }
+    fb.text(2, 1, 'LOADING');
+    flushRight(fb, 1, 'ANIMATION');
+    fb.hline(0, 10, PANEL_W);
+    const count = 10;
+    const step = ctx.frame % 12;
+    for (let i = 0; i < count; i += 1) {
+      const x = 4 + i * 12;
+      fb.rect(x, 15, 9, 10);
+      if (i < Math.min(step, count)) fb.fillRect(x + 2, 17, 5, 6);
     }
+    fb.hline(4, 29, 117);
   },
 };
 
 const creature: OLEDModeSpec = {
-  id: 'creature',
-  label: 'Pixel Buddy',
-  frames: 16,
-  fps: 6,
-  runtime: false,
+  id: 'creature', label: 'Pixel Buddy', frames: 16, fps: 6, runtime: false,
   render(fb, ctx) {
     const f = ctx.frame % 16;
     const bitmap = f === 6 || f === 7 ? CREATURE_BLINK : f === 12 ? CREATURE_LOOK : CREATURE_IDLE;
     const bob = f === 3 || f === 4 || f === 11 ? 1 : 0;
-    fb.sprite(bitmap, 3, 7 + bob);
-
-    fb.text(23, 3, trunc(ctx.layerName.toUpperCase(), 16));
-    fb.text(23, 12, blink(ctx.time, 1400) ? 'HELLO' : 'HELLO.');
-    fb.text(23, 23, trunc(ctx.deckName.toUpperCase(), 16));
+    fb.sprite(bitmap, 4, 8 + bob);
+    fb.hline(2, 27, 20);
+    fb.text(28, 1, 'PIXEL BUDDY');
+    fb.hline(28, 10, 98);
+    fb.rect(28, 14, 67, 13);
+    fb.text(32, 17, 'HELLO');
+    for (let i = 0; i < 3; i += 1) if (i <= Math.floor(f / 4) % 4) fb.fillRect(69 + i * 6, 21, 2, 2);
   },
 };
 
 const wave: OLEDModeSpec = {
-  id: 'wave',
-  label: 'Signal Wave',
-  frames: 15,
-  fps: 15,
-  runtime: false,
+  id: 'wave', label: 'Signal Wave', frames: 15, fps: 15, runtime: false,
   render(fb, ctx) {
-    fb.text(0, 0, 'SIGNAL');
-    flushRight(fb, 0, '1.0V');
-    // Dotted axis and graticule.
-    for (let x = 0; x < PANEL_W; x += 4) fb.pixel(x, 20, false);
-    for (let x = 8; x < PANEL_W; x += 32) fb.vline(x, 10, 20, false);
+    fb.text(1, 0, 'SIGNAL WAVE');
+    fb.hline(0, 9, PANEL_W);
+    // A decorative trace, not a voltage measurement.
+    for (let x = 0; x < PANEL_W; x += 6) fb.pixel(x, 20);
+    const phase = ((ctx.frame % 15) / 15) * Math.PI * 2;
+    let previous = Math.round(20 - Math.sin((-1 / PANEL_W) * Math.PI * 4 + phase) * 8);
     for (let x = 0; x < PANEL_W; x += 1) {
-      const phase = (ctx.frame / 15) * Math.PI * 2;
-      const v = Math.sin((x / PANEL_W) * Math.PI * 4 + phase);
-      fb.pixel(x, Math.round(20 - v * 9));
+      const y = Math.round(20 - Math.sin((x / PANEL_W) * Math.PI * 4 + phase) * 8);
+      fb.vline(x, Math.min(y, previous), Math.abs(y - previous) + 1);
+      previous = y;
     }
-    fb.hline(0, 20, PANEL_W, false);
-    for (let x = 0; x < PANEL_W; x += 4) fb.pixel(x, 20);
   },
 };
 
 const starfield: OLEDModeSpec = {
-  id: 'starfield',
-  label: 'Starfield',
-  frames: 24,
-  fps: 12,
-  runtime: false,
+  id: 'starfield', label: 'Starfield', frames: 24, fps: 12, runtime: false,
   render(fb, ctx) {
-    const t = ctx.frame;
-    for (let i = 0; i < 46; i += 1) {
-      const depth = 1 + Math.floor(hash(i * 7 + 1) * 3); // 1 far .. 3 near
-      const speed = depth * 0.9 + 0.4;
-      const baseY = hash(i * 13 + 5) * PANEL_H;
+    // Every depth makes an integer number of screen widths per loop.
+    const t = (ctx.frame % 24) / 24;
+    for (let i = 0; i < 40; i += 1) {
+      const depth = 1 + Math.floor(hash(i * 7 + 1) * 3);
       const startX = hash(i * 31 + 9) * PANEL_W;
-      const x = Math.round((startX - t * speed * 2 + PANEL_W * 4) % PANEL_W);
-      const y = Math.round(baseY + Math.sin((t / 24) * Math.PI * 2 + i) * (depth - 1));
-      if (depth === 3) {
-        fb.fillRect(x, y, 2, 2);
-      } else if (depth === 2) {
-        fb.pixel(x, y);
-        fb.pixel(x + 1, y);
-      } else {
-        fb.pixel(x, y);
-      }
+      const x = Math.floor((startX - t * PANEL_W * depth + PANEL_W * 4) % PANEL_W);
+      const y = Math.floor(hash(i * 13 + 5) * PANEL_H);
+      fb.pixel(x, y);
+      if (depth >= 2 && x > 0) fb.pixel(x - 1, y);
+      if (depth === 3 && y < PANEL_H - 1) fb.pixel(x, y + 1);
     }
-    // Vanishing point cross.
-    fb.pixel(0, 15);
-    fb.pixel(0, 16);
   },
 };
 
 const rain: OLEDModeSpec = {
-  id: 'rain',
-  label: 'Digital Rain',
-  frames: 24,
-  fps: 12,
-  runtime: false,
+  id: 'rain', label: 'Digital Rain', frames: 24, fps: 12, runtime: false,
   render(fb, ctx) {
-    const t = ctx.frame;
+    const t = (ctx.frame % 24) / 24;
     for (let col = 0; col < 16; col += 1) {
-      const x = col * 8 + 1;
-      const speed = 1 + Math.floor(hash(col * 5 + 3) * 3);
+      const x = col * 8 + 2;
+      const speed = 1 + Math.floor(hash(col * 5 + 3) * 2);
       const len = 5 + Math.floor(hash(col * 11 + 7) * 8);
-      const span = PANEL_H + len + 6;
-      const head = Math.round((t * speed + hash(col) * span) % span) - 4;
+      const head = Math.floor((t * PANEL_H * speed + hash(col) * PANEL_H) % PANEL_H);
       for (let k = 0; k < len; k += 1) {
-        const y = head - k;
-        if (y < 0 || y >= PANEL_H) continue;
-        if (k === 0) {
-          fb.fillRect(x, y, 3, 2);
-        } else if (k < 3) {
-          fb.fillRect(x, y, 2, 1);
-        } else {
-          fb.pixel(x + 1, y);
-        }
+        const y = (head - k + PANEL_H) % PANEL_H;
+        if (k === 0) fb.fillRect(x, y, 3, 1);
+        else if (k < 3 || (k + col) % 2 === 0) fb.pixel(x + 1, y);
       }
     }
   },
 };
 
 const clock: OLEDModeSpec = {
-  id: 'clock',
-  label: 'Clock',
-  frames: 60,
-  fps: 1,
-  runtime: true,
-  render(fb, ctx) {
+  id: 'clock', label: 'Clock', frames: 60, fps: 1, runtime: true,
+  render(fb) {
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, '0');
     const mm = String(now.getMinutes()).padStart(2, '0');
-    const ss = now.getSeconds();
-    // A blinking colon at 2x just looks like a rendering fault; the seconds
-    // blocks below already show the clock is alive.
-    centre(fb, 1, `${hh}:${mm}`, 2);
-    // Seconds sweep, one block per five seconds.
-    const blocks = 12;
-    const bw = 6;
-    const gap = 2;
-    const total = blocks * bw + (blocks - 1) * gap;
-    const x0 = Math.round((PANEL_W - total) / 2);
-    const lit = Math.floor(ss / 5);
-    for (let i = 0; i < blocks; i += 1) {
-      const x = x0 + i * (bw + gap);
-      if (i < lit) fb.fillRect(x, 19, bw, 4);
-      else fb.rect(x, 19, bw, 4);
-    }
+    centre(fb, 0, `${hh}:${mm}`, 2);
     const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    centre(fb, 24, `${days[now.getDay()]} ${now.getDate()} ${months[now.getMonth()]}`);
+    centre(fb, 17, `${days[now.getDay()]} ${now.getDate()} ${months[now.getMonth()]}`);
+    // One tick for each five seconds; no RTC is assumed on the pad itself.
+    for (let i = 0; i < 12; i += 1) {
+      const x = 17 + i * 8;
+      if (i < Math.floor(now.getSeconds() / 5)) fb.fillRect(x, 27, 5, 3);
+      else fb.hline(x, 29, 5);
+    }
   },
 };
 
 const radar: OLEDModeSpec = {
-  id: 'radar',
-  label: 'Radar Sweep',
-  frames: 24,
-  fps: 12,
-  runtime: false,
+  id: 'radar', label: 'Radar Sweep', frames: 24, fps: 12, runtime: false,
   render(fb, ctx) {
-    const cx = 17;
-    const cy = 16;
-    const r = 14;
-    const angle = (ctx.frame / 24) * Math.PI * 2;
-    // Scope rings, dotted so the sweep reads over them.
-    for (const rr of [5, 10, 14]) {
-      for (let a = 0; a < 360; a += 12) {
-        const rad = (a * Math.PI) / 180;
-        fb.pixel(Math.round(cx + Math.cos(rad) * rr), Math.round(cy + Math.sin(rad) * rr));
-      }
+    const cx = 16, cy = 16, r = 14;
+    const angle = ((ctx.frame % 24) / 24) * Math.PI * 2;
+    for (const rr of [5, 10, 14]) for (let a = 0; a < 360; a += 15) {
+      const rad = (a * Math.PI) / 180;
+      fb.pixel(Math.round(cx + Math.cos(rad) * rr), Math.round(cy + Math.sin(rad) * rr));
     }
-    // Cross hairs.
-    fb.pixel(cx, cy - r);
-    fb.pixel(cx, cy + r);
-    fb.pixel(cx - r, cy);
-    fb.pixel(cx + r, cy);
-    // Sweep line with a fading tail.
-    for (let i = 0; i < 16; i += 1) {
-      const a = angle - (i * Math.PI) / 180;
-      const rr = r * (1 - i / 40);
-      fb.pixel(Math.round(cx + Math.cos(a) * rr), Math.round(cy + Math.sin(a) * rr));
+    for (let radius = 1; radius <= r; radius += 1) {
+      fb.pixel(Math.round(cx + Math.cos(angle) * radius), Math.round(cy + Math.sin(angle) * radius));
     }
-    // Blips light up as the sweep passes them.
-    const blips: [number, number][] = [
-      [8, 9],
-      [22, 12],
-      [14, 24],
-      [26, 20],
-    ];
-    blips.forEach(([bx, by], i) => {
+    for (const [bx, by] of [[8, 9], [22, 12], [14, 24], [26, 20]]) {
       const ba = Math.atan2(by - cy, bx - cx);
-      let d = ((angle - ba) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-      if (d < Math.PI * 0.9) fb.fillRect(bx, by, 2, 2);
-      if (d < 0.02 && i === 0) fb.fillRect(bx - 1, by - 1, 3, 3);
-    });
-    fb.text(38, 4, 'SCAN');
-    fb.text(38, 13, `${(ctx.frame % 24).toString().padStart(2, '0')} / 24`);
-    fb.text(38, 22, 'R13.0M');
+      const d = ((angle - ba) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+      if (d < Math.PI * 0.65) fb.fillRect(bx, by, 2, 2);
+    }
+    fb.vline(35, 1, 30);
+    fb.text(41, 2, 'RADAR');
+    fb.text(41, 12, 'SWEEP');
+    for (let i = 0; i < 8; i += 1) {
+      if (i <= Math.floor((ctx.frame % 24) / 3)) fb.fillRect(41 + i * 10, 24, 7, 3);
+      else fb.hline(41 + i * 10, 26, 7);
+    }
   },
 };
 
 const pulse: OLEDModeSpec = {
-  id: 'pulse',
-  label: 'Heartbeat',
-  frames: 12,
-  fps: 12,
-  runtime: false,
+  id: 'pulse', label: 'Heartbeat', frames: 12, fps: 12, runtime: false,
   render(fb, ctx) {
-    const width = PANEL_W - 30; // leave room for the BPM block
-    const shift = ctx.frame * 2;
-    const baseline = 15;
-    let prev = baseline;
-    for (let x = 0; x < width; x += 1) {
-      const p = (x + shift) % 60;
+    const width = 91;
+    const shift = (ctx.frame % 12) * 5; // exactly one 60-pixel cycle per loop
+    const baseline = 16;
+    const sample = (x: number) => {
+      const p = (x + shift + 60) % 60;
       let v = 0;
-      if (p >= 4 && p <= 7) v = (p - 4) * 0.7; // P wave
+      if (p >= 4 && p <= 7) v = (p - 4) * 0.7;
       if (p >= 8 && p <= 9) v = -1;
-      if (p >= 14 && p <= 16) v = -3; // Q
-      if (p >= 17 && p <= 18) v = 11; // R
-      if (p >= 19 && p <= 21) v = -5; // S
-      if (p >= 30 && p <= 36) v = 3; // T wave
-      const y = Math.round(baseline - v);
-      // Join samples so the trace is a line, not a dotted field.
-      const lo = Math.min(prev, y);
-      const hi = Math.max(prev, y);
-      fb.vline(x, lo, hi - lo + 1);
+      if (p >= 14 && p <= 16) v = -3;
+      if (p >= 17 && p <= 18) v = 11;
+      if (p >= 19 && p <= 21) v = -5;
+      if (p >= 30 && p <= 36) v = 3;
+      return Math.round(baseline - v);
+    };
+    let prev = sample(-1);
+    for (let x = 0; x < width; x += 1) {
+      const y = sample(x);
+      fb.vline(x, Math.min(prev, y), Math.abs(y - prev) + 1);
       prev = y;
     }
-    // Pulse marker on the right, beating with the loop.
-    const beat = ctx.frame % 12;
-    if (beat < 3) fb.sprite(HEART, PANEL_W - 9, 2);
-    else fb.rect(PANEL_W - 9, 2, 8, 7, false);
-    flushRight(fb, 12, 'BPM');
-    flushRight(fb, 21, String(72 + (beat % 3)));
+    fb.vline(94, 1, 30);
+    if (ctx.frame % 12 < 4) fb.sprite(HEART, 106, 2);
+    else fb.sprite(HEART, 106, 3);
+    fb.text(97, 13, 'PULSE');
+    fb.text(102, 23, 'DEMO');
   },
 };
 

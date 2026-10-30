@@ -8,7 +8,6 @@ import { KnobConfigDrawer } from './components/KnobConfigDrawer';
 import { DisplayConfigDrawer } from './components/DisplayConfigDrawer';
 import { ShortcutsPanel } from './components/ShortcutsPanel';
 import { AppLauncherPanel } from './components/AppLauncherPanel';
-import { PCShortcut } from './data/pcShortcuts';
 import { restoreMacropadConfig } from './utils/macropadConfig';
 import { getOLEDMode, isOLEDMode, OLED_MODE_IDS, type OLEDMode } from './oled/modes';
 import { startOledStreaming, type OledStreamSnapshot } from './oled/streamer';
@@ -39,6 +38,7 @@ import { routePhysicalAction } from './utils/physicalActionRouter';
 import { WebhookDocPanel } from './components/WebhookDocPanel';
 import { AudioMixerPanel } from './components/AudioMixerPanel';
 import { HardwareDiagnosticsPanel, ActionHistoryEntry } from './components/HardwareDiagnosticsPanel';
+import { AnimatedDetails } from './components/AnimatedDetails';
 import { FirmwarePanel } from './components/FirmwarePanel';
 import { UploadSheet } from './components/UploadSheet';
 import { CommandPalette } from './components/CommandPalette';
@@ -230,12 +230,12 @@ export const App: React.FC = () => {
   /* Serial frames read this on a 200ms timer, independently of RAF and drawer
    * visibility. The callback never captures stale layer/media/metrics values. */
   const oledStreamSnapshot = useRef<OledStreamSnapshot>({
-    state: oledState, deckName: deck.name, layerName: `Layer ${activeChannelIdx}`,
-    layerIndex: activeChannelIdx, layerCount: layers.length,
+    state: oledState, deckName: deck.name, layerName: padChannelIndex === null ? '' : `Layer ${padChannelIndex}`,
+    layerIndex: padChannelIndex, layerCount: layers.length,
   });
   oledStreamSnapshot.current = {
-    state: oledState, deckName: deck.name, layerName: `Layer ${activeChannelIdx}`,
-    layerIndex: activeChannelIdx, layerCount: layers.length,
+    state: oledState, deckName: deck.name, layerName: padChannelIndex === null ? '' : `Layer ${padChannelIndex}`,
+    layerIndex: padChannelIndex, layerCount: layers.length,
   };
   const modeFromPadRef = useRef<OLEDMode | null>(null);
 
@@ -918,7 +918,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#E3E2DE] text-[#141414] overflow-hidden">
+    <div className="app-shell flex flex-col h-screen w-screen bg-[#E3E2DE] text-[#141414] overflow-hidden">
       {/* Top Application Navbar */}
       <TopNavbar
         activeTab={activeTab}
@@ -993,14 +993,14 @@ export const App: React.FC = () => {
           </div>
 
           {/* Firmware tools live in the left rail, below the layer register. */}
-          <details
+          <AnimatedDetails
             ref={firmwareDisclosureRef}
             id="firmware-bootloader"
             open={isFirmwareExpanded}
-            onToggle={(event) => setIsFirmwareExpanded(event.currentTarget.open)}
-            className="border-b border-[#C7C7C7] group shrink-0"
-          >
-            <summary className="list-none cursor-pointer select-none px-4 py-3 flex items-center gap-2.5 hover:bg-[#EDECE8] [&::-webkit-details-marker]:hidden">
+            onOpenChange={setIsFirmwareExpanded}
+            className="border-b border-[#C7C7C7] shrink-0"
+            summaryClassName="list-none cursor-pointer select-none px-4 py-3 flex items-center gap-2.5 hover:bg-[#EDECE8] [&::-webkit-details-marker]:hidden"
+            summary={<>
               <span className="w-7 h-7 shrink-0 flex items-center justify-center border border-[#C7C7C7] text-[#1351AA]">
                 <Zap className="w-3.5 h-3.5" />
               </span>
@@ -1008,12 +1008,13 @@ export const App: React.FC = () => {
                 <span className="eyebrow block leading-snug">RP2040 Firmware &amp; Bootloader</span>
                 <span className="block mt-0.5 font-mono text-[9px] text-[#646464]">BOOTSEL · UF2 flasher</span>
               </span>
-              <ChevronDown className="w-3.5 h-3.5 shrink-0 text-[#646464] transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="border-t border-[#C7C7C7]">
-              <FirmwarePanel isExpanded={isFirmwareExpanded} />
-            </div>
-          </details>
+              <ChevronDown className={`w-3.5 h-3.5 shrink-0 text-[#646464] transition-transform ${isFirmwareExpanded ? 'rotate-180' : ''}`} />
+            </>}
+          >
+            {(renderedOpen) => <div className="border-t border-[#C7C7C7]">
+              <FirmwarePanel isExpanded={isFirmwareExpanded} keepVisible={renderedOpen} />
+            </div>}
+          </AnimatedDetails>
 
           {/* foot */}
           <div className="mt-auto px-4 py-3 border-t border-[#C7C7C7]">
@@ -1117,7 +1118,6 @@ export const App: React.FC = () => {
                   onSave={handleSaveDial}
                   onClose={() => setIsEditingKnob(false)}
                   onTriggerAction={handleTriggerAction}
-                  onSelectChannel={(idx) => handleCycleDialMode(idx)}
                 />
               ) : isEditingDisplay ? (
                 <DisplayConfigDrawer
@@ -1170,7 +1170,6 @@ export const App: React.FC = () => {
                         const k = activeLayer.keys.find(item => item.keyIndex === selectedKeyIndex);
                         if (!k) return null;
                         const rows = [
-                          { label: 'Legend', value: k.label, mono: false },
                           { label: 'Shortcut', value: k.tapAction?.name || 'Unassigned', mono: true },
                           { label: 'Category', value: (k.tapAction?.category || 'none').replace(/_/g, ' '), mono: true },
                         ];
@@ -1211,15 +1210,15 @@ export const App: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Expanded hardware diagnostics stays in the right inspector above Audio Mixer. */}
-                  <details
+                  {/* Expandable inspector panels retain their native disclosure controls. */}
+                  <AnimatedDetails
                     ref={hardwareDiagnosticsRef}
                     id="hardware-diagnostics"
                     open={isHardwareDiagnosticsExpanded}
-                    onToggle={(event) => setIsHardwareDiagnosticsExpanded(event.currentTarget.open)}
+                    onOpenChange={setIsHardwareDiagnosticsExpanded}
                     className="panel mb-4 shrink-0 min-w-0"
-                  >
-                    <summary className="px-3 py-2 cursor-pointer select-none flex items-center justify-between gap-2 border-b border-[#E3E2DE]">
+                    summaryClassName="px-3 py-2 cursor-pointer select-none flex items-center justify-between gap-2 border-b border-[#E3E2DE]"
+                    summary={<>
                       <span className="eyebrow eyebrow--ink">Hardware Status &amp; Diagnostics</span>
                       <span className="min-w-0 max-w-[42%] flex items-center justify-end gap-2">
                         <span className={`mark shrink-0 ${hardwareState === 'connected' ? 'mark--on' : 'mark--off'}`} aria-hidden="true" />
@@ -1227,40 +1226,38 @@ export const App: React.FC = () => {
                           {hardwareState === 'connected' ? (deviceInfo?.name || 'DEVICE LINKED') : 'NO DEVICE · SIMULATOR'}
                         </span>
                       </span>
-                    </summary>
-                    <div className="px-3 pt-2 pb-3">
-                      <p className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[#444343] leading-relaxed break-words">
-                        {hardwareState === 'connected' ? (deviceInfo?.name || 'DEVICE LINKED') : 'NO DEVICE · SIMULATOR'}
-                      </p>
-                    </div>
-                    <HardwareDiagnosticsPanel
-                      isExpanded={isHardwareDiagnosticsExpanded}
-                      actionHistory={actionLogs}
-                      onClearHistory={() => setActionLogs([])}
-                    />
-                  </details>
+                    </>}
+                  >
+                    {(renderedOpen) => <>
+                      <div className="px-3 pt-2 pb-3">
+                        <p className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[#444343] leading-relaxed break-words">
+                          {hardwareState === 'connected' ? (deviceInfo?.name || 'DEVICE LINKED') : 'NO DEVICE · SIMULATOR'}
+                        </p>
+                      </div>
+                      <HardwareDiagnosticsPanel
+                        isExpanded={isHardwareDiagnosticsExpanded}
+                        keepVisible={renderedOpen}
+                        actionHistory={actionLogs}
+                        onClearHistory={() => setActionLogs([])}
+                      />
+                    </>}
+                  </AnimatedDetails>
 
                   {/* Real Windows WASAPI Audio Mixer */}
-                  <details className="panel mb-4">
-                    <summary className="px-3 py-2 cursor-pointer select-none flex items-center justify-between border-b border-[#E3E2DE]">
-                      <span className="eyebrow eyebrow--ink">Audio mixer</span>
-                      <span className="idx">WASAPI</span>
-                    </summary>
+                  <AnimatedDetails className="panel mb-4 shrink-0" summaryClassName="px-3 py-2 cursor-pointer select-none flex items-center justify-between border-b border-[#E3E2DE]"
+                    summary={<><span className="eyebrow eyebrow--ink">Audio mixer</span><span className="idx">WASAPI</span></>}>
                     <div className="p-2 pt-0">
                       <AudioMixerPanel />
                     </div>
-                  </details>
+                  </AnimatedDetails>
 
                   {/* Localhost webhook API (collapsed by default) */}
-                  <details className="panel mb-4">
-                    <summary className="px-3 py-2 cursor-pointer select-none flex items-center justify-between border-b border-[#E3E2DE]">
-                      <span className="eyebrow eyebrow--ink">Webhook API</span>
-                      <span className="idx">localhost</span>
-                    </summary>
+                  <AnimatedDetails className="panel mb-4 shrink-0" summaryClassName="px-3 py-2 cursor-pointer select-none flex items-center justify-between border-b border-[#E3E2DE]"
+                    summary={<><span className="eyebrow eyebrow--ink">Webhook API</span><span className="idx">localhost</span></>}>
                     <div className="px-2 pb-2 max-h-80 overflow-y-auto">
                       <WebhookDocPanel onRunLocally={handleWebhookRequest} />
                     </div>
-                  </details>
+                  </AnimatedDetails>
 
                   {/* Telemetry: a mono readout table, hairline rows */}
                   <div className="flex-1 panel flex flex-col overflow-hidden min-h-[160px]">
@@ -1341,10 +1338,8 @@ export const App: React.FC = () => {
 
         {/* TAB 2: VIA KEY MATRIX TESTER */}
         {activeTab === 'tester' && (
-          <div className="flex-1 p-6 overflow-y-auto flex justify-center">
-            <div className="w-full max-w-4xl">
-              <ViaKeyTester />
-            </div>
+          <div className="tester-page flex-1 min-w-0 p-4 sm:p-6 md:p-8 overflow-y-auto bg-[#F4F3F0]">
+            <ViaKeyTester />
           </div>
         )}
 

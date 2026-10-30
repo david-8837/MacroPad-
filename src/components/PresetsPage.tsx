@@ -67,7 +67,7 @@ export const PresetsPage: React.FC<Props> = ({ layers, activeLayerId, onApply, o
           <div className="w-11 h-11 border border-[#C7C7C7] bg-white flex items-center justify-center shrink-0"><Layers className="w-5 h-5 text-[#1351AA]" /></div>
           <div className="flex-1"><p className="eyebrow">READY-MADE LAYERS</p><h1 className="text-2xl font-bold text-[#141414] mt-1">Layer presets</h1>
             <p className="text-sm text-[#646464] mt-1">Choose a set, pick a layer, and upload when you're ready.</p></div>
-          <button type="button" disabled={!!loaded.error} onClick={() => setEditor({ preset: createPreset(newPresetId()), isNew: true })} className="shrink-0 bg-[#1351AA] text-white px-3 py-2 text-xs font-bold flex items-center gap-1.5"><Plus className="w-4 h-4" /> Create preset</button>
+          <button type="button" disabled={!!loaded.error} onClick={() => setEditor({ preset: createPreset(newPresetId()), isNew: true })} className="premium-action shrink-0 bg-[#1351AA] text-white px-3 py-2 text-xs font-bold flex items-center gap-1.5"><Plus className="w-4 h-4" /> Create preset</button>
         </div>
         <p className="text-xs leading-relaxed text-[#646464]">These send keyboard shortcuts to the focused app. Check the preview: default shortcuts can differ by operating system, version, workspace, keyboard layout or custom keymap.</p>
         {storageError && <p role="alert" className="text-xs text-[#A23333] border border-[#D3A24A] bg-[#FFF5E4] p-3">{storageError}</p>}
@@ -85,7 +85,7 @@ export const PresetsPage: React.FC<Props> = ({ layers, activeLayerId, onApply, o
             {filteredPresets.length === 0 && <p className="border border-dashed border-[#C7C7C7] p-4 text-xs text-[#646464]">No custom presets yet. Choose “Create preset” to make one.</p>}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {filteredPresets.map((item) => <button key={item.id} type="button" onClick={() => { setPresetId(item.id); reset(); }}
-              aria-pressed={presetId === item.id} className={`text-left p-4 border min-h-[118px] transition-colors ${presetId === item.id ? 'border-[#1351AA] bg-white' : 'border-[#C7C7C7] bg-[#EDECE8] hover:bg-white'}`}>
+              aria-pressed={presetId === item.id} className={`preset-card text-left p-4 border min-h-[118px] transition-colors ${presetId === item.id ? 'border-[#1351AA] bg-white' : 'border-[#C7C7C7] bg-[#EDECE8] hover:bg-white'}`}>
               <span className="flex items-start gap-3">
                 <PresetIcon id={item.id} iconId={item.iconId} />
                 <span className="min-w-0 flex-1">
@@ -97,7 +97,7 @@ export const PresetsPage: React.FC<Props> = ({ layers, activeLayerId, onApply, o
             </button>)}
             </div>
           </section>
-          {preset && <section className="border border-[#C7C7C7] bg-white p-5 space-y-4 lg:sticky lg:top-4" aria-label="Preset preview">
+          {preset && <section className="premium-preview border border-[#C7C7C7] bg-white p-5 space-y-4 lg:sticky lg:top-4" aria-label="Preset preview">
             <div className="flex items-start gap-3"><PresetIcon id={preset.id} iconId={preset.iconId} large /><div className="min-w-0"><p className="eyebrow">PREVIEW · 9 KEYS</p><h2 className="font-bold text-[#141414] mt-1">{preset.name}</h2><p className="text-[11px] text-[#646464] mt-1">{preset.note}</p></div></div>
             {preset.group === 'Games' && <p className="text-[11px] text-[#8A4B00] leading-relaxed bg-[#FFF5E4] border border-[#E6C894] p-2">Held keys require updated firmware. Older firmware may only send taps; Full Deck hold support is unverified. Check the game’s controls and test safely.</p>}
             <div className="flex flex-wrap gap-2"><button type="button" disabled={!!loaded.error} onClick={() => { reset(); setEditor({ preset, isNew: false }); }} className="border border-[#C7C7C7] px-2 py-1.5 text-[11px] font-bold flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit preset</button>
@@ -110,7 +110,7 @@ export const PresetsPage: React.FC<Props> = ({ layers, activeLayerId, onApply, o
             <p className="text-[11px] text-[#646464] leading-relaxed">Replaces all nine keys and their gestures on this layer. Its knob and other layers stay unchanged. Saved on this PC until you upload.</p>
             {confirm && <p role="alert" className="text-xs text-[#8A4B00] bg-[#FFF5E4] border border-[#E6C894] p-2">Layer {index} already has assignments. Apply again to replace them.</p>}
             {saved && <p role="status" className="text-xs text-[#1351AA] flex items-center gap-1"><Check className="w-4 h-4" />{saved}</p>}
-            <button type="button" onClick={apply} disabled={!target} className="w-full bg-[#1351AA] text-white px-3 py-2.5 text-xs font-bold disabled:opacity-50">{confirm ? 'Replace layer keys' : 'Save preset to layer'}</button>
+            <button type="button" onClick={apply} disabled={!target} className="premium-action w-full bg-[#1351AA] text-white px-3 py-2.5 text-xs font-bold disabled:opacity-50">{confirm ? 'Replace layer keys' : 'Save preset to layer'}</button>
             <button type="button" onClick={onReviewUpload} className="w-full border border-[#C7C7C7] text-[#141414] px-3 py-2 text-xs font-bold flex justify-center items-center gap-2 hover:border-[#141414]">Review &amp; upload all layers <ArrowRight className="w-3.5 h-3.5" /></button>
           </section>}
         </div>

@@ -4,9 +4,7 @@ import { playKeyClick } from '../utils/soundEffects';
 import { 
   X, 
   Play, 
-  ShieldAlert, 
   Check, 
-  CircleDot, 
   Keyboard as KeyboardIcon, 
   Type, 
   Trash2,
@@ -14,16 +12,10 @@ import {
   ChevronRight,
   Plus,
   Sparkles,
-  Command,
-  Sliders,
-  Layers,
   Search,
-  FolderOpen,
   ExternalLink,
   RefreshCw,
-  AlertCircle,
   Monitor,
-  CheckCircle2,
   Zap,
 } from 'lucide-react';
 
@@ -34,8 +26,8 @@ interface KeyConfigDrawerProps {
   onSave: (updated: KeyBinding) => void;
   onClose: () => void;
   onTestAction: (action: ActionDefinition) => void;
-  /** Preset editor keeps keyboard navigation available until Record is selected. */
-  captureOnlyWhenRecording?: boolean;
+  /** Limit physical-key capture to the dedicated shortcut field in the preset editor. */
+  captureOnlyWhenFocused?: boolean;
   hideCloseButton?: boolean;
 }
 
@@ -242,12 +234,12 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   onSave,
   onClose,
   onTestAction,
-  captureOnlyWhenRecording = false,
+  captureOnlyWhenFocused = false,
   hideCloseButton = false,
 }) => {
   const [editedKey, setEditedKey] = useState<KeyBinding>({ ...keyBinding });
-  const [activeTab, setActiveTab] = useState<'keyboard' | 'recorder' | 'text' | 'safety' | 'app' | 'media'>(
-    keyBinding.tapAction?.category === 'app_launch' ? 'app' : keyBinding.tapAction?.category === 'media' ? 'media' : 'keyboard'
+  const [activeTab, setActiveTab] = useState<'keyboard' | 'text' | 'app'>(
+    keyBinding.tapAction?.category === 'app_launch' ? 'app' : 'keyboard'
   );
   const [keyboardLayout, setKeyboardLayout] = useState<'full' | 'tkl' | '60'>('full');
   
@@ -255,7 +247,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   // 'append': every key click/press adds to the combo without wiping existing keys
   // 'chord': live chord replace mode
   const [comboMode, setComboMode] = useState<'append' | 'chord'>('append');
-  const [isRecording, setIsRecording] = useState(false);
+  const shortcutCaptureRef = useRef<HTMLDivElement>(null);
   const [recordedKeys, setRecordedKeys] = useState<string[]>(
     editedKey.tapAction?.payload?.keys || []
   );
@@ -371,14 +363,18 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
   // Live Physical Keyboard Typing Listener
   useEffect(() => {
-    if (!isRecording && (captureOnlyWhenRecording || activeTab !== 'keyboard')) return;
+    if (activeTab !== 'keyboard') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+      if ((captureOnlyWhenFocused && target !== shortcutCaptureRef.current) ||
+          (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'))) {
         return;
       }
 
+      // Let keyboard users leave the dedicated field; Tab can still be chosen
+      // on the virtual keyboard or captured with a modifier.
+      if (captureOnlyWhenFocused && e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) return;
       e.preventDefault();
       e.stopPropagation();
       playKeyClick('down');
@@ -443,7 +439,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [isRecording, activeTab, editedKey, comboMode, recordedKeys.length, captureOnlyWhenRecording]);
+  }, [activeTab, editedKey, comboMode, recordedKeys.length, captureOnlyWhenFocused]);
 
   // Handle clicking on virtual keyboard key
   const handleVirtualKeyClick = (keyName: string) => {
@@ -561,7 +557,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   };
 
   return (
-    <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden animate-in slide-in-from-right duration-200">
+    <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden editor-slide-in">
       
       {/* DRAWER TOP BAR: Switch Navigator & Direct Switch Selector */}
       <div className="px-4 py-2.5 border-b border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between gap-3 max-[1463px]:flex-wrap">
@@ -640,14 +636,14 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               </div>
             )}
 
-            <button
+            {!hideCloseButton && <button
               type="button"
               onClick={onClose}
               title="Close Drawer"
               className="w-7 h-7 text-[#646464] hover:text-[#141414] hover:bg-[#EDECE8] flex items-center justify-center transition-colors"
             >
               <X className="w-4 h-4" />
-            </button>
+            </button>}
           </div>
         </div>
       </div>
@@ -668,7 +664,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
       {/* FEATURE NAVIGATION TABS: scroll rather than clipping at compact widths. */}
       <div className="flex overflow-x-auto px-3 border-b border-[#E3E2DE] bg-[#FFFFFF] text-xs font-mono shrink-0 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
         <button
-          onClick={() => { setActiveTab('keyboard'); setIsRecording(false); }}
+          onClick={() => { setActiveTab('keyboard'); }}
           className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
  activeTab === 'keyboard'
  ? 'border-[#1351AA] text-[#1351AA] font-bold'
@@ -680,19 +676,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         </button>
 
         <button
-          onClick={() => { setActiveTab('recorder'); setIsRecording(false); }}
-          className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
- activeTab === 'recorder'
- ? 'border-[#1351AA] text-[#1351AA] font-bold'
- : 'border-transparent text-[#646464] hover:text-[#141414]'
- }`}
-        >
-          <CircleDot className="w-3.5 h-3.5" />
-          2. Recorder
-        </button>
-
-        <button
-          onClick={() => { setActiveTab('text'); setIsRecording(false); }}
+          onClick={() => { setActiveTab('text'); }}
           className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
  activeTab === 'text'
  ? 'border-[#1351AA] text-[#1351AA] font-bold'
@@ -700,23 +684,11 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
  }`}
         >
           <Type className="w-3.5 h-3.5" />
-          3. Text Macro
+          2. Text Macro
         </button>
 
         <button
-          onClick={() => { setActiveTab('safety'); setIsRecording(false); }}
-          className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
- activeTab === 'safety'
- ? 'border-[#C7C7C7] text-[#141414] font-bold'
- : 'border-transparent text-[#646464] hover:text-[#141414]'
- }`}
-        >
-          <ShieldAlert className="w-3.5 h-3.5" />
-          4. Safety Hold
-        </button>
-
-        <button
-          onClick={() => { setActiveTab('app'); setIsRecording(false); }}
+          onClick={() => { setActiveTab('app'); }}
           className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${
  activeTab === 'app'
  ? 'border-[#1351AA] text-[#1351AA] font-bold'
@@ -724,29 +696,18 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
  }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          5. Open App
-        </button>
-        <button onClick={() => { setActiveTab('media'); setIsRecording(false); }} className={`py-2 px-2.5 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer ${activeTab === 'media' ? 'border-[#1351AA] text-[#1351AA] font-bold' : 'border-transparent text-[#646464] hover:text-[#141414]'}`}>
-          <Play className="w-3.5 h-3.5" /> 6. Media
+          3. Open App
         </button>
       </div>
 
       {/* DRAWER BODY */}
       <div className="flex-1 p-3.5 overflow-y-auto space-y-3">
 
-        {activeTab === 'media' && <div className="space-y-3"><p className="text-xs text-[#444343]">Choose a media key for this switch. Support depends on your computer.</p><div className="grid grid-cols-2 gap-2">{([
-          ['play_pause', 'Play / pause', 'Play'], ['stop', 'Stop', 'Square'], ['prev', 'Previous', 'SkipBack'], ['next', 'Next', 'SkipForward'],
-          ['volume_down', 'Volume down', 'Volume2'], ['volume_up', 'Volume up', 'Volume2'], ['mute', 'Mute', 'VolumeX'],
-          ['brightness_down', 'Brightness down', 'Square'], ['brightness_up', 'Brightness up', 'Square'],
-        ] as const).map(([mediaAction, label, iconName]) => <button key={mediaAction} type="button" aria-pressed={editedKey.tapAction?.category === 'media' && editedKey.tapAction.payload.mediaAction === mediaAction} onClick={() => {
-          const updated: KeyBinding = { ...editedKey, label, sublabel: 'Media key', iconName, tapAction: { id: `media-${mediaAction}`, category: 'media', name: label, payload: { mediaAction } } };
-          setEditedKey(updated); onSave(updated);
-        }} className={`text-left text-xs p-2 border ${editedKey.tapAction?.category === 'media' && editedKey.tapAction.payload.mediaAction === mediaAction ? 'border-[#1351AA] bg-[#F4F8FF]' : 'border-[#C7C7C7] hover:bg-[#EDECE8]'}`}>{label}</button>)}</div></div>}
-
         {/* TAB 1: FULL SIZE KEYBOARD & MULTI-KEY COMBO BUILDER */}
         {activeTab === 'keyboard' && (
           <div className="space-y-3">
             
+            {captureOnlyWhenFocused && <div ref={shortcutCaptureRef} role="textbox" aria-label="Type shortcut" aria-readonly="true" tabIndex={0} className="border border-[#C7C7C7] p-2 text-xs text-[#444343] focus:border-[#1351AA] focus:outline-none">Click here and type a shortcut, or use the virtual keyboard below.</div>}
             {/* MULTI-KEY COMBO PILL BAR (Interactive Chips) */}
             <div className="p-3  border border-[#E3E2DE] space-y-2.5">
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -1010,100 +971,6 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               </div>
             </div>
 
-            {/* Quick Media Keys */}
-            <div>
-              <label className="text-[10px] font-mono text-[#646464] uppercase block mb-1">
-                Media Hotkeys
-              </label>
-              <div className="grid grid-cols-6 gap-1.5">
-                {DRAWER_MEDIA_KEYS.map((m) => {
-                  const isSelected = recordedKeys.includes(m.name);
-                  return (
-                    <button
-                      key={m.key}
-                      type="button"
-                      onClick={() => handleVirtualKeyClick(m.name)}
-                      className={`py-1.5 px-1 border text-center font-mono text-[10px] transition-all truncate cursor-pointer ${
- isSelected
- ? 'bg-[#1351AA] text-[#E3E2DE] border-[#1351AA] font-bold '
- : 'bg-[#FFFFFF] text-[#444343] border-[#E3E2DE] hover:border-[#141414] hover:bg-[#FFFFFF]'
- }`}
-                    >
-                      {m.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: LIVE MACRO RECORDER */}
-        {activeTab === 'recorder' && (
-          <div className="space-y-3">
-            <div className="p-4 bg-[#FFFFFF] border border-[#E3E2DE] text-center space-y-3">
-              <div className="text-xs text-[#444343]">
-                {isRecording ? (
-                  <span className="text-[#141414] font-bold flex items-center justify-center gap-2 animate-pulse text-xs">
-                    <span className="w-2.5 h-2.5 bg-[#EDECE8]" />
-                    RECORDING LIVE KEYSTROKES: PRESS KEYS ON KEYBOARD...
-                  </span>
-                ) : (
-                  "Click 'Record Keys' and press your desired shortcut combo on your physical keyboard"
-                )}
-              </div>
-
-              {/* Recorded Badges */}
-              <div className="min-h-[52px] p-2.5 bg-[#FFFFFF] border border-[#E3E2DE] flex items-center justify-center gap-1.5 flex-wrap">
-                {recordedKeys.length === 0 ? (
-                  <span className="text-[#646464] text-xs italic">No keys recorded</span>
-                ) : (
-                  recordedKeys.map((k, i) => (
-                    <React.Fragment key={i}>
-                      {i > 0 && <span className="text-[#646464] text-xs font-bold font-mono">+</span>}
-                      <span className="px-2.5 py-1 bg-[#FFFFFF] border border-[#C7C7C7] font-mono text-xs font-bold text-[#141414] ">
-                        {k}
-                      </span>
-                    </React.Fragment>
-                  ))
-                )}
-              </div>
-
-              <div className="flex items-center justify-center gap-2 pt-1">
-                {!isRecording ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      updateRecordedKeys([]);
-                      setIsRecording(true);
-                    }}
-                    className="px-3.5 py-1.5 bg-[#EDECE8] hover:bg-[#EDECE8] text-[#141414] text-xs font-bold font-mono flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  >
-                    <CircleDot className="w-3.5 h-3.5 animate-pulse" />
-                    Record Keys
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsRecording(false)}
-                    className="px-3.5 py-1.5 bg-[#EDECE8] hover:bg-[#EDECE8] text-[#141414] text-xs font-bold font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    Done Recording
-                  </button>
-                )}
-
-                {recordedKeys.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={clearShortcut}
-                    className="px-3 py-1.5 border border-[#E3E2DE] text-[#646464] hover:text-[#141414] text-xs font-mono transition-colors cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
         )}
 
@@ -1126,94 +993,6 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               <Check className="w-3.5 h-3.5 text-[#1351AA] shrink-0" />
               <span>Simulates high-speed mechanical keystrokes directly into active application window.</span>
             </div>
-          </div>
-        )}
-
-        {/* TAB 4: LONG-PRESS SAFETY ISOLATION */}
-        {activeTab === 'safety' && (
-          <div className="p-3.5 bg-[#141414]/20 border border-[#C7C7C7]/20 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-[#141414] shrink-0" />
-                <div>
-                  <h4 className="text-xs font-bold text-[#141414]">Long-Press Safety Isolation</h4>
-                  <p className="text-[10px] text-[#141414]/60">
-                    Suppresses quick accidental taps. Requires holding down to execute.
-                  </p>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={editedKey.isDestructiveSafety || false}
-                onChange={(e) => {
-                  const updated = {
-                    ...editedKey,
-                    isDestructiveSafety: e.target.checked,
-                    safetyConfirmAction: e.target.checked
-                      ? editedKey.safetyConfirmAction || {
-                          id: `safety-${Date.now()}`,
-                          category: 'hotkey' as const,
-                          name: 'Confirmed Operation',
-                          payload: {}
-                        }
-                      : null
-                  };
-                  setEditedKey(updated);
-                  onSave(updated);
-                }}
-                className="w-4 h-4 accent-red-500 cursor-pointer"
-              />
-            </div>
-
-            {editedKey.isDestructiveSafety && (
-              <div className="space-y-3 pt-1">
-                <div>
-                  <div className="flex justify-between text-xs text-[#444343] mb-1">
-                    <span>Hold Threshold Duration</span>
-                    <span className="font-mono text-[#1351AA] font-bold">
-                      {((editedKey.longPressThresholdMs || 1500) / 1000).toFixed(1)}s
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="500"
-                    max="4000"
-                    step="100"
-                    value={editedKey.longPressThresholdMs || 1500}
-                    onChange={(e) => {
-                      const updated = {
-                        ...editedKey,
-                        longPressThresholdMs: parseInt(e.target.value)
-                      };
-                      setEditedKey(updated);
-                      onSave(updated);
-                    }}
-                    className="w-full accent-[#1351AA] cursor-pointer"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] text-[#646464] block mb-1">Safety Action Name</label>
-                  <input
-                    type="text"
-                    value={editedKey.safetyConfirmAction?.name || ''}
-                    onChange={(e) => {
-                      const updated = {
-                        ...editedKey,
-                        safetyConfirmAction: {
-                          ...editedKey.safetyConfirmAction!,
-                          name: e.target.value
-                        }
-                      };
-                      setEditedKey(updated);
-                      onSave(updated);
-                    }}
-                    className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#C7C7C7]/30 text-xs text-[#141414] font-mono"
-                    placeholder="e.g. TERMINATE STREAM"
-                  />
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -1667,13 +1446,13 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         </button>
 
         <div className="flex items-center gap-2">
-          <button
+          {!hideCloseButton && <button
             type="button"
             onClick={onClose}
             className="px-3.5 py-1.5 border border-[#E3E2DE] text-xs text-[#444343] hover:text-[#141414] hover:bg-[#F4F3F0] transition-colors cursor-pointer"
           >
             Close
-          </button>
+          </button>}
           <button
             type="button"
             onClick={handleManualSave}

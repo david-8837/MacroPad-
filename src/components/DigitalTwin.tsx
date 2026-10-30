@@ -94,7 +94,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
   ];
 
   return (
-    <div className="w-full flex flex-col items-center">
+    <div className="workspace-arrival w-full flex flex-col items-center">
 
       {/* ── section header: label + readout ─────────────────────── */}
       <div className="w-full flex items-end justify-between border-b border-[#C7C7C7] pb-2 mb-5">

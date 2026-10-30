@@ -152,6 +152,15 @@ async function runTests() {
     'the deck status screen must blink between its two frames',
   );
 
+  // Loops are deterministic and start at the same frame after wrapping. Baked
+  // art cannot encode a changing deck or layer, so it must not pretend to.
+  for (const spec of OLED_MODES.filter(m => !m.runtime)) {
+    assert.equal(render(engine, spec, 0).toHex(), render(engine, spec, spec.frames).toHex(), `${spec.id} must wrap`);
+    const fb = new engine.Frame();
+    engine.renderPanel(fb, spec.id, {time:0, frame:0, state:sampleState, deckName:'OTHER', layerName:'OTHER', layerIndex:3, layerCount:4, track:null});
+    assert.equal(fb.toHex(), render(engine, spec, 0).toHex(), `${spec.id} must not bake sample layer or deck labels`);
+  }
+
   // 5. Runtime vs baked split — the exporter bakes everything else
   const runtime = OLED_MODES.filter((m) => m.runtime).map((m) => m.id).sort();
   assert.deepStrictEqual(runtime, ['channel', 'clock', 'kadowaz', 'media', 'system']);
@@ -336,6 +345,32 @@ async function runTests() {
     // And nothing on the screen may look like a percentage.
     const measured = render(engine, getOLEDMode('system'), 0);
     assert.ok(measured.inkCount() > system.inkCount(), 'measured screen must draw more than an empty one');
+
+    // Large status uses zero-based numbers, just like the editor and pad.
+    for (const index of [0, 3]) {
+      const fb = new engine.Frame();
+      engine.renderPanel(fb, 'kadowaz', {time:0,frame:0,state:{...sampleState,customTitle:'A VERY LONG USER TITLE',customSubtitle:'LONG BADGE'},deckName:'PAD',layerName:`Layer ${index}`,layerIndex:index,layerCount:4,track:null});
+      const expected = new engine.Frame();
+      const label = `LAYER ${index}`;
+      expected.text(Math.round((128 - engine.textWidth(label, 2)) / 2), 12, label, {scale:2});
+      assert.equal(patch(fb,0,12,128,14), patch(expected,0,12,128,14), `status must show Layer ${index} without overlaps`);
+      const badge = new engine.Frame();
+      const badgeText = 'LONG BAD';
+      const badgeWidth = engine.textWidth(badgeText) + 4;
+      const badgeX = 128 - badgeWidth - 1;
+      badge.fillRect(badgeX,0,badgeWidth,8); badge.text(badgeX+2,0,badgeText,{invert:true});
+      assert.equal(patch(fb,badgeX,0,badgeWidth,8), patch(badge,badgeX,0,badgeWidth,8), 'long title cannot overlap badge');
+    }
+    const frameForMedia = (title, time, progress) => {
+      const fb = new engine.Frame();
+      engine.renderPanel(fb, 'media', {time,frame:0,state:{...sampleState,nowPlayingTrack:title,trackProgress:progress},deckName:'PAD',layerName:'Layer 0',layerIndex:0,layerCount:4,track:null});
+      return fb;
+    };
+    const shortTitle = frameForMedia('SHORT TITLE', 0, null);
+    assert.equal(patch(shortTitle,0,9,128,7), patch(frameForMedia('SHORT TITLE',5000,null),0,9,128,7), 'short title stays still');
+    const longTitle = 'THIS IS A MUCH LONGER TITLE THAN THE DISPLAY';
+    assert.notEqual(patch(frameForMedia(longTitle,0,null),0,9,128,7), patch(frameForMedia(longTitle,1800,null),0,9,128,7), 'long title scrolls');
+    assert.equal(frameForMedia('SHORT TITLE',0,NaN).toHex(), shortTitle.toHex(), 'invalid progress is treated as unknown');
 
     // Media with no session: the panel says so instead of naming a track.
     const media = renderUnmeasured(engine, 'media');

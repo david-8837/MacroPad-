@@ -4,6 +4,7 @@ import type { FirmwareStatus, FlashProgress, FirmwareOption } from '../types/ele
 
 interface FirmwarePanelProps {
   isExpanded: boolean;
+  keepVisible?: boolean;
 }
 
 const previewOptions: FirmwareOption[] = [
@@ -12,7 +13,7 @@ const previewOptions: FirmwareOption[] = [
 ];
 
 /** Full UF2 workflow inside the sidebar disclosure. Opening it never launches an app modal. */
-export const FirmwarePanel: React.FC<FirmwarePanelProps> = ({ isExpanded }) => {
+export const FirmwarePanel: React.FC<FirmwarePanelProps> = ({ isExpanded, keepVisible = false }) => {
   const [status, setStatus] = useState<FirmwareStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [options, setOptions] = useState<FirmwareOption[]>(previewOptions);
@@ -85,7 +86,7 @@ export const FirmwarePanel: React.FC<FirmwarePanelProps> = ({ isExpanded }) => {
     }
   };
 
-  if (!isExpanded) return null;
+  if (!isExpanded && !keepVisible) return null;
 
   const nativeAvailable = Boolean(window.electronAPI?.getFirmwareStatus);
   const ready = Boolean(status?.inBootloader);

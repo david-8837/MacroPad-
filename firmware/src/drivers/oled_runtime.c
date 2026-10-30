@@ -23,17 +23,18 @@ static void text(oled_canvas_t *c, int x, int y, const char *s, int scale) {
 }
 
 static void title(oled_canvas_t *c, const char *s) {
-    text(c, 2, 1, s, 1);
-    oled_hline(c, 0, 10, OLED_FRAME_W, 1);
+    text(c, 2, 0, s, 1);
+    oled_hline(c, 0, 9, OLED_FRAME_W, 1);
 }
 
 static void layer(oled_canvas_t *c, uint8_t channel) {
-    const char number[] = {(char)('1' + (channel < 4 ? channel : 0)), '\0'};
-    text(c, 2, 15, "LAYER", 2);
-    text(c, 76, 14, number, 2); /* leave 4 px before the four stop boxes */
+    const uint8_t selected = channel < 4 ? channel : 0;
+    const char number[] = {(char)('0' + selected), '\0'};
+    text(c, 23, 12, "LAYER", 2);
+    text(c, 95, 12, number, 2);
     for (int i = 0; i < 4; i++) {
-        oled_rect(c, 91 + i * 9, 26, 6, 5, 1);
-        if (i == (channel < 4 ? channel : 0)) oled_fill_rect(c, 92 + i * 9, 27, 4, 3, 1);
+        if (i == selected) oled_fill_rect(c, 42 + i * 12, 29, 9, 2, 1);
+        else oled_hline(c, 42 + i * 12, 30, 9, 1);
     }
 }
 
@@ -52,13 +53,14 @@ void oled_render_local(oled_canvas_t *c, uint8_t mode, uint32_t now_ms, uint8_t 
         layer(c, channel);
         break;
     case OLED_SCREEN_SYSTEM:
-        title(c, "SYSTEM TELEMETRY");
-        text(c, 2, 14, "CPU --% RAM --%", 1);
-        text(c, 2, 24, "HOST DATA UNAVAIL", 1);
+        text(c, 0, 0, "SYSTEM   HOST OFFLINE", 1);
+        text(c, 0, 9, "CPU --", 1);
+        text(c, 0, 17, "RAM --", 1);
+        text(c, 0, 25, "GPU --", 1);
         break;
     case OLED_SCREEN_MEDIA:
         title(c, "NOW PLAYING");
-        text(c, 2, 17, "NO MEDIA DATA", 1);
+        text(c, 17, 14, "NO MEDIA", 2);
         break;
     case OLED_SCREEN_CHANNEL:
         title(c, "LAYER INDICATOR");
@@ -78,7 +80,7 @@ void oled_render_local(oled_canvas_t *c, uint8_t mode, uint32_t now_ms, uint8_t 
         clock[4] = (char)('0' + minutes % 10u);
         clock[6] = (char)('0' + (seconds / 10u) % 6u);
         clock[7] = (char)('0' + seconds % 10u);
-        text(c, 8, 16, clock, 1);
+        text(c, 17, 14, clock, 2);
         break;
     }
     default:
