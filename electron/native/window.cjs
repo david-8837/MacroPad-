@@ -55,6 +55,9 @@ function normalise(raw) {
 }
 
 async function getActiveWindow() {
+  if (process.platform !== 'win32') {
+    return ok(normalise({}));
+  }
   try {
     const r = await powershell(SCRIPT, { timeoutMs: 4000 });
     if (r.timedOut) {

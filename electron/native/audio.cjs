@@ -67,6 +67,9 @@ ${src}
 }
 
 async function callAudio(method, args = '') {
+  if (process.platform !== 'win32') {
+    return { error: 'Audio control requires Windows WASAPI COM interop.' };
+  }
   const script = `${prelude()}
 [void][Reflection.Assembly]::LoadWithPartialName('System.Runtime')
 $global:LASTRESULT=''
@@ -461,6 +464,7 @@ function parseNowPlaying(text, now = Date.now()) {
 let nowPlayingCache = null;
 
 async function getNowPlaying(opts = {}) {
+  if (process.platform !== 'win32') return ok(null);
   const cacheMs = opts.cacheMs === undefined ? 900 : opts.cacheMs;
   if (nowPlayingCache && Date.now() - nowPlayingCache.at < cacheMs) return nowPlayingCache.result;
 

@@ -1,8 +1,8 @@
 // Inspector disclosures animate without losing native summary semantics or hiding content mid-collapse.
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
-const { resolve } = require('node:path');
-const read = path => readFileSync(resolve(path), 'utf8');
+const { join } = require('node:path');
+const read = path => readFileSync(join(__dirname, '..', path), 'utf8');
 const app = read('src/App.tsx');
 const component = read('src/components/AnimatedDetails.tsx');
 const firmware = read('src/components/FirmwarePanel.tsx');

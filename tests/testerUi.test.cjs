@@ -10,7 +10,7 @@ try {
   const entry = join(dir, 'entry.tsx');
   writeFileSync(entry, `import React from 'react';\nimport { renderToStaticMarkup } from 'react-dom/server';\nimport { ViaKeyTester } from '${root}/src/components/via/ViaKeyTester.tsx';\nexport const render = () => renderToStaticMarkup(<ViaKeyTester />);`);
   const out = join(dir, 'bundle.cjs');
-  buildSync({ entryPoints: [entry], outfile: out, bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent', nodePaths: [resolve('node_modules')] });
+  buildSync({ entryPoints: [entry], outfile: out, bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent', nodePaths: [resolve(root, 'node_modules')] });
   const html = require(out).render();
   for (const text of ['Key tester', 'OS keyboard events', 'Cannot identify', 'Codes observed', 'Fresh keydowns', 'Held in window', 'OS auto-repeat', 'Observed key codes', 'Reset events']) {
     assert(html.toLowerCase().includes(text.toLowerCase()), `missing ${text}`);
