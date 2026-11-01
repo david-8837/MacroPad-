@@ -34,8 +34,8 @@ export interface PaletteItem {
 export interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
-  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros';
-  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros') => void;
+  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets';
+  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets') => void;
   deck: Deck;
   activeLayer: Layer;
   onSelectLayer: (layerId: string) => void;
@@ -115,7 +115,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       {
         id: 'tab-designer',
         group: 'Page',
-        label: 'Deck Studio',
+        label: 'Configure Keys',
         where: 'Layout editor & digital twin',
         also: 'home editor keymap pad simulator twin buttons',
         icon: <Sliders className="w-4 h-4 text-[#1351AA]" />,
@@ -174,7 +174,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'action-diagnostics',
         group: 'Action',
         label: 'Hardware Status & Diagnostics',
-        where: 'Studio inspector · action history, wire log & self-tests',
+        where: 'Key editor · action history, wire log & self-tests',
         also: 'diagnostics action history logs debug health selftest errors',
         icon: <Activity className="w-4 h-4 text-[#1351AA]" />,
         run: onOpenDiagnostics,
@@ -201,7 +201,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
     // 3. Hardware Interop Actions
     if (hardwareState === 'connected') {
-      if (!deck.isLocked) list.push(
+      list.push(
         {
           id: 'hw-sync',
           group: 'Hardware',
@@ -245,9 +245,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       list.push({
         id: `layer-${l.id}`,
         group: 'Layer',
-        label: `Edit / preview ${l.name}`,
+        label: `Edit / preview Layer ${idx}`,
         where: l.id === activeLayer.id ? 'Editing here · pad unchanged' : `Preview Layer ${idx} · pad unchanged`,
-        also: `edit preview layer channel ${l.name} ch${idx} layer${idx}`,
+        also: `edit preview layer channel ch${idx} layer${idx}`,
         icon: <Layers className="w-4 h-4 text-[#1351AA]" />,
         run: () => {
           onSelectLayer(l.id);
@@ -263,7 +263,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: `key-${idx}`,
         group: 'Key',
         label: `Key ${idx + 1}: ${actionName}`,
-        where: `${activeLayer.name} · Switch #${idx + 1}`,
+        where: `Layer ${deck.layers.findIndex(layer => layer.id === activeLayer.id)} · Switch #${idx + 1}`,
         also: `key ${idx + 1} switch button ${actionName} edit`,
         icon: <Sliders className="w-4 h-4 text-[#646464]" />,
         run: () => {
@@ -277,7 +277,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       id: 'knob-edit',
       group: 'Key',
       label: `Rotary Encoder: ${activeLayer.dial.label || 'Dial Controls'}`,
-      where: `${activeLayer.name} · Encoder`,
+      where: `Layer ${deck.layers.findIndex(layer => layer.id === activeLayer.id)} · Encoder`,
       also: 'knob dial rotary encoder volume scrub cw ccw press',
       icon: <Volume2 className="w-4 h-4 text-[#1351AA]" />,
       run: () => {

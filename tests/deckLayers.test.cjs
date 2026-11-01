@@ -92,12 +92,14 @@ async function run() {
     assert.strictEqual(deck.layers[0].name, 'Nuke Timeline');
   });
 
-  await check('the shipped layer 0 is the example layer', () => {
-    assert.strictEqual(defaultDeck.layers[0].isExample, true);
-    assert.ok(
-      defaultDeck.layers.slice(1).every((l) => !l.isExample),
-      'only layer 0 ships as an example',
-    );
+  await check('a new configuration has four empty key layers', () => {
+    assert.strictEqual(defaultDeck.layers.length, 4);
+    assert.deepStrictEqual(defaultDeck.layers.map(layer => layer.name), ['Layer 0', 'Layer 1', 'Layer 2', 'Layer 3']);
+    for (const layer of defaultDeck.layers) {
+      assert.strictEqual(layer.keys.length, 9);
+      assert.ok(layer.keys.every(k => !k.tapAction && !k.holdAction && !k.doubleTapAction && !k.safetyConfirmAction));
+      assert.ok(!layer.isExample);
+    }
   });
 
   await check('the dial carries one mode per layer, numbered from zero', () => {
@@ -107,7 +109,7 @@ async function run() {
       assert.strictEqual(layer.dial.activeModeName, layer.dial.availableModes[i]);
       assert.ok(!/^Layer 4/.test(layer.dial.activeModeName), `${layer.badge} has a 1-based name`);
     });
-    assert.deepStrictEqual([...DIAL_MODES], deck.layers[0].dial.availableModes);
+    assert.deepStrictEqual(deck.layers[0].dial.availableModes, Array.from({ length: 4 }, (_, i) => `Layer ${i}: Volume`));
   });
 
   await check('an old three-mode dial is translated, not dropped', () => {

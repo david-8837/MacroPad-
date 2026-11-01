@@ -45,10 +45,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // In-App RP2040 Firmware Flasher
   getFirmwareStatus: () => ipcRenderer.invoke('firmware:status'),
-  getBuiltinFirmware: () => ipcRenderer.invoke('firmware:builtin'),
-  flashBuiltinFirmware: () => ipcRenderer.invoke('firmware:flashBuiltin'),
-  browseFirmwareUf2: () => ipcRenderer.invoke('firmware:browse'),
-  flashFirmwareUf2: (filePath) => ipcRenderer.invoke('firmware:flash', filePath),
+  listBuiltinFirmware: () => ipcRenderer.invoke('firmware:list'),
+  flashBuiltinFirmware: (id, acknowledgedUntested) => ipcRenderer.invoke('firmware:flashBuiltin', id, acknowledgedUntested),
   onFirmwareFlashProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on('firmware-flash-progress', listener);

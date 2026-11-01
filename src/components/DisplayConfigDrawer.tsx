@@ -267,7 +267,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#FFFFFF] text-[#141414] select-none">
+    <div className="editor-slide-in h-full flex flex-col bg-[#FFFFFF] text-[#141414] select-none">
       {/* Header */}
       <div className="p-6 border-b border-[#E3E2DE] flex items-center justify-between bg-[#FFFFFF] ">
         <div className="flex items-center gap-3">
@@ -394,6 +394,8 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
                 {OLED_MODES.length} MODES · 128×32 MONO
               </span>
             </div>
+
+            <p className="text-[10.5px] text-[#646464] leading-relaxed">Signal Wave, Heartbeat and the other animated designs are decorative, not sensor readings. Live values appear only on the telemetry and media screens when available.</p>
 
             {/* Rotation: the only controls that matter on a panel with no touch. */}
             <div className="panel p-4 border border-[#E3E2DE] space-y-3">
@@ -586,7 +588,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
               </label>
               <p className="text-[10px] font-mono text-[#646464]">
                 {hardwareState === 'connected' && deviceInfo?.protocolReady && deviceInfo.hasOledStream
-                  ? 'Labels live on this PC, not in pad flash. Runtime screens receive rendered pixels while a verified OLED stream is active; baked modes run locally and stream loss restores the pad fallback.'
+                  ? 'Labels live on this PC, not in pad flash. Runtime screens receive rendered pixels while a verified OLED stream is active; baked modes run locally and stream loss restores the pad fallback. Layer screens use the pad’s reported layer, or its local display until that layer is known.'
                   : 'Labels live on this PC. Without a verified OLED stream, they affect the editor preview only; the pad uses its local fallback text.'}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

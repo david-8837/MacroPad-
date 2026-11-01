@@ -7,7 +7,6 @@ import { Mpad3Link, LinkError, type DeviceInfo, type LinkEvent } from './mpad3Li
 import type { OledState } from '../../host/protocol/mpad3-protocol.mjs';
 import { CHUNK_COUNT } from '../../host/protocol/mpad3-protocol.mjs';
 import { deckToConfig, hasOledNextAction, type UnsupportedBinding } from './deckToConfig';
-import { deckIsLocked } from './deckLock';
 import { loadStoredMacros } from './executeDeckAction';
 import { isMacroReady, requiredPcMacroIds } from './macroStorage';
 import { OLED_MODE_IDS, getOLEDMode, type OLEDMode } from '../oled/modes';
@@ -321,12 +320,6 @@ class HardwareBridgeManager {
     onProgress?: (p: UploadProgress) => void,
     options: UploadOptions = {},
   ): Promise<UploadResult> {
-    // A programmatic caller must not bypass the sidebar lock or the modal's
-    // disabled button. Check before GET_CONFIG and before any write or callback.
-    if (deckIsLocked(deck)) {
-      return { ok: false, message: 'Deck is locked. Unlock deck before uploading bindings.',
-        mapped: 0, unsupported: [] };
-    }
     const link = this.link;
     if (!link || !this.protocolInfo?.hasFlash) {
       return {

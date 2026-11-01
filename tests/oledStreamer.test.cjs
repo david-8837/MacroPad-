@@ -88,6 +88,29 @@ async function main() {
   await clock.advance(1000);
   assert.equal(sent.length, 3, 'stop cancels the next frame');
 
+  // Never replace the pad's actual layer with an editor-only selection.
+  const layerClock = fakeClock();
+  let physicalLayer = null;
+  const layerState = { ...state, mode: 'channel' };
+  const layerFrames = [];
+  const stopLayer = startOledStreaming(() => ({ state: layerState, deckName:'DESK', layerName:'', layerIndex:physicalLayer, layerCount:4 }), async (mode, pages) => {
+    layerFrames.push({mode, pages:Uint8Array.from(pages)}); return true;
+  }, () => assert.fail('unexpected layer stream error'), layerClock.scheduler);
+  await layerClock.flush();
+  assert.equal(layerFrames.length, 0, 'unknown physical layer uses the firmware fallback');
+  layerState.mode = 'kadowaz'; await layerClock.advance(200);
+  assert.equal(layerFrames.length, 0, 'deck status also waits for a physical layer report');
+  physicalLayer = 3; await layerClock.advance(200);
+  assert.equal(layerFrames.length, 1, 'reported physical layer can be streamed');
+  const firstLayerFrame = layerFrames[0].pages;
+  physicalLayer = 1; await layerClock.advance(200);
+  assert.notDeepEqual(layerFrames[1].pages, firstLayerFrame, 'fresh reported layer changes the frame');
+  physicalLayer = null; await layerClock.advance(200);
+  assert.equal(layerFrames.length, 2, 'stream stops again if layer becomes unknown');
+  layerState.mode = 'system'; await layerClock.advance(200);
+  assert.equal(layerFrames.length, 3, 'unrelated live data does not need a layer report');
+  stopLayer();
+
   const retryClock = fakeClock();
   let calls = 0;
   const errors = [];

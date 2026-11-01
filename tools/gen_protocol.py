@@ -377,7 +377,7 @@ def emit_md(spec: dict) -> str:
     w("  PING            ──────────▶")
     w("                  ◀──────────  PONG")
     w("  GET_INFO        ──────────▶")
-    w(f"                  ◀──────────  INFO   ({meta['channels']} channels, {meta['keys']} keys, {meta['leds']} LEDs, {spec['structs']['config']['size']}-byte config)")
+    w(f"                  ◀──────────  INFO   ({meta['channels']} channels, {meta['keys']} keys, {meta['leds']} LED slots on full / 0 physical LEDs on keys-only, {spec['structs']['config']['size']}-byte config)")
     w("  GET_CONFIG 0    ──────────▶")
     w(f"                  ◀──────────  CONFIG_CHUNK (0/{chunks})")
     w("       ⋮               ⋮              ⋮")

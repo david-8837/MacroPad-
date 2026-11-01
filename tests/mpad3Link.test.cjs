@@ -125,7 +125,7 @@ async function main() {
     view.setUint16(6, overrides.configVersion ?? protocol.CONFIG_FORMAT_VERSION, true);
     info[8] = overrides.channels ?? protocol.CHANNEL_COUNT;
     info[9] = overrides.keys ?? protocol.KEY_COUNT;
-    info[10] = 9;
+    info[10] = overrides.leds ?? 9;
     info[11] = overrides.capabilities ?? (protocol.CAP.FLASH | protocol.CAP.EVENTS | protocol.CAP.OLED);
     view.setUint16(12, overrides.configSize ?? SIZES.config, true);
     view.setUint16(14, 42, true);
@@ -157,6 +157,12 @@ async function main() {
   ]) {
     await assert.rejects(probePeer(invalid).probe(), /does not match this MPAD3/);
   }
+  const keysOnlyInfo = await probePeer({ leds: 0, capabilities: protocol.CAP.FLASH | protocol.CAP.EVENTS | protocol.CAP.ENCODER }).probe();
+  assert.equal(keysOnlyInfo.leds, 0);
+  assert.equal(keysOnlyInfo.hasFlash, true);
+  assert.equal(keysOnlyInfo.hasEvents, true);
+  assert.equal(keysOnlyInfo.hasOled, false);
+  assert.equal(keysOnlyInfo.hasLedOutput, false);
   assert.equal((await probePeer({ capabilities: 0 }).probe()).hasFlash, false);
   console.log('  ok  protocol probe rejects foreign/incompatible ports and reports flash capability');
 

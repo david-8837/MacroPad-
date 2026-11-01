@@ -115,10 +115,6 @@ export function getChannel(channel: number): LightingConfig {
   return channels[channel] ?? channels[0];
 }
 
-export function getAllChannels(): LightingConfig[] {
-  return channels.map(clone);
-}
-
 export function setChannel(channel: number, patch: Partial<LightingConfig>): LightingConfig {
   const current = channels[channel] ?? channels[0];
   const next = sanitise({ ...current, ...patch }, current);
@@ -145,11 +141,4 @@ export function resetChannel(channel: number): LightingConfig {
 export function subscribe(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
-}
-
-/** Test hook: drop in-memory state back to the defaults. */
-export function __resetForTests() {
-  channels = DEFAULTS.map(clone);
-  persist();
-  listeners.forEach((fn) => fn());
 }

@@ -205,7 +205,7 @@ Prepended inside each of the two flash sectors, before the config blob.
 | 6 | `configVersion` | `u16` |  |
 | 8 | `channels` | `u8` |  |
 | 9 | `keys` | `u8` |  |
-| 10 | `leds` | `u8` |  |
+| 10 | `leds` | `u8` | 9 on the full model; 0 on the keys-and-knob model. Config keeps nine lighting slots for wire compatibility; LED_OUTPUT reports whether physical data output is enabled. |
 | 11 | `capabilities` | `u8` | CAP_EVENTS means KEY_EVENT support even if global.usbReportEvents=0; read GET_CONFIG for the current stream setting. |
 | 12 | `configSize` | `u16` |  |
 | 14 | `firmwareBuild` | `u16` |  |
@@ -427,7 +427,7 @@ host                          device
   PING            ──────────▶
                   ◀──────────  PONG
   GET_INFO        ──────────▶
-                  ◀──────────  INFO   (4 channels, 9 keys, 9 LEDs, 2272-byte config)
+                  ◀──────────  INFO   (4 channels, 9 keys, 9 LED slots on full / 0 physical LEDs on keys-only, 2272-byte config)
   GET_CONFIG 0    ──────────▶
                   ◀──────────  CONFIG_CHUNK (0/9)
        ⋮               ⋮              ⋮

@@ -9,7 +9,6 @@ import { Zap } from 'lucide-react';
 
 interface ViaKeycodePickerProps {
   selectedKeyIndex: number | null;
-  isDeckLocked?: boolean;
   onAssignKeycode: (keyIndex: number, item: ViaKeycodeItem) => void;
 }
 
@@ -44,7 +43,6 @@ const formatKeycodeLabel = (item: ViaKeycodeItem): string => {
 
 export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
   selectedKeyIndex,
-  isDeckLocked = false,
   onAssignKeycode,
 }) => {
   const [activeCategory, setActiveCategory] = useState<ViaKeycodeItem['category']>('basic');
@@ -88,9 +86,6 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
       <p className="font-mono text-[9px] text-[#646464] leading-relaxed">
         Keys, media, layer switches and OLED NEXT run on the pad after upload. Macros run only in the desktop app with USB events.
       </p>
-      {isDeckLocked && <p role="status" className="font-mono text-[10px] font-bold text-[#1351AA]">
-        DECK LOCKED · Unlock in the sidebar before assigning or clearing a switch.
-      </p>}
       {/* Only categories with a real MPAD3 or PC route are offered. */}
       <div className="grid grid-cols-6 gap-1 bg-[#FFFFFF] p-1 border border-[#E3E2DE] text-[10px] font-mono text-center">
         {(['basic', 'media', 'macro', 'layers', 'oled', 'special'] as const).map(cat => (
@@ -114,7 +109,7 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
           const displayLabel = formatKeycodeLabel(item);
           const macroId = item.category === 'macro' ? Number(item.code.slice(1)) : null;
           const missingMacro = macroId !== null && !definedMacros.has(macroId);
-          const disabled = selectedKeyIndex === null || missingMacro || isDeckLocked;
+          const disabled = selectedKeyIndex === null || missingMacro;
           return (
             <button
               key={item.code}
@@ -123,7 +118,7 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
                 if (!disabled && selectedKeyIndex !== null) onAssignKeycode(selectedKeyIndex, item);
               }}
               disabled={disabled}
-              title={isDeckLocked ? 'Unlock deck in the sidebar to change assignments' : missingMacro
+              title={missingMacro
                 ? `${item.code} has no executable steps. Add combo/text/delay steps in PC Macro Studio before assigning; desktop app and USB events required.`
                 : `${item.code} — ${item.tooltip}${selectedKeyIndex === null ? ' (select a switch first)' : ''}`}
               className="min-h-10 px-1 border border-[#E3E2DE] enabled:hover:border-[#1351AA] enabled:hover:bg-[#EDECE8] text-[#444343] enabled:hover:text-[#1351AA] disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center text-center transition-all group enabled:cursor-pointer enabled:active:scale-95"

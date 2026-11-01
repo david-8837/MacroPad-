@@ -69,7 +69,7 @@ export function createEmptyChannelKeys(channelNum: number): KeyBinding[] {
     keyIndex: i,
     label: `Switch #${i + 1}`,
     sublabel: 'Empty Slot',
-    iconName: 'Square',
+    iconName: '',
     accentColor,
     tapAction: null,
     holdAction: null,
@@ -77,35 +77,19 @@ export function createEmptyChannelKeys(channelNum: number): KeyBinding[] {
   }));
 }
 
-export function createChannel2DefaultKeys(deckId: string): KeyBinding[] {
-  // Diverse pre-configured tools for Channel 2
-  const tools = [
-    { label: 'Copy', sub: 'Ctrl+C', key: ['Ctrl', 'C'], icon: 'Copy' },
-    { label: 'Paste', sub: 'Ctrl+V', key: ['Ctrl', 'V'], icon: 'Clipboard' },
-    { label: 'Cut', sub: 'Ctrl+X', key: ['Ctrl', 'X'], icon: 'Scissors' },
-    { label: 'Undo', sub: 'Ctrl+Z', key: ['Ctrl', 'Z'], icon: 'RotateCcw' },
-    { label: 'Redo', sub: 'Ctrl+Y', key: ['Ctrl', 'Y'], icon: 'RotateCw' },
-    { label: 'Select All', sub: 'Ctrl+A', key: ['Ctrl', 'A'], icon: 'CheckSquare' },
-    { label: 'Find', sub: 'Ctrl+F', key: ['Ctrl', 'F'], icon: 'Search' },
-    { label: 'Save', sub: 'Ctrl+S', key: ['Ctrl', 'S'], icon: 'Save' },
-    { label: 'Lock PC', sub: 'Win+L', key: ['Win', 'L'], icon: 'Lock' },
-  ];
-
-  return tools.map((t, idx) => ({
-    keyIndex: idx,
-    label: t.label,
-    sublabel: t.sub,
-    iconName: t.icon,
-    accentColor: '#1351AA',
-    tapAction: {
-      id: `${deckId}-ch2-key-${idx}`,
-      category: 'hotkey',
-      name: t.label,
-      payload: { keys: t.key }
-    },
-    holdAction: null,
-    doubleTapAction: null,
-  }));
+/** New or missing layers start with no key bindings. The knob uses pad-native
+ * media controls; its hold gesture remains reserved for changing layers. */
+function createDefaultDial(index: number): Layer['dial'] {
+  const media = (name: string, action: 'volume_up' | 'volume_down' | 'mute') => ({
+    id: `default-dial-${index}-${action}`, category: 'media' as const, name,
+    payload: { mediaAction: action },
+  });
+  const modes = Array.from({ length: LAYER_COUNT }, (_, i) => `Layer ${i}: Volume`);
+  return {
+    label: `Volume · Layer ${index}`, activeModeName: modes[index], availableModes: modes,
+    cwAction: media('Volume Up', 'volume_up'), ccwAction: media('Volume Down', 'volume_down'),
+    pressAction: media('Mute', 'mute'), accelerationCurve: 'linear', sensitivity: 5, channelHoldThresholdMs: 800,
+  };
 }
 
 export function normalizeDeckLayers(deck: Deck): Deck {
@@ -115,20 +99,10 @@ export function normalizeDeckLayers(deck: Deck): Deck {
   if (!existingLayers[0]) {
     existingLayers[0] = {
       id: `${deck.id}-layer-1`,
-      name: 'Edit',
+      name: 'Layer 0',
       badge: 'LAYER 0',
       accentColor: '#1351AA',
-      dial: {
-        label: 'Dial Layer 0',
-        activeModeName: DIAL_MODES[0],
-        availableModes: [...DIAL_MODES],
-        cwAction: { id: `${deck.id}-cw-l1`, category: 'audio_session', name: 'Volume Up (+5%)', payload: { audioDelta: 5 } },
-        ccwAction: { id: `${deck.id}-ccw-l1`, category: 'audio_session', name: 'Volume Down (-5%)', payload: { audioDelta: -5 } },
-        pressAction: { id: `${deck.id}-press-l1`, category: 'audio_session', name: 'Toggle Mute', payload: { toggleMute: true } },
-        accelerationCurve: 'exponential',
-        sensitivity: 6,
-        channelHoldThresholdMs: 800,
-      },
+      dial: createDefaultDial(0),
       keys: createEmptyChannelKeys(1),
     };
   } else {
@@ -144,21 +118,11 @@ export function normalizeDeckLayers(deck: Deck): Deck {
   if (!existingLayers[1]) {
     existingLayers[1] = {
       id: `${deck.id}-layer-2`,
-      name: 'Tools',
+      name: 'Layer 1',
       badge: 'LAYER 1',
       accentColor: '#1351AA',
-      dial: {
-        label: 'Dial Layer 1',
-        activeModeName: DIAL_MODES[1],
-        availableModes: [...DIAL_MODES],
-        cwAction: { id: `${deck.id}-cw-l2`, category: 'hotkey', name: 'Scrub Forward', payload: { keys: ['ArrowRight'] } },
-        ccwAction: { id: `${deck.id}-ccw-l2`, category: 'hotkey', name: 'Scrub Backward', payload: { keys: ['ArrowLeft'] } },
-        pressAction: { id: `${deck.id}-press-l2`, category: 'media', name: 'Play / Pause', payload: { mediaAction: 'play_pause' } },
-        accelerationCurve: 'exponential',
-        sensitivity: 7,
-        channelHoldThresholdMs: 800,
-      },
-      keys: createChannel2DefaultKeys(deck.id),
+      dial: createDefaultDial(1),
+      keys: createEmptyChannelKeys(2),
     };
   } else {
     existingLayers[1].badge = 'LAYER 1';
@@ -173,20 +137,10 @@ export function normalizeDeckLayers(deck: Deck): Deck {
   if (!existingLayers[2]) {
     existingLayers[2] = {
       id: `${deck.id}-layer-3`,
-      name: 'Custom',
+      name: 'Layer 2',
       badge: 'LAYER 2',
       accentColor: '#1351AA',
-      dial: {
-        label: 'Dial Layer 2',
-        activeModeName: DIAL_MODES[2],
-        availableModes: [...DIAL_MODES],
-        cwAction: { id: `${deck.id}-cw-l3`, category: 'hotkey', name: 'Zoom In', payload: { keys: ['Control', 'Equal'] } },
-        ccwAction: { id: `${deck.id}-ccw-l3`, category: 'hotkey', name: 'Zoom Out', payload: { keys: ['Control', 'Minus'] } },
-        pressAction: { id: `${deck.id}-press-l3`, category: 'hotkey', name: 'Reset Zoom', payload: { keys: ['Control', 'Digit0'] } },
-        accelerationCurve: 'exponential',
-        sensitivity: 5,
-        channelHoldThresholdMs: 800,
-      },
+      dial: createDefaultDial(2),
       keys: createEmptyChannelKeys(3),
     };
   } else {
@@ -202,20 +156,10 @@ export function normalizeDeckLayers(deck: Deck): Deck {
   if (!existingLayers[3]) {
     existingLayers[3] = {
       id: `${deck.id}-layer-4`,
-      name: 'Macros',
+      name: 'Layer 3',
       badge: 'LAYER 3',
       accentColor: '#1351AA',
-      dial: {
-        label: 'Dial Layer 3',
-        activeModeName: DIAL_MODES[3],
-        availableModes: [...DIAL_MODES],
-        cwAction: { id: `${deck.id}-cw-l4`, category: 'hotkey', name: 'Next Macro', payload: { keys: ['Control', 'Tab'] } },
-        ccwAction: { id: `${deck.id}-ccw-l4`, category: 'hotkey', name: 'Previous Macro', payload: { keys: ['Control', 'Shift', 'Tab'] } },
-        pressAction: { id: `${deck.id}-press-l4`, category: 'hotkey', name: 'Run Macro', payload: { keys: ['Enter'] } },
-        accelerationCurve: 'exponential',
-        sensitivity: 6,
-        channelHoldThresholdMs: 800,
-      },
+      dial: createDefaultDial(3),
       keys: createEmptyChannelKeys(4),
     };
   } else {

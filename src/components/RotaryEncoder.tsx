@@ -19,8 +19,6 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
 }) => {
   const [rotationAngle, setRotationAngle] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [isPressed, setIsPressed] = useState(false);
-  const [velocityMultiplier, setVelocityMultiplier] = useState(1);
   const lastDetentAngle = useRef(0);
   const lastTurnTime = useRef(Date.now());
   const dragStartY = useRef(0);
@@ -61,7 +59,6 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
       mult = dt < 80 ? 2 : 1;
     }
 
-    setVelocityMultiplier(mult);
     playDetentClick(direction);
 
     if (direction === 'cw') {
@@ -129,7 +126,6 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
   // HOLD & TAP HANDLERS FOR KNOB SWITCH
   const handleHoldStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
-    setIsPressed(true);
     setIsHolding(true);
     setHoldProgress(0);
     setHoldSuccess(false);
@@ -158,7 +154,6 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
 
         setTimeout(() => {
           setHoldSuccess(false);
-          setIsPressed(false);
         }, 350);
         return;
       }
@@ -179,7 +174,6 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
     const wasHolding = isHolding;
     setIsHolding(false);
     setHoldProgress(0);
-    setIsPressed(false);
 
     if (wasHolding && !didTriggerHoldRef.current) {
       // Released before hold duration -> Trigger TAP action!

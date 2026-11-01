@@ -42,7 +42,7 @@ The physical macropad features:
 
 Connect the macropad to your Windows PC using a **USB-C data cable** (ensure it is not a power-only charging cable).
 
-Open **KADOWAZ Deck Studio**. In the top right corner of the navigation bar, click the **NOT CONNECTED** pill.
+Open **KADOWAZ Deck Studio**. In the top right corner of the navigation bar, click **Connect**, then choose **USB serial**.
 
 ### USB Serial / CDC Mode
 1. In the connection dropdown, select **USB Serial / COM Port**.
@@ -55,7 +55,7 @@ Open **KADOWAZ Deck Studio**. In the top right corner of the navigation bar, cli
 
 ## 3. In-App RP2040 Firmware Flashing
 
-The app can transfer a **user-supplied** RP2040 `.uf2` file to a board in BOOTSEL mode. No known-good image is bundled; obtain or build one for your exact board and retain a recovery path before flashing. Structural inspection cannot prove an image boots.
+The app offers built-in **Full Deck** and **Keys & Knob** firmware choices for an RP2040 in BOOTSEL mode. Full Deck includes the user-supplied **untested** RP2040 image; Keys & Knob includes a separately built **untested** image without display or LED hardware support. Confirm that the image matches your board and wiring before accepting the warning and flashing. Structural inspection cannot prove an image boots or matches your board.
 
 ### Entering BOOTSEL Mode:
 1. Unplug the USB-C cable from the macropad.
@@ -65,18 +65,18 @@ The app can transfer a **user-supplied** RP2040 `.uf2` file to a board in BOOTSE
 
 ### Flashing via Deck Studio:
 1. Expand **RP2040 Firmware & Bootloader** below Edit Layers in the **left sidebar**. The top connection menu's **Firmware & bootloader** shortcut (when offline) or the `Ctrl+K` firmware action expands that same sidebar row; it does not open a separate app popup.
-2. Check that **BOOTSEL Drive** reports the mounted `RPI-RP2` volume (for example `D:\`). Browser preview cannot inspect Windows drives; use the desktop app.
-3. Click **Browse .uf2 File…** (this intentionally opens the standard Windows *file picker*) and select a **known-good** image built for your exact hardware. Do not assume a file in this repository is ready to flash.
-4. The flasher checks UF2 block structure, RP2040 family, contiguous image addresses, and plausible boot vectors. It does **not** prove the program boots or matches your board.
-5. **Flash Firmware** stays disabled until a valid RP2040 UF2 and BOOTSEL drive are detected. Click it only when ready, then verify that the board re-enumerates and responds to the serial probe. Keep BOOTSEL recovery instructions handy if it does not.
+2. Connect the pad in BOOTSEL mode as described above. The app automatically detects the `RPI-RP2` volume; browser preview cannot flash a device.
+3. Select **Full Deck** for a pad with a display, or **Keys & Knob** for the version without a display or LEDs. Unavailable versions cannot be flashed.
+4. For an untested image, read and acknowledge the warning. The flasher checks the bundled UF2 block structure, RP2040 family, contiguous addresses, and plausible boot vectors. It does **not** prove the program boots or matches your board.
+5. **Flash Firmware** is enabled only for an available image and a detected BOOTSEL drive. After transfer, verify that the board re-enumerates and responds to the serial probe. Keep BOOTSEL recovery instructions handy if it does not.
 
 ---
 
 ## 4. Deck Studio & Digital Twin
 
-The **Deck Studio** tab provides a real-time digital twin of your physical hardware. Clicking a switch on the visual pad opens the **Switch Configuration Drawer** while the deck is unlocked.
+The **Keys** tab provides a real-time digital twin of your physical hardware. Select a layer, then use the visual pad and **Configure Switch** to assign a key. Edits are saved on this PC; use **Upload to deck** to apply all four layers to the connected pad. Connecting does not load the existing pad bindings into the editor.
 
-**Deck lock:** Click **Lock deck** in the sidebar to make key/knob assignments and PC M-slot editing read-only and block deck uploads (including the Studio and command-palette paths). Open key/knob editors and the upload sheet close when locking; the lock button is disabled during an in-progress upload. Exporting a backup and browsing editing layers are still allowed. Click **Unlock deck** to resume editing. The lock is saved locally with the deck, but is **not** a password, an import validator, a pad security feature or a way to stop actions already saved to the pad. Display and lighting settings are separate from deck bindings and remain editable. There is no in-app deck import in this version; modifying local storage or running another program can bypass this convenience guard.
+There is one local configuration, not a collection of decks. Earlier saved configurations keep their assignments; the old local lock is no longer used. The upload review still checks connection, supported actions and device readback.
 
 ### Key Temporal Mechanics
 Each key supports three distinct temporal actions:
@@ -101,18 +101,18 @@ Click on the rotary knob in the Digital Twin to configure dial actions:
 
 ## 5. Four-Layer Architecture
 
-The single Studio Deck contains 4 completely isolated, independent hardware layers, numbered 0–3:
-- **Layer 0 (Edit):** Primary shortcuts and navigation.
-- **Layer 1 (Tools):** Copy / paste / find and other secondary tools.
-- **Layer 2 (Custom):** your own bank.
-- **Layer 3 (Macros):** empty macro bank, ready for your own keys.
+The macropad has four independent layers (0–3), with nine keys each. On a new installation, all keys are empty. The knob initially controls volume and mute; holding it switches layers. Previously saved configurations are not cleared.
+
+Open **Presets**, choose a layout and target layer, and save it. The preview shows all nine keys; saving replaces that layer's key assignments and gestures but leaves its knob and other layers alone. Confirm if the target contains assignments, then use **Review & upload all layers** to send the complete configuration to the pad. Presets include creative apps, coding tools and Microsoft Office as well as general layouts. App presets use the displayed default shortcuts and require the correct app or terminal to be focused; OS, versions, workspace, keyboard layout and custom keymaps can change the results. Claude Code and Codex presets target their CLI interfaces. Media support varies by host.
+
+To choose an icon, open the key's configuration drawer and use **Key icon** (or choose None). Icons are shown in the app only, not on the physical keycaps.
 
 ### How to Switch Layers:
 - **Hardware:** Hold the rotary knob past the firmware's configured knob-hold threshold (500 ms by default) to cycle channels; the simulator's setting can differ.
 - **Software:** Click a layer in the left sidebar or the layer pills under the deck (**00**–**03**), or select from the `Ctrl+K` command palette.
 - **Display feedback:** Firmware now draws a temporary layer indicator on the required OLED when the physical channel changes; the desktop preview also follows the channel. Confirm timing/appearance on the assembled board.
 
-To upload supported bindings, connect a compatible MPAD3 serial device with flash capability, then click **Upload to deck** in the Studio pad's **Configure** column. There is no Upload button in the top navbar. The review panel **slides up from the bottom**: inspect each of the four layers’ nine switches and its **visible rotary knob** (clockwise, counter-clockwise, press and hold). The knob here is a read-only preview; clicking or turning it does not execute an action. Review pad/PC/unavailable assignments, connection and capability warnings, and (for PC-owned actions) the explicit USB-event opt-in. Nothing writes merely by opening it. Use the fixed **Flash / Upload All to Macropad Now** button to begin; the action stays disabled when the pad is unready or the deck is locked. You cannot dismiss the sheet during a write or readback. A successful upload requires a final SET_ACK, COMMIT_ACK, and matching full readback. App-only bindings remain on the PC and require the desktop app plus event reporting. In a browser-only preview or without a connected pad, you can review but cannot upload. The connected-device `Ctrl+K` upload command opens the same review sheet instead of silently writing.
+To upload supported bindings, connect a compatible MPAD3 serial device with flash capability, then click **Upload to deck** in the pad's **Configure** column. There is no Upload button in the top navbar. The review panel **slides up from the bottom**: inspect each of the four layers’ nine switches and its **visible rotary knob** (clockwise, counter-clockwise, press and hold). The knob here is a read-only preview; clicking or turning it does not execute an action. Review pad/PC/unavailable assignments, connection and capability warnings, and (for PC-owned actions) the explicit USB-event opt-in. Nothing writes merely by opening it. Use the fixed **Flash / Upload All to Macropad Now** button to begin; the action stays disabled when the pad is unready. You cannot dismiss the sheet during a write or readback. A successful upload requires a final SET_ACK, COMMIT_ACK, and matching full readback. App-only bindings remain on the PC and require the desktop app plus event reporting. In a browser-only preview or without a connected pad, you can review but cannot upload. The connected-device `Ctrl+K` upload command opens the same review sheet instead of silently writing.
 
 ---
 
@@ -187,7 +187,7 @@ an SSD1306 module — so:
 
 ## 8. Global Command Palette (`Ctrl+K`)
 
-Press **`Ctrl+K`** (or click the search button in the top navbar) from anywhere in the application to summon the Command Palette:
+Press **`Ctrl+K`** (or `Cmd+K`) to open the Command Palette:
 - **Fuzzy Search:** Type to instantly locate pages, layers, keys, audio commands, and hardware tools.
 - **400+ PC Shortcuts:** Search application shortcuts across Windows, DaVinci, Blender, Premiere, Photoshop, Figma, and Chrome.
 - **Instant Execution:** Press `Enter` on any shortcut in the palette to execute it immediately through the keyboard synthesizer.
@@ -215,7 +215,7 @@ Click the **Activity icon** in the top navbar (or press `Ctrl+K` → `Hardware S
 - **Solution:** Verify you are using a USB data cable and that your board has running firmware exposing a CDC COM port. A board in BOOTSEL mode appears as `RPI-RP2` storage, not a COM port. Try a direct USB port and inspect Device Manager; keyboard HID alone is not a control link.
 
 #### Q: The rotary knob changes master volume, but I want it to control Spotify only.
-- **Solution:** Open the **Deck Studio** tab, click on the Rotary Knob, set the CW action to **Audio Session Volume (+5%)** and set the target process to `spotify.exe`.
+- **Solution:** Open the **Keys** tab, click on the Rotary Knob, set the CW action to **Audio Session Volume (+5%)** and set the target process to `spotify.exe`.
 
 
 #### Q: How do I build a standalone Windows `.exe` installer?

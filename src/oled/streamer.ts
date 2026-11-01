@@ -15,7 +15,8 @@ export interface OledStreamSnapshot {
   state: OLEDState;
   deckName: string;
   layerName: string;
-  layerIndex: number;
+  /** The physical layer, or null until the pad reports it. */
+  layerIndex: number | null;
   layerCount: number;
 }
 
@@ -57,7 +58,10 @@ export function startOledStreaming(
         lastMode = mode;
         modeStartedAt = scheduler.now();
       }
-      if (spec.runtime) {
+      // The editor selection is not a device-layer report. If the actual
+      // layer is unknown, let the firmware render its own truthful fallback.
+      const needsLayer = mode === 'kadowaz' || mode === 'channel';
+      if (spec.runtime && (!needsLayer || ctx.layerIndex !== null)) {
         const elapsed = Math.max(0, scheduler.now() - modeStartedAt);
         renderPanel(canvas, mode, {
           time: elapsed,
@@ -65,7 +69,7 @@ export function startOledStreaming(
           state: ctx.state,
           deckName: ctx.deckName,
           layerName: ctx.layerName,
-          layerIndex: ctx.layerIndex,
+          layerIndex: ctx.layerIndex ?? 0,
           layerCount: ctx.layerCount,
           track: null, // pad's local 1.4s layer overlay takes priority
         });

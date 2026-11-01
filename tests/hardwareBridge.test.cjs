@@ -114,11 +114,6 @@ async function run() {
     },
   };
   hardwareBridge.protocolInfo = { hasFlash: true, hasEvents: true };
-  const lockedDeck = { ...macroDeck, isLocked: true };
-  const lockedUpload = await hardwareBridge.uploadDeck(lockedDeck, undefined, { enablePcEvents: true });
-  assert.strictEqual(lockedUpload.ok, false);
-  assert.match(lockedUpload.message, /deck.*locked|unlock.*deck/i);
-  assert.strictEqual(writes, 0, 'a locked deck cannot reach the config transaction');
   const refused = await hardwareBridge.uploadDeck(macroDeck);
   assert.strictEqual(refused.ok, false, 'no silent upload of PC macros with pad key events off');
   assert.match(refused.message, /key events|usbReportEvents/i);
@@ -137,7 +132,8 @@ async function run() {
   assert.match(browserOnly.message, /desktop app|native executor/i);
   assert.strictEqual(writes, 0);
   global.window = { electronAPI: { execAction: async () => ({ success: true }) } };
-  const consented = await hardwareBridge.uploadDeck(macroDeck, undefined, { enablePcEvents: true });
+  // Old stored configurations may still contain the former lock flag.
+  const consented = await hardwareBridge.uploadDeck({ ...macroDeck, isLocked: true }, undefined, { enablePcEvents: true });
   assert.strictEqual(consented.ok, true);
   assert.strictEqual(writes, 1);
   assert.strictEqual(lastConfig.global.usbReportEvents, 1);

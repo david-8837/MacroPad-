@@ -84,7 +84,17 @@ double-tap is unconfigured, in which case it commits on release with zero added
 latency. That single optimisation is why `doubleTapMs == 0` is a meaningful default
 and not just "disabled".
 
-Two rules prevent the two worst failure modes:
+Normal unflagged keyboard slots are an exception to gesture-triggered actions:
+the dispatcher sends HID key-down on the debounced physical press and key-up on
+release. Simultaneous slots are combined in a 6-key rollover report. The OS
+provides typing repeat. Gesture events are still reported but do not replay the
+keyboard action. Layer changes, live config replacement and USB reconnect release
+held keys; a switch already held must be released and pressed again. Flagged
+legacy actions and non-keyboard actions retain their gesture behavior. This is in
+the repository firmware and the updated Keys & Knob image; the original supplied
+Full Deck binary is unchanged and its hold behavior is unverified.
+
+Two rules prevent the two worst failure modes for gesture-based actions:
 
 - **Tap window is `min(holdMs, 200 ms)`.** Without the `min`, setting `holdMs` to
   60 would make a 100 ms press fire *both* a hold and a tap. One press, two actions,

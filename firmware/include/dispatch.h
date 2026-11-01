@@ -13,6 +13,8 @@
 #include "gesture.h"
 
 void dispatch_init(void);
+/* Sample debounced physical keys before gesture processing on each scan. */
+void dispatch_keyboard_sample(uint16_t down_mask, bool usb_ready, uint32_t usb_epoch);
 
 /* Drain the gesture queue and execute what it implies. Call once per scan tick.
  * Returns the number of gestures handled. */

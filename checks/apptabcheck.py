@@ -26,17 +26,17 @@ with sync_playwright() as p:
 
     nav = pg.locator("nav")
     nav_text = nav.inner_text().upper()
-    check("nav has Studio", "STUDIO" in nav_text)
+    check("nav has Keys", "KEYS" in nav_text)
     check("nav has Tester", "TESTER" in nav_text)
     check("nav has Shortcuts", "SHORTCUTS" in nav_text)
     check("nav has Lighting", "LIGHTING" in nav_text)
     check("nav has Macros", "MACROS" in nav_text)
     check("no Apps tab in the nav", "\nAPPS\n" not in nav_text and not nav_text.strip().endswith("APPS"))
     tabs = pg.locator("nav button")
-    check("exactly 5 nav tabs", tabs.count() == 5)
+    check("exactly 6 nav tabs", tabs.count() == 6)
 
     idx = [tabs.nth(i).inner_text().upper().replace("\n", " ") for i in range(tabs.count())]
-    check("indices renumbered 01-05", all(str(i + 1).zfill(2) in idx[i] for i in range(5)))
+    check("indices renumbered 01-06", all(str(i + 1).zfill(2) in idx[i] for i in range(6)))
 
     # Ctrl+K -> Application Library
     pg.keyboard.press("Control+k")
@@ -53,17 +53,17 @@ with sync_playwright() as p:
 
     body = pg.locator("body").inner_text().upper()
     check("apps page rendered", "NO NAV TAB" in body)
-    check("apps page offers a way back", "STUDIO" in body)
+    check("apps page offers a way back", "KEYS" in body)
     check("nothing in the nav is marked active", pg.locator("nav button[aria-current], nav button[data-active]").count() == 0)
     pg.screenshot(path="checks/artifacts/apptabcheck.png", full_page=False)
 
-    back = pg.get_by_role("button", name="← Studio")
+    back = pg.get_by_role("button", name="← Keys")
     check("back button present", back.count() == 1)
     back.first.click()
     pg.wait_for_timeout(500)
     body = pg.locator("body").inner_text().upper()
-    check("back returns to the Studio page", "NO NAV TAB" not in body)
-    check("deck twin is back", pg.locator("nav button", has_text="STUDIO").first.is_visible())
+    check("back returns to the Keys page", "NO NAV TAB" not in body)
+    check("deck twin is back", pg.locator("nav button", has_text="KEYS").first.is_visible())
 
     check("no console errors", len(errors) == 0)
     if errors:
