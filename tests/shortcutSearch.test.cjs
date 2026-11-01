@@ -5,7 +5,7 @@ const { join, resolve } = require('node:path');
 const { buildSync } = require('esbuild');
 const dir = mkdtempSync(join(tmpdir(), 'shortcut-search-'));
 try {
-  const root = resolve(__dirname, '..');
+  const root = resolve(__dirname, '..').replace(/\\/g, '/');
   const entry = join(dir, 'entry.ts');
   writeFileSync(entry, `export { matchesShortcut } from '${root}/src/utils/shortcutSearch.ts';\nexport { PC_SHORTCUTS } from '${root}/src/data/pcShortcuts.ts';`);
   const out = join(dir, 'bundle.cjs');

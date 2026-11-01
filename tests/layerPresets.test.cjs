@@ -7,7 +7,7 @@ const { build } = require('esbuild');
 (async () => {
   const dir = mkdtempSync(join(tmpdir(), 'mpad-presets-'));
   try {
-    const root = resolve(__dirname, '..');
+    const root = resolve(__dirname, '..').replace(/\\/g, '/');
     const entry = join(dir, 'entry.mjs');
     writeFileSync(entry, `export { LAYER_PRESETS, applyLayerPreset } from '${root}/src/data/layerPresets.ts';\nexport { defaultDeck } from '${root}/src/data/defaultDeck.ts';\nexport { deckToConfig } from '${root}/src/utils/deckToConfig.ts';\nexport { defaultConfig, ACTION_TYPE } from '${root}/host/protocol/mpad3-protocol.mjs';`);
     const outfile = join(dir, 'bundle.mjs');

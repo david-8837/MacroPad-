@@ -4,7 +4,7 @@ const { mkdtempSync, rmSync, readFileSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { buildSync } = require('esbuild');
-const root = resolve(__dirname, '..');
+const root = resolve(__dirname, '..').replace(/\\/g, '/');
 const dir = mkdtempSync(join(tmpdir(), 'tester-ui-'));
 try {
   const entry = join(dir, 'entry.tsx');

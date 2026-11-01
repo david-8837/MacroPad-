@@ -8,7 +8,7 @@ const { build } = require('esbuild');
 (async () => {
   const dir = mkdtempSync(join(tmpdir(), 'preset-icons-'));
   try {
-    const root = resolve(__dirname, '..');
+    const root = resolve(__dirname, '..').replace(/\\/g, '/');
     const entry = join(dir, 'entry.mjs');
     writeFileSync(entry, `export { LAYER_PRESETS } from '${root}/src/data/layerPresets.ts';\nexport { PRESET_APP_ICONS } from '${root}/src/data/presetIcons.ts';`);
     const outfile = join(dir, 'bundle.mjs');
