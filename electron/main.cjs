@@ -90,7 +90,7 @@ function showStartupFailure() {
     splashWindow.show();
   } else if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.show();
-    dialog.showErrorBox('KADOWAZ could not start', 'Quit and restart the app. If the problem continues, reinstall from a trusted release.');
+    dialog.showErrorBox('ZERO could not start', 'Quit and restart the app. If the problem continues, reinstall from a trusted release.');
   }
 }
 
@@ -129,7 +129,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
     },
-    title: 'KADOWAZ Deck Studio',
+    title: 'ZERO Deck Studio',
   });
 
   splashWindow = new BrowserWindow({
@@ -160,7 +160,7 @@ function createWindow() {
   });
   mainWindow.webContents.on('render-process-gone', () => {
     if (splashWindow && !splashWindow.isDestroyed()) showStartupFailure();
-    else dialog.showErrorBox('KADOWAZ stopped unexpectedly', 'Quit and restart the app. Your locally saved settings are not intentionally removed.');
+    else dialog.showErrorBox('ZERO stopped unexpectedly', 'Quit and restart the app. Your locally saved settings are not intentionally removed.');
   });
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
@@ -199,7 +199,7 @@ ipcMain.handle('help:open', async (event, id) => {
 function buildTrayMenu() {
   return Menu.buildFromTemplate([
     {
-      label: 'Open KADOWAZ Studio',
+      label: 'Open ZERO Studio',
       click: () => {
         if (splashWindow && !splashWindow.isDestroyed()) { splashWindow.show(); splashWindow.focus(); }
         else if (mainWindow) {
@@ -238,7 +238,7 @@ function createTrayIcon() {
 function createTray() {
   if (tray) return;
   tray = new Tray(createTrayIcon());
-  tray.setToolTip('KADOWAZ Deck Studio');
+  tray.setToolTip('ZERO Deck Studio');
   tray.setContextMenu(buildTrayMenu());
   tray.on('click', () => {
     if (splashWindow && !splashWindow.isDestroyed()) { splashWindow.show(); splashWindow.focus(); return; }

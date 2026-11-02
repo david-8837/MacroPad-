@@ -15,7 +15,7 @@ function runTests() {
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
   assert.ok(pkg.build, 'package.json must define a "build" configuration block');
   assert.strictEqual(pkg.build.appId, 'studio.kadowaz.deck');
-  assert.strictEqual(pkg.build.productName, 'KADOWAZ Deck Studio');
+  assert.strictEqual(pkg.build.productName, 'ZERO Deck Studio');
   console.log('✓ package.json defines valid build metadata & appId');
 
   // Verify Windows targets

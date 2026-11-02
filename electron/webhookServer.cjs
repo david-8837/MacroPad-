@@ -148,7 +148,7 @@ function createWebhookServer({ port, token, getStatus, onEvent }) {
     if (url === '/api/v1/status' && req.method === 'GET') {
       sendJson(res, 200, {
         status: 'online',
-        app: 'KADOWAZ Deck Studio',
+        app: 'ZERO Deck Studio',
         port,
         ...(typeof getStatus === 'function' ? getStatus() : {}),
       });

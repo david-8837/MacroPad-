@@ -1,6 +1,6 @@
-# KADOWAZ Deck Studio — User Manual & Hardware Companion Guide
+# ZERO Deck Studio — User Manual & Hardware Companion Guide
 
-Welcome to **KADOWAZ Deck Studio**, a companion app and simulator for a 9-key RP2040 macropad.
+Welcome to **ZERO Deck Studio**, a companion app and simulator for a 9-key RP2040 macropad.
 
 **Hardware status:** No boot-verified firmware image is bundled. A Pico SDK/ARM candidate UF2 was built and source-checked, but the required SSD1306 128×32 OLED on RP2040-Zero GP28/GP29 has only fake-I²C and fake-CDC source tests; physical flash/display validation is still needed. On a verified responding pad, Display Save performs a flash commit with readback. Protocol-v3 runtime OLED streaming and mode sync are source-implemented; LED data output is default-disabled while the cuttable strip and its supply are unselected. Real hardware behavior is not yet confirmed.
 
@@ -42,7 +42,7 @@ The target macropad has nine keys and an encoder. Full Deck optionally uses the 
 
 Connect the macropad to your Windows PC using a **USB-C data cable** (ensure it is not a power-only charging cable).
 
-Open **KADOWAZ Deck Studio**. The optional welcome strip can be dismissed; the **Help & About** button in the top bar always reopens the quick guide, version, credits, and privacy notes. In the top right corner of the navigation bar, click **Connect**, then choose **USB serial**.
+Open **ZERO Deck Studio**. The optional welcome strip can be dismissed; the **Help & About** button in the top bar always reopens the quick guide, version, credits, and privacy notes. In the top right corner of the navigation bar, click **Connect**, then choose **USB serial**.
 
 ### USB Serial / CDC Mode
 1. In the connection dropdown, select **USB Serial / COM Port**.
@@ -226,4 +226,4 @@ Click the **Activity icon** in the top navbar (or press `Ctrl+K` → `Hardware S
 
 ---
 
-*KADOWAZ Deck Studio — Designed for makers, streamers, video editors, and audio engineers.*
+*ZERO Deck Studio — Designed for makers, streamers, video editors, and audio engineers.*

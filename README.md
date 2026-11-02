@@ -1,6 +1,6 @@
 <div align="center">
 
-# KADOWAZ Deck Studio
+# ZERO Deck Studio
 
 **A little deck for the shortcuts you use a lot.**
 
@@ -16,7 +16,7 @@ Design four layers of keys and a rotary knob, then upload them to an RP2040 macr
 
 ---
 
-KADOWAZ Deck Studio brings a desktop editor and RP2040 firmware together for a compact, customizable macropad: **nine keys, one clickable rotary encoder, and four layers**. Use it to organize shortcuts for creative apps, games, and everyday workflows, or start with a preset and make it your own.
+ZERO Deck Studio brings a desktop editor and RP2040 firmware together for a compact, customizable macropad: **nine keys, one clickable rotary encoder, and four layers**. Use it to organize shortcuts for creative apps, games, and everyday workflows, or start with a preset and make it your own.
 
 > [!IMPORTANT]
 > This is a work in progress. The physical hardware and both bundled firmware images have **not yet been tested on a real device**. The V1 RGB power design is not approved: leave the LED power and data disconnected. See the [hardware notes](#hardware--wiring) before building or powering anything.

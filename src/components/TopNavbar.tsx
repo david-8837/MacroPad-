@@ -61,10 +61,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         <div className="navbar-brand flex items-center gap-3 pl-4 pr-4 border-r border-[#C7C7C7] shrink-0 min-w-0">
           <div className="flex items-center gap-2 shrink-0">
             <span className="brand-mark w-6 h-6 bg-[#141414] text-[#E3E2DE] font-mono text-[11px] font-bold flex items-center justify-center">
-              K
+              Z
             </span>
             <span className="text-[13px] font-bold uppercase tracking-[-0.02em] text-[#141414] leading-none">
-              Kadowaz<span className="text-[#646464]"> / Macropad</span>
+              Zero<span className="text-[#646464]"> / Macropad</span>
             </span>
           </div>
         </div>

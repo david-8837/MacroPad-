@@ -43,7 +43,7 @@ export function HelpPanel({ onClose, onReplayIntro }: { onClose: () => void; onR
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="help-title" tabIndex={-1} className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-[#f5f4f0] border border-[#141414] shadow-2xl outline-none">
         <div className="bg-[#141414] text-white px-6 py-5 flex items-start justify-between gap-4">
-          <div><p className="font-mono text-[10px] tracking-[.18em] text-[#a8a8a8]">KADOWAZ / DECK STUDIO</p><h2 id="help-title" className="text-xl font-bold mt-1">Help &amp; About</h2><p className="font-mono text-xs text-[#bbb] mt-1">Version {version}</p></div>
+          <div><p className="font-mono text-[10px] tracking-[.18em] text-[#a8a8a8]">ZERO / DECK STUDIO</p><h2 id="help-title" className="text-xl font-bold mt-1">Help &amp; About</h2><p className="font-mono text-xs text-[#bbb] mt-1">Version {version}</p></div>
           <button type="button" onClick={onClose} aria-label="Close help" className="border border-[#777] px-3 py-1 text-sm hover:bg-white hover:text-black">Close</button>
         </div>
         <div className="p-6 space-y-5 text-sm text-[#343434]">
@@ -63,7 +63,7 @@ export function HelpPanel({ onClose, onReplayIntro }: { onClose: () => void; onR
           </section>}
           <section className="border-t border-[#c7c7c7] pt-4"><h3 className="font-bold text-[#141414]">Pad or PC?</h3><p className="mt-1 leading-relaxed">Pad-native bindings run on compatible firmware after upload. Desktop-only actions need this app running and a compatible serial connection; the upload review identifies them and any unsupported bindings.</p></section>
           <section className="border-t border-[#c7c7c7] pt-4"><h3 className="font-bold text-[#141414]">Your data</h3><p className="mt-1 leading-relaxed">Assignments, settings and cached application details are stored on this computer. Backups you export can contain private paths and settings. The desktop app also runs a token-protected webhook on localhost for local automation. Project links open in your browser.</p></section>
-          <section className="border-t border-[#c7c7c7] pt-4"><h3 className="font-bold text-[#141414]">Project &amp; credits</h3><p className="mt-1 leading-relaxed">KADOWAZ Deck Studio and its contributors. See the project and asset credits for third-party icon attribution.</p>
+          <section className="border-t border-[#c7c7c7] pt-4"><h3 className="font-bold text-[#141414]">Project &amp; credits</h3><p className="mt-1 leading-relaxed">ZERO Deck Studio and its contributors. See the project and asset credits for third-party icon attribution.</p>
             <div className="flex flex-wrap gap-2 mt-3">{([['guide', 'User guide'], ['project', 'Project on GitHub'], ['credits', 'Icon credits']] as const).map(([id, label]) => <button key={id} type="button" onClick={() => openLink(id)} className="border border-[#999] px-3 py-2 text-xs font-bold hover:bg-[#141414] hover:text-white">{label} ↗</button>)}</div>
           </section>
         </div>

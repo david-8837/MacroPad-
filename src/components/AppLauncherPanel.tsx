@@ -332,7 +332,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
           Desktop Companion Required
         </h3>
         <p className="text-xs text-[#646464] text-center max-w-md leading-relaxed">
-          Application discovery requires the KADOWAZ desktop companion.
+          Application discovery requires the ZERO desktop companion.
           <br />
           Run the app via Electron to scan and manage installed applications.
         </p>

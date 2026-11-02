@@ -46,7 +46,7 @@
   },
   "build": {
     "appId": "studio.kadowaz.deck",
-    "productName": "KADOWAZ Deck Studio",
+    "productName": "ZERO Deck Studio",
     "directories": {
       "output": "release"
     },
@@ -80,7 +80,7 @@
         "nsis",
         "portable"
       ],
-      "artifactName": "KADOWAZ-Deck-Studio-${version}-${arch}.${ext}"
+      "artifactName": "ZERO-Deck-Studio-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,

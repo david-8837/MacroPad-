@@ -1,6 +1,6 @@
 # DESIGN.md — Reality-First UI System (Deck Studio)
 
-**Version** 1.0 · **Applies to** `src/**` (Kadowaz Deck Studio renderer) · **Primitive layer** `src/index.css`
+**Version** 1.0 · **Applies to** `src/**` (ZERO Deck Studio renderer) · **Primitive layer** `src/index.css`
 **Status** Updated with a restrained premium interaction layer. The grid, cream and ink palette, cobalt accent, and square geometry remain the foundation.
 
 > Poster-modernist, "reality-first": a strict grid and clear controls. The premium
