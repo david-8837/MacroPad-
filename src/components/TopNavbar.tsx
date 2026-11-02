@@ -179,10 +179,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             </button>
           ))}
 
-          {/* window controls */}
-          {window.electronAPI?.hasNativeTitleBar ? (
-            <div className="w-[138px] shrink-0 h-full pointer-events-none" aria-hidden="true" />
-          ) : (
+          {/* custom window controls (web preview or non-Windows frameless) */}
+          {!window.electronAPI?.hasNativeTitleBar && (
             <div className="flex items-center ml-1 border-l border-[#C7C7C7] pl-2 gap-0.5">
               {[
                 { icon: <Minus className="w-3 h-3" />, act: 'minimize', hover: 'hover:bg-[#EDECE8]' },
@@ -202,6 +200,11 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             </div>
           )}
         </div>
+
+        {/* Windows 11 native titleBarOverlay reservation spacer */}
+        {window.electronAPI?.hasNativeTitleBar && (
+          <div className="w-[138px] shrink-0 h-full pointer-events-none" aria-hidden="true" />
+        )}
       </div>
     </header>
   );
