@@ -14,6 +14,9 @@
       #startup-name { display: block; font-size: 20px; font-weight: 750; letter-spacing: .1em; }
       #startup-subtitle { display: block; color: #646464; font-size: 10px; letter-spacing: .16em; margin-top: 2px; }
       #startup-status { margin: 27px 0 0; color: #646464; font-size: 13px; line-height: 1.5; }
+      #startup-bar { margin-top: 14px; height: 3px; width: 100%; background: #e5e5e5; overflow: hidden; border-radius: 1px; }
+      #startup-bar-fill { height: 100%; width: 0%; background: #1351aa; animation: startup-progress 4s cubic-bezier(0.1, 0.5, 0.2, 1) forwards; }
+      @keyframes startup-progress { 0% { width: 0%; } 100% { width: 100%; } }
       #startup-error { display: none; margin-top: 22px; color: #444343; font-size: 13px; line-height: 1.5; }
       #startup-retry { margin-top: 12px; padding: 9px 16px; border: 1px solid #141414; background: #141414; color: #fff; cursor: pointer; font: inherit; font-weight: 700; }
       #startup-retry:focus-visible { outline: 2px solid #6fa8ff; outline-offset: 3px; }
@@ -38,6 +41,7 @@
           <div><span id="startup-name">ZERO</span><span id="startup-subtitle">DECK STUDIO</span></div>
         </div>
         <p id="startup-status" role="status">Loading the editor…</p>
+        <div id="startup-bar"><div id="startup-bar-fill"></div></div>
         <div id="startup-error" role="alert">The editor could not load. Check your connection if needed, then try again.<br><button id="startup-retry" type="button">Try again</button></div>
       </div>
     </div>
@@ -48,6 +52,8 @@
         const showFailure = () => {
           if (!screen.isConnected) return;
           document.getElementById('startup-status').style.display = 'none';
+          const bar = document.getElementById('startup-bar');
+          if (bar) bar.style.display = 'none';
           document.getElementById('startup-error').style.display = 'block';
         };
         const timer = setTimeout(showFailure, 20000);
