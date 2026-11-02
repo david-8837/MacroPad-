@@ -1,0 +1,78 @@
+name: CI / Build & Test
+
+on:
+  push:
+    branches:
+      - main
+      - 'arena/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Matrix (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        node-version: [20.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run 41-suite test runner & host protocol verification
+        run: npm test
+
+      - name: Build web application (Vite)
+        run: npm run build
+
+      - name: Build Electron main & verify native assets
+        run: npm run build:electron
+
+  package-check:
+    name: Windows Package Verification
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile and package desktop distribution
+        run: npm run pack
+
+      - name: Verify release executable
+        shell: pwsh
+        run: |
+          $exePath = "release/win-unpacked/KADOWAZ Deck Studio.exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Error "Packaged executable not found at $exePath!"
+            exit 1
+          }
+          $item = Get-Item $exePath
+          Write-Host "Verified packaged executable ($($item.Length) bytes): $exePath"

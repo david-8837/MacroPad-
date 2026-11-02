@@ -1051,7 +1051,7 @@ export const App: React.FC = () => {
                 plus 48px padding/borders. Keep it at 676px so the controls
                 never drop below the pad on laptop-sized full-screen windows;
                 larger screens grow the inspector instead of stretching the deck. */}
-            <div className="designer-pad flex-1 min-w-0 min-[1264px]:w-[676px] min-[1264px]:flex-none flex flex-col items-center justify-start p-6 border-r border-[#E3E2DE] overflow-y-auto space-y-4">
+            <div className="designer-pad flex-1 min-w-[672px] flex flex-col items-center justify-start p-6 border-r border-[#E3E2DE] overflow-y-auto space-y-4">
               <DigitalTwin
                 layer={activeLayer}
                 channelIndex={activeChannelIdx}
@@ -1103,7 +1103,7 @@ export const App: React.FC = () => {
               />
 
               {/* VIA quick keycode tray */}
-              <div className="w-full max-w-[600px] mt-6">
+              <div className="w-full max-w-[624px] mt-2">
                 <ViaKeycodePicker
                   selectedKeyIndex={selectedKeyIndex}
                   onAssignKeycode={handleAssignViaKeycode}
@@ -1111,10 +1111,9 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Right Column: Key Config Drawer OR Knob Config Drawer OR Display Config Drawer OR Switch Inspector + Telemetry */}
-            <div className={`designer-inspector ${editingKeyBinding || isEditingKnob || isEditingDisplay ? 'designer-inspector--editing' : ''} w-[560px] min-w-[360px] shrink min-[1264px]:flex-1 flex flex-col bg-[#FFFFFF] border-l border-[#E3E2DE] ${
- editingKeyBinding || isEditingKnob || isEditingDisplay ? 'overflow-hidden' : 'p-4 overflow-x-hidden overflow-y-auto'
- }`}>
+            <div className={`designer-inspector ${editingKeyBinding || isEditingKnob || isEditingDisplay ? 'designer-inspector--editing w-[480px]' : 'w-[360px]'} shrink-0 flex flex-col bg-[#FFFFFF] border-l border-[#E3E2DE] ${
+              editingKeyBinding || isEditingKnob || isEditingDisplay ? 'overflow-hidden' : 'p-4 overflow-x-hidden overflow-y-auto'
+            }`}>
               {editingKeyBinding ? (
                 <KeyConfigDrawer
                   keyBinding={editingKeyBinding}
