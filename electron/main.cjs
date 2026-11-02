@@ -114,13 +114,25 @@ function loadEditor() {
 }
 
 function createWindow() {
+  const isWindows = process.platform === 'win32';
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 900,
     minHeight: 640,
     show: false,
-    frame: false,
+    ...(isWindows
+      ? {
+          titleBarStyle: 'hidden',
+          titleBarOverlay: {
+            color: '#E3E2DE',
+            symbolColor: '#141414',
+            height: 64,
+          },
+        }
+      : {
+          frame: false,
+        }),
     icon: path.join(__dirname, 'assets/kadowaz.png'),
     backgroundColor: '#0C0E14',
     webPreferences: {

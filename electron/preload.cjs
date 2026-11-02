@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  hasNativeTitleBar: process.platform === 'win32',
   rendererReady: () => ipcRenderer.send('startup:ready'),
   openHelpLink: (id) => ipcRenderer.invoke('help:open', id),
   windowControl: (action) => ipcRenderer.send('window-control', action),

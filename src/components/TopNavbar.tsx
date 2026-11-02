@@ -54,11 +54,11 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   const connected = hardwareState === 'connected';
 
   return (
-    <header className="app-header h-16 shrink-0 border-b border-[#C7C7C7] bg-[#E3E2DE] select-none z-50">
+    <header className="app-header h-16 shrink-0 border-b border-[#C7C7C7] bg-[#E3E2DE] select-none z-50 [-webkit-app-region:drag]">
       <div className="navbar-layout h-full flex items-stretch min-w-0">
 
         {/* ── identity · brand + deck ───────────────────────────── */}
-        <div className="navbar-brand flex items-center gap-3 pl-4 pr-4 border-r border-[#C7C7C7] shrink-0 min-w-0">
+        <div className="navbar-brand flex items-center gap-3 pl-4 pr-4 border-r border-[#C7C7C7] shrink-0 min-w-0 [-webkit-app-region:no-drag]">
           <div className="flex items-center gap-2 shrink-0">
             <span className="brand-mark w-6 h-6 bg-[#141414] text-[#E3E2DE] font-mono text-[11px] font-bold flex items-center justify-center">
               Z
@@ -70,7 +70,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </div>
 
         {/* ── cols 4–9 · modules ─────────────────────────────────── */}
-        <nav className="flex-1 flex items-stretch justify-start px-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Modules">
+        <nav className="flex-1 flex items-stretch justify-start px-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-app-region:no-drag]" aria-label="Modules">
           {TABS.map((t) => {
             const on = activeTab === t.id;
             return (
@@ -93,7 +93,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </nav>
 
         {/* ── cols 10–12 · hardware + actions ────────────────────── */}
-        <div className="navbar-actions flex items-center justify-end gap-1.5 pr-3 pl-3 border-l border-[#C7C7C7] shrink-0">
+        <div className="navbar-actions flex items-center justify-end gap-1.5 pr-3 pl-3 border-l border-[#C7C7C7] shrink-0 [-webkit-app-region:no-drag]">
           {/* hardware state */}
           <div className="relative">
             {connected ? (
@@ -180,24 +180,27 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           ))}
 
           {/* window controls */}
-          <div className="flex items-center ml-1 border-l border-[#C7C7C7] pl-2 gap-0.5">
-            {[
-              { icon: <Minus className="w-3 h-3" />, act: 'minimize', hover: 'hover:bg-[#EDECE8]' },
-              { icon: <Square className="w-2.5 h-2.5" />, act: 'maximize', hover: 'hover:bg-[#EDECE8]' },
-              { icon: <X className="w-3 h-3" />, act: 'close', hover: 'hover:bg-[#141414] hover:text-[#E3E2DE]' },
-            ].map((w) => (
-              <button
-                key={w.act}
-                onClick={() => {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  (window as any).electronAPI?.windowControl?.(w.act);
-                }}
-                className={`w-6 h-6 flex items-center justify-center text-[#646464] transition-colors ${w.hover}`}
-              >
-                {w.icon}
-              </button>
-            ))}
-          </div>
+          {window.electronAPI?.hasNativeTitleBar ? (
+            <div className="w-[138px] shrink-0 h-full pointer-events-none" aria-hidden="true" />
+          ) : (
+            <div className="flex items-center ml-1 border-l border-[#C7C7C7] pl-2 gap-0.5">
+              {[
+                { icon: <Minus className="w-3 h-3" />, act: 'minimize', hover: 'hover:bg-[#EDECE8]' },
+                { icon: <Square className="w-2.5 h-2.5" />, act: 'maximize', hover: 'hover:bg-[#EDECE8]' },
+                { icon: <X className="w-3 h-3" />, act: 'close', hover: 'hover:bg-[#141414] hover:text-[#E3E2DE]' },
+              ].map((w) => (
+                <button
+                  key={w.act}
+                  onClick={() => {
+                    window.electronAPI?.windowControl?.(w.act as 'minimize' | 'maximize' | 'close');
+                  }}
+                  className={`w-6 h-6 flex items-center justify-center text-[#646464] transition-colors ${w.hover}`}
+                >
+                  {w.icon}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </header>
