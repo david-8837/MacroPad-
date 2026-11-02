@@ -239,12 +239,7 @@ html {
   border: 1px solid var(--ink);
 }
 
-/* Live tally marker: cobalt square, no pulse-softening. */
-@keyframes tally-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-.tally-live { animation: tally-pulse 1.2s linear infinite; }
+
 
 /* The system guarantees two things no matter what a component inline-styles. */
 [style*="box-shadow"] { box-shadow: none !important; }
