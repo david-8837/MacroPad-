@@ -350,8 +350,7 @@ desktop-app/
 │   ├── Makefile.host           # Host-runner test makefile for C unit tests
 │   ├── include/                # Firmware headers (board.h, gesture.h, leds.h, magic.h, etc.)
 │   ├── src/                    # Firmware C sources (core, drivers, lighting, storage, usb)
-│   ├── tests/                  # Gated + bench host-compiled firmware tests (no actual board)
-│   └── kadowaz_macropad/       # Historical incompatible matrix/Arduino sketch (do not flash here)
+│   └── tests/                  # Gated + bench host-compiled firmware tests (no actual board)
 │
 ├── host/
 │   ├── protocol/
@@ -506,9 +505,9 @@ You don't need any special flashing software or programmers! The RP2040 has a bu
 
 ---
 
-#### Arduino sketches are not a supported flashing path
+#### Firmware architecture
 
-The historical `firmware/kadowaz_macropad/kadowaz_macropad.ino` uses a different key matrix, pin map and legacy text serial commands. It is **not compatible** with the selected direct-wired RP2040-Zero + GP28/GP29 OLED or the v3 desktop Save path. Use the Pico SDK C build above; do not follow the old Arduino wiring instructions for this pad.
+The official firmware is built exclusively with the Raspberry Pi Pico SDK C codebase (`firmware/src/`). Obsolete matrix-based Arduino sketches have been retired in favor of direct-wired GPIO architecture and the binary MPAD3 protocol.
 
 ### 6. Testing & Verification
 
