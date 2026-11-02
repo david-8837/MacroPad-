@@ -15,8 +15,8 @@ This guide covers connection and configuration; treat descriptions of optional h
    - [USB Serial / COM Port Connection](#usb-serial--cdc-mode)
 3. [In-App RP2040 Firmware Flashing](#3-in-app-rp2040-firmware-flashing)
 4. [Deck Studio & Digital Twin](#4-deck-studio--digital-twin)
-   - [Key Configuration (Tap, Hold, Double-Tap)](#key-temporal-mechanics)
-   - [Safety Isolation (Long-Press Protection)](#safety-isolation)
+   - [Key Configuration](#key-configuration)
+   - [Backup and Read-only Inspection](#backup-and-read-only-inspection)
    - [Rotary Encoder Dial Modes](#rotary-encoder-configuration)
 5. [Four-Layer Architecture](#5-four-layer-architecture)
 6. [Windows Audio & Per-App Volume Mixer](#6-windows-audio--per-app-volume-mixer)
@@ -29,10 +29,10 @@ This guide covers connection and configuration; treat descriptions of optional h
 
 ## 1. Hardware Overview
 
-The physical macropad features:
+The target macropad has nine keys and an encoder. Full Deck optionally uses the display and planned LEDs; Keys & Knob uses neither:
 - **9 Mechanical Switches (direct GPIO):** one RP2040 pin per key, no 3×3 diode matrix in this build.
 - **1 EC11 Rotary Encoder:** Detented continuous dial with an integrated push switch.
-- **Required SSD1306 128×32 OLED:** wire 3V3/GND and I²C0 GP28 SDA/GP29 SCL (0x3C). Firmware draws baked animations and offline live-mode fallbacks; the assembled panel is not yet bench-tested.
+- **Full Deck OLED (SSD1306 128×32):** wire 3V3/GND and I²C0 GP28 SDA/GP29 SCL (0x3C). Firmware draws baked animations and offline live-mode fallbacks; the assembled panel is not yet bench-tested.
 - **9 planned addressable RGB pixel positions:** You intend to buy a cuttable strip; its exact chipset, per-pixel cut points, current and 5 V supply are unknown. Normal firmware gates physical data OFF after initialization. Lighting presets can be edited/saved but no physical LED output is approved yet.
 - **Waveshare RP2040-Zero:** Dual-core ARM Cortex-M0+ microcontroller with 2MB onboard flash memory.
 
@@ -49,7 +49,7 @@ Open **KADOWAZ Deck Studio**. In the top right corner of the navigation bar, cli
 2. Select the RP2040's COM port (for example, `COM3`), at 115200 baud.
 3. When the device answers the MPAD3 probe, key/encoder events and configuration use this serial link. The device's HID keyboard/consumer reports go directly to the operating system. **There is no raw WebHID event interface** in this firmware; do not select a keyboard HID interface for pad events.
 
-> **Key Tester is an OS keyboard-event visualizer, not a pad diagnostic.** It draws `KeyboardEvent.code` events delivered to the focused app (from any keyboard), and separates fresh keydowns from OS auto-repeat. It cannot identify their source, measure scan/USB latency or detect switch chatter. Verify physical switch registration and timing with a booted pad, its CDC `KEY_EVENT` reports and appropriate USB/logic-analyser instrumentation. The simulator works without a board; serial connection alone does not prove correct actions.
+> **Tester has two separate views.** The OS keyboard visualizer draws `KeyboardEvent.code` events from any keyboard delivered to the focused app. The physical pad inspector listens for compatible serial `KEY_EVENT` reports; capability alone does not guarantee reporting is enabled. Read the config to see the setting at that moment. Physical actions still run during testing. Neither view measures scan/USB latency or chatter, and missing events alone do not prove a fault. Hardware behavior remains unverified.
 
 ---
 
@@ -78,17 +78,17 @@ The **Keys** tab provides a real-time digital twin of your physical hardware. Se
 
 There is one local configuration, not a collection of decks. Earlier saved configurations keep their assignments; the old local lock is no longer used. The upload review still checks connection, supported actions and device readback.
 
-### Key Temporal Mechanics
-Each key supports three distinct temporal actions:
-- **Tap Action:** Fires immediately on a standard momentary click (e.g., `Ctrl+C`, Launch App, or Layer Next).
-- **Hold Action (Mod-Tap):** Fires when the key is held down past 250ms (e.g., holds `Shift`, switches temporary layer, or triggers a macro).
-- **Double-Tap Action (Tap Dance):** Fires when double-clicked within 300ms (e.g., `Select All`, or emergency mute).
+### Key Configuration
 
-### Safety Isolation (Long-Press Protection)
-For critical or destructive actions (such as *Delete All*, *Close Workspace*, or *Emergency Stream Cut*), enable **Safety Isolation**:
-1. Check the **Destructive Safety Action** toggle in the Key Drawer.
-2. Set the threshold duration (e.g., `1500ms`).
-3. A casual tap does not execute the action. In the simulator, confirmation fires after the threshold while held; with MPAD3 serial events, it fires **on release** only if the firmware reported a verified hold duration at least that long. It stays PC-only: keep the app open and connected, and update firmware if older events report no duration (those fail closed).
+Open a switch drawer to configure Keyboard, Text or Open App and choose an app-only icon. The Recorder, Safety Hold and Media controls were removed. Existing legacy hold, double-tap or safety data can still be present; check the upload review for unsupported or PC-owned actions rather than assuming multiple gestures can run on the pad. A supported normal keyboard key in the Keys & Knob firmware is held until release; OS repeat behavior is controlled by the computer. Full Deck hold behavior is unverified.
+
+The **Shortcuts** page can assign a supported single chord: choose Assign, a layer and switch, then confirm replacing its tap action. Other gestures and the knob are preserved. Some sequences or key names cannot be represented as one pad chord; the page states why they cannot be assigned. Review and upload all four layers when ready.
+
+### Backup and Read-only Inspection
+
+Expand **Backup & restore** in the left rail (on narrow windows open **Layers, firmware & backup**). Download a JSON backup of all four editor layers, knob settings and saved preset overrides/custom presets. It excludes macro steps, OLED and lighting settings. Restoring validates the file and requires confirmation; it replaces the named local data but never writes to the pad. Older deck-only exports leave presets alone. Back up first; files may contain private paths, text and executable actions, so use only trusted backups.
+
+On **Tester**, **Read pad configuration** takes a CRC-validated, read-only device snapshot and compares encoded key/knob slots to the editor's projected upload. It does not import or edit bindings. The pad does not store app-only labels, icons, presets or PC actions; matching slots do not prove those details or PC actions work. The USB event setting is a snapshot and may change; read again to refresh. Upload still replaces all four device layers.
 
 ### Rotary Encoder Configuration
 Click on the rotary knob in the Digital Twin to configure dial actions:
@@ -110,7 +110,7 @@ To choose an icon, open the key's configuration drawer and use **Key icon** (or 
 ### How to Switch Layers:
 - **Hardware:** Hold the rotary knob past the firmware's configured knob-hold threshold (500 ms by default) to cycle channels; the simulator's setting can differ.
 - **Software:** Click a layer in the left sidebar or the layer pills under the deck (**00**–**03**), or select from the `Ctrl+K` command palette.
-- **Display feedback:** Firmware now draws a temporary layer indicator on the required OLED when the physical channel changes; the desktop preview also follows the channel. Confirm timing/appearance on the assembled board.
+- **Display feedback:** Firmware source draws a temporary layer indicator on an attached compatible OLED when the physical channel changes. The bundled Full Deck image is unchanged; verify actual behavior on the assembled board.
 
 To upload supported bindings, connect a compatible MPAD3 serial device with flash capability, then click **Upload to deck** in the pad's **Configure** column. There is no Upload button in the top navbar. The review panel **slides up from the bottom**: inspect each of the four layers’ nine switches and its **visible rotary knob** (clockwise, counter-clockwise, press and hold). The knob here is a read-only preview; clicking or turning it does not execute an action. Review pad/PC/unavailable assignments, connection and capability warnings, and (for PC-owned actions) the explicit USB-event opt-in. Nothing writes merely by opening it. Use the fixed **Flash / Upload All to Macropad Now** button to begin; the action stays disabled when the pad is unready. You cannot dismiss the sheet during a write or readback. A successful upload requires a final SET_ACK, COMMIT_ACK, and matching full readback. App-only bindings remain on the PC and require the desktop app plus event reporting. In a browser-only preview or without a connected pad, you can review but cannot upload. The connected-device `Ctrl+K` upload command opens the same review sheet instead of silently writing.
 
@@ -199,13 +199,12 @@ Press **`Ctrl+K`** (or `Cmd+K`) to open the Command Palette:
 
 Click the **Activity icon** in the top navbar (or press `Ctrl+K` → `Hardware Status & Diagnostics`). The full panel expands **inline in the right Studio inspector**, above Audio Mixer. It does not open a popup:
 - **Action History Stream:** Real-time chronological audit trail of all physical switch actuations, knob detents, app launches, and webhook triggers.
-- **Filter Pills:** Filter events by `Key`, `Dial`, `Audio`, or `Safety`.
+- **Filter Pills:** Filter the available action history by category.
 - **Subsystem Self-Tests:** Run automated health diagnostics across:
   - System Telemetry Engine
   - Windows CoreAudio WASAPI COM Interop
   - Localhost REST Webhook API (`:38491`)
 - **Firmware/BOOTSEL:** Managed separately in the **left sidebar**'s expandable RP2040 Firmware & Bootloader row; it is not duplicated in Diagnostics.
-- **Export Report:** Copies a comprehensive markdown diagnostic log to your clipboard for technical support or GitHub issues.
 
 ---
 

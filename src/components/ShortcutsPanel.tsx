@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PC_SHORTCUTS, PCShortcut } from '../data/pcShortcuts';
 import { matchesShortcut } from '../utils/shortcutSearch';
+import { chordToAction } from '../utils/deviceKeymap';
+import type { Layer } from '../types';
 import { playKeyClick } from '../utils/soundEffects';
 import {
   Search, Command, Monitor, Globe, FileText, Play, Terminal, Eye, Check,
@@ -30,8 +32,11 @@ const COUNTS = Object.fromEntries(CATEGORIES.map(category => [
   category.id, category.id === 'all' ? PC_SHORTCUTS.length : PC_SHORTCUTS.filter(s => s.category === category.id).length,
 ])) as Record<Category, number>;
 
-/** Reference only: copying text does not assign a shortcut to a pad. */
-export const ShortcutsPanel: React.FC = () => {
+export const ShortcutsPanel: React.FC<{ layers: Layer[]; activeLayerId: string; onAssign: (shortcut: PCShortcut, layer: number, key: number) => void }> = ({ layers, activeLayerId, onAssign }) => {
+  const assignmentRef = useRef<HTMLElement>(null);
+  const [assignment, setAssignment] = useState<PCShortcut | null>(null);
+  const [targetLayer, setTargetLayer] = useState(0);
+  const [targetKey, setTargetKey] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -69,6 +74,8 @@ export const ShortcutsPanel: React.FC = () => {
     }
   };
 
+  useEffect(() => { if (assignment) assignmentRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, [assignment]);
+
   const activeCategory = CATEGORIES.find(category => category.id === selectedCategory) || CATEGORIES[0];
   return (
     <main className="w-full h-full overflow-y-auto bg-[#F4F3F0]">
@@ -85,9 +92,17 @@ export const ShortcutsPanel: React.FC = () => {
 
         <div className="shortcut-guide border border-[#C7C7C7] bg-white p-4 flex items-start gap-3">
           <Keyboard className="w-4 h-4 text-[#1351AA] shrink-0 mt-0.5" aria-hidden="true" />
-          <div className="min-w-0 text-xs leading-relaxed text-[#444343]"><strong className="text-[#141414]">A reference, not a binding tool.</strong> Use the shown keys in the key editor, then review and upload your deck. Copy only copies the text. Shortcuts can vary by app, OS or keymap; some may be sequences or unsupported on the pad.</div>
+          <div className="min-w-0 text-xs leading-relaxed text-[#444343]"><strong className="text-[#141414]">Assign a shortcut to a switch.</strong> Choose a supported chord, layer and key, then confirm. Copy only copies the text. Review and upload your deck when ready. Shortcuts can vary by app, OS or keymap; some may be sequences or unsupported on the pad.</div>
         </div>
 
+        {assignment && <section ref={assignmentRef} className="border border-[#1351AA] bg-white p-4 space-y-3 text-sm" aria-label="Confirm shortcut assignment">
+          <h2 className="font-bold">Assign {assignment.name} · {assignment.keys.join(' + ')}</h2>
+          <div className="flex flex-wrap gap-3"><label>Layer <select className="border p-1" value={targetLayer} onChange={e => setTargetLayer(Number(e.target.value))}>{layers.map((l, i) => <option key={l.id} value={i}>Layer {i}</option>)}</select></label>
+            <label>Switch <select className="border p-1" value={targetKey} onChange={e => setTargetKey(Number(e.target.value))}>{Array.from({length: 9}, (_, i) => <option key={i} value={i}>Switch #{i + 1}</option>)}</select></label></div>
+          <p className="text-xs leading-relaxed">This replaces only the tap action of {layers[targetLayer]?.keys.find(k => k.keyIndex === targetKey)?.label || `Switch #${targetKey + 1}`}. Other gestures, labels, icons and knob stay unchanged. Existing safety settings may prevent the tap from running. The pad is not changed until upload.</p>
+          <button className="bg-[#1351AA] text-white px-3 py-2 text-xs" onClick={() => { onAssign(assignment, targetLayer, targetKey); setAssignment(null); }}>Confirm assignment</button>{' '}
+          <button className="border border-[#C7C7C7] px-3 py-2 text-xs" onClick={() => setAssignment(null)}>Cancel</button>
+        </section>}
         <div className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)] gap-5 items-start">
           <aside className="shortcut-categories border border-[#C7C7C7] bg-white lg:sticky lg:top-0" aria-label="Shortcut categories">
             <div className="px-4 py-3 border-b border-[#E3E2DE] flex justify-between items-center"><span className="eyebrow eyebrow--ink">Browse categories</span><span className="idx">{CATEGORIES.length - 1}</span></div>
@@ -120,6 +135,7 @@ export const ShortcutsPanel: React.FC = () => {
             {filteredShortcuts.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {filteredShortcuts.map(s => {
                 const isCopied = copiedId === s.id;
+                const mapping = chordToAction(s.keys);
                 const categoryLabel = CATEGORIES.find(category => category.id === s.category)?.label || s.category;
                 return <article key={s.id} className="shortcut-card panel min-w-0 p-4 flex flex-col bg-white">
                   <div className="text-[9px] font-mono uppercase tracking-wide text-[#1351AA] font-bold break-words">{s.appName || categoryLabel}</div>
@@ -128,11 +144,13 @@ export const ShortcutsPanel: React.FC = () => {
                   <div className="flex items-center gap-1.5 flex-wrap mt-auto pt-5 pb-4" aria-label={`Keys: ${s.keys.join(' plus ')}`}>
                     {s.keys.map((key, index) => <React.Fragment key={index}><kbd className="shortcut-keycap px-2 py-1 border border-[#C7C7C7] font-mono font-bold text-[11px] text-[#141414]">{key}</kbd>{index < s.keys.length - 1 && <span className="text-[#7A7A7A] text-[10px] font-mono" aria-hidden="true">+</span>}</React.Fragment>)}
                   </div>
-                  <div className="flex items-center justify-between gap-2 pt-3 border-t border-[#E3E2DE]"><span className="font-mono text-[9px] uppercase tracking-wide text-[#646464]">{s.keys.length} {s.keys.length === 1 ? 'KEY' : 'KEYS'}</span>
+                  <div className="flex items-center justify-between flex-wrap gap-2 pt-3 border-t border-[#E3E2DE]"><span className="font-mono text-[9px] uppercase tracking-wide text-[#646464]">{s.keys.length} {s.keys.length === 1 ? 'KEY' : 'KEYS'}</span>
+                    <button type="button" disabled={mapping.kind === 'unsupported'} title={mapping.kind === 'unsupported' ? mapping.reason : 'Choose a layer and switch'} aria-label={`Assign ${s.name} shortcut`} onClick={() => { setTargetLayer(Math.max(0, layers.findIndex(l => l.id === activeLayerId))); setTargetKey(0); setAssignment(s); }} className="border border-[#1351AA] text-[#1351AA] px-2.5 py-1.5 text-[10px] font-bold uppercase disabled:opacity-40">Assign</button>
                     <button type="button" aria-label={`Copy ${s.name} shortcut`} onClick={() => void handleCopyCombo(s)} className={`shortcut-copy flex items-center gap-1.5 px-2.5 py-1.5 border text-[10px] font-bold uppercase tracking-wide ${isCopied ? 'bg-[#1351AA] border-[#1351AA] text-white' : 'bg-[#F4F3F0] border-[#C7C7C7] text-[#444343] hover:border-[#1351AA] hover:text-[#1351AA]'}`}>
                       {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}<span>{isCopied ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
+                  {mapping.kind === 'unsupported' && <p className="mt-2 text-[10px] text-[#8A4B00]">Cannot assign as a single pad chord: {mapping.reason}.</p>}
                 </article>;
               })}
             </div> : <div className="border border-dashed border-[#C7C7C7] bg-white py-14 px-5 text-center space-y-3"><Search className="w-7 h-7 text-[#7A7A7A] mx-auto" aria-hidden="true" /><p className="text-sm font-bold">No shortcuts found</p><p className="text-xs text-[#646464]">Try a different search or browse another category.</p><button type="button" onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }} className="text-xs font-bold text-[#1351AA] hover:underline">Reset filters</button></div>}

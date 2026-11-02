@@ -109,6 +109,16 @@ export function hidUsage(name: string): number | null {
   return null;
 }
 
+/** A display-only interpretation of HID codes. It never changes/imports config. */
+export function describeHidKeycode(code: number): string {
+  const mods = ['Left Ctrl', 'Left Shift', 'Left Alt', 'Left GUI', 'Right Ctrl', 'Right Shift', 'Right Alt', 'Right GUI']
+    .filter((_, bit) => (code >> 8) & (1 << bit));
+  const usage = code & 0xff;
+  const name = Object.entries(USAGE_NAMES).find(([, n]) => n === usage)?.[0];
+  const key = name ? name.toUpperCase() : `HID usage 0x${usage.toString(16).padStart(2, '0').toUpperCase()}`;
+  return [...mods, key].join(' + ');
+}
+
 export type ChordResult =
   /** One key, optionally with modifiers held: ACTION_TYPE_KEYCODE. */
   | { kind: 'keycode'; code: number; text: string }

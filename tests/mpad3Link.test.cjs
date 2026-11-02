@@ -333,6 +333,19 @@ async function main() {
     console.log('  ok  simultaneous reads cannot steal the upload acknowledgements');
   }
 
+  {
+    const peer = createPeer();
+    const before = Uint8Array.from(peer.committed);
+    const reading = peer.link.readConfig();
+    await assert.rejects(peer.link.writeConfig(cfg), /busy/);
+    const observed = await reading;
+    assert.deepEqual(encodeConfig(observed), before);
+    assert.deepEqual(peer.committed, before);
+    assert.equal(peer.commands.length, CHUNK_COUNT);
+    assert(peer.commands.every(c => c === CMD.GET_CONFIG), 'read sends GET_CONFIG only, never SET or COMMIT');
+    console.log('  ok  read-only snapshot is exclusive and sends only GET_CONFIG');
+  }
+
   const lighting = defaultConfig().channels[0].lighting;
   lighting.brightness = 234;
   lighting.perKey[0] = [12, 34, 56];

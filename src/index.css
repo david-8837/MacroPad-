@@ -399,3 +399,29 @@
 /* Keep event updates from changing the height or scrollbar of the page. */
 .tester-page { scrollbar-gutter: stable; }
 .tester-readout { height: 128px; overflow-y: auto; scrollbar-gutter: stable; }
+
+/* Keep the workspace usable without sacrificing the layer/tools rail on laptops
+   and narrow windows. The editor becomes an overlay rather than a 360px column. */
+@media (max-width: 900px) {
+  .workspace { position: relative; }
+  .mobile-rail-toggle { display: block; }
+  .workspace-rail { position: absolute; top: 37px; bottom: 0; left: 0; z-index: 40; box-shadow: 8px 0 20px #14141420; }
+  .workspace-rail:not(.workspace-rail--open) { display: none; }
+  .designer-layout { flex-direction: column; overflow-y: auto; }
+  .designer-pad { flex: none; width: 100%; padding: 1rem; overflow: visible; }
+  .designer-inspector { flex: none; width: 100%; min-width: 0; overflow: visible; }
+  .designer-inspector--editing { position: fixed; z-index: 45; inset: 64px 0 0; width: 100%; overflow: hidden; }
+}
+@media (max-width: 480px) {
+  .app-header .brand-mark { display: none; }
+  .app-header > div > div:first-child { padding-left: .5rem; padding-right: .5rem; }
+  .chassis { max-width: 100%; }
+}
+@media (max-width: 600px) {
+  .app-header { height: 80px; }
+  .navbar-layout { display: grid; grid-template-rows: 40px 40px; grid-template-columns: minmax(0, 1fr); }
+  .navbar-brand { display: none; }
+  .navbar-actions { grid-row: 1; border-left: 0; border-bottom: 1px solid #c7c7c7; }
+  .navbar-layout nav { grid-row: 2; overflow-x: auto; }
+  .designer-inspector--editing { top: 80px; }
+}
