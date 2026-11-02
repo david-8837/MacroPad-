@@ -817,9 +817,14 @@ export const App: React.FC = () => {
   // authenticated and validated by the main process (electron/webhookServer.cjs).
   const handleWebhookRequest = (endpoint: string, data: Record<string, unknown>) => {
     const note = (msg: string, type: ActionHistoryEntry['type'] = 'info') => pushLog(`[WEBHOOK] ${msg}`, 'webhook', type);
-    const run = (action: ActionDefinition | null | undefined, label: string) => {
+    const run = (action: ActionDefinition | null | undefined, label: string, isSafetyIsolated = false) => {
       if (!action) {
         note(`${label}: no action assigned`);
+        return;
+      }
+      if (isSafetyIsolated) {
+        // Safety isolation exists so destructive actions need an intentional physical hold.
+        note(`Blocked: ${label} is safety-isolated and can only be run by a physical hold`, 'safety');
         return;
       }
       handleTriggerAction(action.id, `[WEBHOOK] ${action.name}`, action.category, action.payload);
@@ -833,25 +838,21 @@ export const App: React.FC = () => {
           note(`Switch #${index + 1} not found on this layer`, 'safety');
           return;
         }
-        if (key.isDestructiveSafety) {
-          // Safety isolation exists so destructive actions need an intentional physical hold.
-          note(`Blocked: Switch #${index + 1} is safety-isolated and can only be run by a physical hold`, 'safety');
-          return;
-        }
         const which = typeof data.action === 'string' ? data.action : 'tap';
         const action = which === 'hold' ? key.holdAction : which === 'double' ? key.doubleTapAction : key.tapAction;
-        run(action, `Switch #${index + 1} ${which}`);
+        run(action, `Switch #${index + 1} ${which}`, Boolean(key.isDestructiveSafety));
         return;
       }
       case '/api/v1/dial': {
-        const dial = activeLayer.dial;
+        const dial = activeLayer.dial as unknown as Record<string, unknown>;
+        const dialSafe = Boolean(dial?.isDestructiveSafety);
         if (data.direction === 'press') {
-          run(dial.pressAction, 'Knob press');
+          run(activeLayer.dial.pressAction, 'Knob press', dialSafe);
           return;
         }
         const steps = Math.min(10, Math.max(1, Math.floor(Number(data.step)) || 1));
-        const action = data.direction === 'ccw' ? dial.ccwAction : dial.cwAction;
-        for (let i = 0; i < steps; i++) run(action, `Knob ${String(data.direction)}`);
+        const action = data.direction === 'ccw' ? activeLayer.dial.ccwAction : activeLayer.dial.cwAction;
+        for (let i = 0; i < steps; i++) run(action, `Knob ${String(data.direction)}`, dialSafe);
         return;
       }
       case '/api/v1/oled': {

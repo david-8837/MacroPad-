@@ -31,7 +31,9 @@ export function newPresetId(): string {
   return `custom-${random}`;
 }
 
-const categories = new Set(['hotkey', 'media', 'audio_session', 'midi', 'script', 'macro', 'text', 'navigation', 'oled', 'app_launch']);
+// Drop 'script' and 'macro' at the import boundary to prevent backup files from
+// injecting arbitrary executable actions or unauthorized capabilities.
+const categories = new Set(['hotkey', 'media', 'audio_session', 'midi', 'text', 'navigation', 'oled', 'app_launch']);
 export function validAction(value: unknown): value is ActionDefinition | null {
   if (value === null) return true;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;

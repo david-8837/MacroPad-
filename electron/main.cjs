@@ -198,8 +198,27 @@ function normalizeIncomingAction(incoming) {
   return { category, name: incoming?.actionName, payload };
 }
 
+// The renderer process is untrusted authority. Only safe UI-authorable
+// action categories may be executed over native IPC; arbitrary scripts are forbidden.
+const ALLOWED_EXEC_CATEGORIES = new Set([
+  'hotkey',
+  'media',
+  'text',
+  'audio_session',
+  'midi',
+  'navigation',
+  'app_launch',
+  'app-launch',
+]);
+
 async function runIncomingAction(incoming) {
   const action = normalizeIncomingAction(incoming);
+  if (!action || !action.category || !ALLOWED_EXEC_CATEGORIES.has(action.category)) {
+    return {
+      success: false,
+      error: `Blocked: category '${action?.category}' is not authorized for native execution`,
+    };
+  }
   if (action.category === 'app_launch' || action.category === 'app-launch') {
     return launchApplication(action.payload || incoming);
   }

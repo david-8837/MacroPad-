@@ -30,6 +30,8 @@ const { pathToFileURL } = require('node:url');
       x => x.deck.layers.pop(),
       x => x.deck.layers[0].keys[0].keyIndex = 9,
       x => x.deck.layers[0].keys[0].tapAction = {id:2},
+      x => x.deck.layers[0].keys[0].tapAction = {id:'e', name:'calc', category:'script', payload:{command:'calc.exe'}},
+      x => x.deck.layers[0].keys[0].tapAction = {id:'m', name:'macro', category:'macro', payload:{macroId:0}},
       x => x.deck.layers[0].dial.sensitivity = 'bad',
       x => x.presetLibrary.custom[0].keys.pop(),
       x => x.deck.activeLayerId = 'missing',
