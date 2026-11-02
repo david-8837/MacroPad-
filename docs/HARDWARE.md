@@ -107,11 +107,13 @@ physical chain order and keycap clearance before power.
 
 Header numbering is Waveshare's own for header P1: **23 pins**, USB-C pointing up,
 front (component) side facing you, pin 1 = 5V at the top-left, then counter-clockwise.
-The left column is pins 1–11 top to bottom and the right column is pins 12–23 bottom
-to top. `tools/check_board.py` cross-checks the named GPIO/header pins against
+The left edge is pins 1–9 top to bottom; the bottom edge is pins 10–14
+left to right; the right edge is pins 15–23 bottom to top. `tools/check_board.py` cross-checks the named GPIO/header pins against
 `board.h` and `protocol.json` and rejects the old unsafe key sketch. It checks
 text, **not an actual circuit or solder joints**: confirm against your board's
-silkscreen and use a multimeter before applying power.
+silkscreen and use a multimeter before applying power. The three-edge layout is
+also described by the [RP2040-Zero footprint reference](https://github.com/tscircuit/rp2040-zero/blob/main/lib/PinOutCircuit.tsx);
+this is a documentation cross-check, not verification of your specific board.
 
 | Function | GPIO | Header pin | Notes |
 |---|---:|---:|---|
@@ -147,8 +149,11 @@ local screen on the next runtime refresh; pixels never touch saved config flash.
 The fake-I²C/fake-CDC tests do not replace an assembled-board latency or
 re-enumeration test.
 
-The left column, for reference: **1 = 5V, 2 = GND, 3 = 3V3, 4 = GP29, 5 = GP28,
-6 = GP27, 7 = GP26, 8 = GP15, 9 = GP14, 10 = GP13, 11 = GP12.**
+Left edge: **1 = 5V, 2 = GND, 3 = 3V3, 4 = GP29, 5 = GP28, 6 = GP27,
+7 = GP26, 8 = GP15, 9 = GP14.** Bottom edge, left to right: **10 = GP13,
+11 = GP12, 12 = GP11, 13 = GP10, 14 = GP9.** Right edge, bottom to top:
+**15 = GP8, 16 = GP7, 17 = GP6, 18 = GP5, 19 = GP4, 20 = GP3,
+21 = GP2, 22 = GP1, 23 = GP0.**
 
 That is **15 of the 20 header GPIOs**, with the required OLED connected.
 

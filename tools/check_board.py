@@ -55,30 +55,23 @@ ONBOARD_WS2812_PIN = 16
 # the main castellated header. This pin map never uses them.
 NOT_ON_MAIN_HEADER = set(range(17, 26))
 
-# Derived rather than typed, because both easy mistakes are silent and this table
-# is what you solder against. Numbering is Waveshare's own for header P1: 23 pins,
-# USB-C up, front side facing you, pin 1 = 5V at top-left, counter-clockwise. The
-# left column is pins 1..11 top to bottom and the right column is pins 12..23
-# bottom to top, so GP0 - the last pin reached - is 23.
-#
-# The first version of this table had the right column starting at pin 12 with GP10
-# instead of GP11, which shifted every pin from GP10 down by one and put GP0 at a
-# pin 22 that is actually GP1. Exactly the class of error this file exists to stop.
+# P1 numbering with USB up and the component side facing you: left edge 1..9
+# top-to-bottom, bottom edge 10..14 left-to-right, right edge 15..23 bottom-to-top.
+# The GPIO/header associations are unchanged; older prose wrongly described the
+# 23 castellations as just two columns. Check physical boards against silkscreen.
 def _derive_header_pins() -> dict:
-    pins = {}
-    left = [29, 28, 27, 26, 15, 14, 13, 12]              # header pins 4..11
-    right = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]       # header pins 12..23
-    for i, g in enumerate(left):
-        pins[g] = 4 + i
-    for i, g in enumerate(right):
-        pins[g] = 12 + i
-    assert pins[29] == 4 and pins[26] == 7, "left column drifted"
-    assert pins[15] == 8 and pins[12] == 11, "left column drifted"
-    assert pins[11] == 12 and pins[10] == 13, "right column drifted"
-    assert pins[1] == 22 and pins[0] == 23, "right column drifted"
-    assert len(pins) == 20 and max(pins.values()) == 23, "23-pin header, 20 of them GPIO"
-    assert set(pins) == (set(range(16)) | {26, 27, 28, 29}) - {16}, \
-        "GP0..GP15 and GP26..GP29 are the header GPIOs; GP16 is the onboard WS2812"
+    left = [29, 28, 27, 26, 15, 14]       # 4..9 after 5V/GND/3V3
+    bottom = [13, 12, 11, 10, 9]         # 10..14 left to right
+    right = [8, 7, 6, 5, 4, 3, 2, 1, 0] # 15..23 bottom to top
+    pins = {g: 4 + i for i, g in enumerate(left)}
+    pins.update({g: 10 + i for i, g in enumerate(bottom)})
+    pins.update({g: 15 + i for i, g in enumerate(right)})
+    assert pins[29] == 4 and pins[14] == 9
+    assert pins[13] == 10 and pins[12] == 11 and pins[11] == 12
+    assert pins[10] == 13 and pins[9] == 14
+    assert pins[8] == 15 and pins[1] == 22 and pins[0] == 23
+    assert len(pins) == 20 and max(pins.values()) == 23
+    assert set(pins) == (set(range(16)) | {26, 27, 28, 29}) - {16}
     return pins
 
 

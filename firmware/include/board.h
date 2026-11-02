@@ -68,10 +68,11 @@
  *   exist; it cost both ADC0 and ADC1 for two digital keys.
  *
  *   Header pin numbers assume USB-C pointing up, front (component) side facing
- *   you, pin 1 = 5V at the top-left, counting counter-clockwise: the left column
- *   is pins 1..11 top to bottom (5V, GND, 3V3, GP29, GP28, GP27, GP26, GP15,
- *   GP14, GP13, GP12) and the right column is pins 12..23 bottom to top (GP11,
- *   GP10, GP9, GP8, GP7, GP6, GP5, GP4, GP3, GP2, GP1, GP0). That is the
+ *   you, pin 1 = 5V at top-left, counting counter-clockwise: left edge 1..9
+ *   top to bottom (5V, GND, 3V3, GP29, GP28, GP27, GP26, GP15, GP14),
+ *   bottom edge 10..14 left to right (GP13, GP12, GP11, GP10, GP9),
+ *   right edge 15..23 bottom to top (GP8, GP7, GP6, GP5, GP4, GP3, GP2,
+ *   GP1, GP0). That is the
  *   Waveshare schematic's own numbering for header P1. tools/check_board.py
  *   derives this table and cross-checks it against docs/HARDWARE.md and
  *   protocol.json, so the three cannot drift apart silently. Still confirm

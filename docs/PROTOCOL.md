@@ -398,7 +398,7 @@ Key indices, which is also LED indices — LED *n* sits under key *n*, so a per-
 
 - Header: 23 on the main castellated header: 5V, GND, 3V3, then 20 GPIO (GP0-GP15 and GP26-GP29).
 - GP16 drives the board's own onboard WS2812. GP17-GP25 are on two 5-pin headers on the back and on solder pads, and are unused here.
-- Numbering: USB-C up, front/component side facing you, pin 1 = 5V at top-left, counter-clockwise: left column 1-11 top to bottom (5V, GND, 3V3, GP29, GP28, GP27, GP26, GP15, GP14, GP13, GP12), right column 12-23 bottom to top (GP11, GP10, GP9, GP8, GP7, GP6, GP5, GP4, GP3, GP2, GP1, GP0).
+- Numbering: USB-C up, component side facing you, P1 counter-clockwise: left edge top to bottom 1-9 (5V, GND, 3V3, GP29, GP28, GP27, GP26, GP15, GP14); bottom edge left to right 10-14 (GP13, GP12, GP11, GP10, GP9); right edge bottom to top 15-23 (GP8, GP7, GP6, GP5, GP4, GP3, GP2, GP1, GP0). Confirm GPIO labels on the actual board before soldering.
 - Spare after this map: GP13, GP14, GP15, GP26, GP27. GP28/GP29 carry required OLED I2C; only GP26/GP27 remain free as ADC inputs.
 - Saved config lives at 0x1FE000 and 0x1FF000 - the last two 4 KiB sectors of the 2 MB flash.
 

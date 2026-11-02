@@ -108,7 +108,7 @@ for i in range(9):
     text(xx+7,yy-13,f'K{i}',8,INK,bold=True)
     text(xx+7,yy-25, f'GP{[0,1,2,3,4,5,6,11,12][i]}',7,BLUE)
 para(rx,top-173,180,'<b>Position:</b> K0–K8 read left to right, then top to bottom. The knob is separate from these nine keys.', SMALL_STYLE)
-para(rx,top-225,180,'<b>P1 orientation:</b> USB-C up, component side toward you. Waveshare numbering starts at 5V = pin 1, then runs counter-clockwise. Verify every label against the board.',SMALL_STYLE)
+para(rx,top-225,180,'<b>P1 orientation:</b> USB-C up, component side toward you: 1–9 on left, 10–14 on bottom, 15–23 on right (counter-clockwise). Verify each label on your board.',SMALL_STYLE)
 box(M,top-300,W-2*M,91,PALE)
 para(M+10,top-311,W-2*M-20,'<b>Power rule:</b> unplug USB and every external power supply before soldering or continuity tests. Each key connects one GPIO to GND <b>only while pressed</b>; do not connect key contacts to 3V3 or 5V. GPIO inputs use firmware pull-ups. Do not put 5 V onto any RP2040 GPIO.',FONT_STYLE)
 c.showPage()
