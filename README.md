@@ -57,6 +57,7 @@ and encoder wiring. Do not connect OLED or LED hardware for this model.
    - [Recommended Hardware Bill of Materials (BOM)](#recommended-hardware-bill-of-materials-bom)
    - [Firmware Options (Pico SDK C vs Arduino)](#firmware-options)
    - [Hardware Wiring & Electrical Guide (`docs/HARDWARE.md`)](./docs/HARDWARE.md)
+   - [Complete Master Wiring Guide PDF (`docs/Macropad_Complete_Wiring_Guide.pdf`)](./docs/Macropad_Complete_Wiring_Guide.pdf)
    - [Firmware Architecture & Event Pipeline (`docs/ARCHITECTURE.md`)](./docs/ARCHITECTURE.md)
    - [Binary Wire Protocol Specification (`docs/PROTOCOL.md`)](./docs/PROTOCOL.md)
    - [Hardware Pinout & Wiring Configurations](#hardware-pinout--wiring-configurations)

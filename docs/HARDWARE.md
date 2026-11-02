@@ -4,6 +4,9 @@ Read this before you solder. Three sections matter in order:
 [power](#led-power-this-is-the-one-to-get-right), [wiring](#wiring),
 [things to measure](#measure-these-before-you-order).
 
+> **Unified Wiring Reference:** See [`Macropad_Complete_Wiring_Guide.pdf`](./Macropad_Complete_Wiring_Guide.pdf) for the comprehensive 8-page master document containing color-coded picture wiring diagrams, hand-soldering schematics, RP2040-Zero pinout tables, and electrical pre-flight checklists.
+
+
 ## Bill of materials
 
 | Qty | Part | Notes |
