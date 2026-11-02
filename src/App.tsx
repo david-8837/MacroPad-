@@ -3,6 +3,7 @@ import { Deck, Layer, KeyBinding, DialBinding, OLEDState, ActionDefinition, Disc
 import { defaultDeck } from './data/defaultDeck';
 import { TopNavbar } from './components/TopNavbar';
 import { HelpPanel } from './components/HelpPanel';
+import { INTRO_REPLAY_EVENT } from './intro/config';
 import { shouldShowWelcome } from './utils/welcome';
 import { DigitalTwin } from './components/DigitalTwin';
 import { KeyConfigDrawer } from './components/KeyConfigDrawer';
@@ -965,7 +966,11 @@ export const App: React.FC = () => {
       />
 
 
-      {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
+      {showHelp && <HelpPanel onClose={() => setShowHelp(false)} onReplayIntro={() => {
+        setShowHelp(false);
+        // Let the help dialog restore focus before the intro takes it.
+        window.setTimeout(() => window.dispatchEvent(new Event(INTRO_REPLAY_EVENT)), 0);
+      }} />}
       {showWelcome && <div role="region" aria-label="Getting started" className="shrink-0 border-b border-[#aeb7c6] bg-[#f3f5f8] px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-[#343434]">
         <strong className="text-[#1351AA] uppercase tracking-wider">Welcome</strong>
         <span className="flex-1 min-w-[240px]">Connect your pad → assign keys and layers → review and upload. Nothing is assigned for you.</span>

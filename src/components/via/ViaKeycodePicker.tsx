@@ -87,7 +87,7 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
         Keys, media, layer switches and OLED NEXT run on the pad after upload. Macros run only in the desktop app with USB events.
       </p>
       {/* Only categories with a real MPAD3 or PC route are offered. */}
-      <div className="grid grid-cols-6 gap-1 bg-[#FFFFFF] p-1 border border-[#E3E2DE] text-[10px] font-mono text-center">
+      <div className="intro-quick-categories grid grid-cols-6 gap-1 bg-[#FFFFFF] p-1 border border-[#E3E2DE] text-[10px] font-mono text-center">
         {(['basic', 'media', 'macro', 'layers', 'oled', 'special'] as const).map(cat => (
           <button
             key={cat}
@@ -104,7 +104,7 @@ export const ViaKeycodePicker: React.FC<ViaKeycodePickerProps> = ({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 sm:grid-cols-8 gap-1.5 max-h-40 overflow-y-auto p-1 pr-1.5 select-none scrollbar-thin scrollbar-thumb-white/10">
+      <div className="intro-quick-keys grid grid-cols-7 sm:grid-cols-8 gap-1.5 max-h-40 overflow-y-auto p-1 pr-1.5 select-none scrollbar-thin scrollbar-thumb-white/10">
         {getActiveList().map(item => {
           const displayLabel = formatKeycodeLabel(item);
           const macroId = item.category === 'macro' ? Number(item.code.slice(1)) : null;

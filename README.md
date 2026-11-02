@@ -179,6 +179,7 @@ tools/               Generators and validation scripts
 - [OLED modes](docs/OLED_MODES.md) and [lighting page](docs/LIGHTING_PAGE.md) — feature details and limitations
 - [Preset shortcut sources](docs/PRESET_SHORTCUT_SOURCES.md) — sources and shortcut caveats
 - [Release checklist](docs/RELEASE_CHECKLIST.md) — pending Windows and physical-device checks
+- [Multi-cursor intro prompt](docs/multi-cursor-intro-prompt.md) — updated animation requirements and implementation notes
 - [Bundled firmware](electron/firmware/README.md) — UF2 provenance, checksums and testing status
 
 Some detailed documents describe earlier stages of development; where they conflict with current behavior, check the source and the current safety notes above.

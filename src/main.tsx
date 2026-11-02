@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
+import { Intro, IntroBoundary } from './intro/Intro';
 import './index.css';
 
 class StartupBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
@@ -19,6 +20,6 @@ class StartupBoundary extends React.Component<{ children: React.ReactNode }, { f
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <StartupBoundary><App /></StartupBoundary>
+    <StartupBoundary><App /><IntroBoundary><Intro /></IntroBoundary></StartupBoundary>
   </React.StrictMode>,
 );

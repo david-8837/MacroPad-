@@ -127,7 +127,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
                   layerCount={layerNames.length}
                 />
               </div>
-              <div className="w-[76px] shrink-0 flex flex-col items-center justify-center gap-2 pl-4 border-l border-[#E3E2DE]">
+              <div className="intro-knob-target w-[76px] shrink-0 flex flex-col items-center justify-center gap-2 pl-4 border-l border-[#E3E2DE]">
                 <RotaryEncoder
                   dial={layer.dial}
                   channelIndex={currentChannelIdx}

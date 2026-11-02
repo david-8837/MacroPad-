@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ENABLE_INTRO } from '../intro/config';
 import { version } from '../../package.json';
 
 const LINKS = {
@@ -18,7 +19,8 @@ function openLink(id: LinkId) {
   }
 }
 
-export function HelpPanel({ onClose }: { onClose: () => void }) {
+export function HelpPanel({ onClose, onReplayIntro }: { onClose: () => void; onReplayIntro: () => void }) {
+  const [motionBlocked, setMotionBlocked] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -52,6 +54,13 @@ export function HelpPanel({ onClose }: { onClose: () => void }) {
               <li>Choose <strong>Upload to deck</strong>, review the bindings and upload. Change and upload again whenever you like.</li>
             </ol>
           </section>
+          {ENABLE_INTRO && <section className="border-t border-[#c7c7c7] pt-4"><h3 className="font-bold text-[#141414]">Intro animation</h3><p className="mt-1 leading-relaxed">Replay the scripted introduction without changing your settings.</p>
+            <button type="button" onClick={() => {
+              if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setMotionBlocked(true); return; }
+              onReplayIntro();
+            }} className="border border-[#999] px-3 py-2 mt-3 text-xs font-bold hover:bg-[#141414] hover:text-white">Replay intro</button>
+            {motionBlocked && <p role="status" className="mt-2 text-xs">The intro is off because Reduce Motion is enabled in your device settings.</p>}
+          </section>}
           <section className="border-t border-[#c7c7c7] pt-4"><h3 className="font-bold text-[#141414]">Pad or PC?</h3><p className="mt-1 leading-relaxed">Pad-native bindings run on compatible firmware after upload. Desktop-only actions need this app running and a compatible serial connection; the upload review identifies them and any unsupported bindings.</p></section>
           <section className="border-t border-[#c7c7c7] pt-4"><h3 className="font-bold text-[#141414]">Your data</h3><p className="mt-1 leading-relaxed">Assignments, settings and cached application details are stored on this computer. Backups you export can contain private paths and settings. The desktop app also runs a token-protected webhook on localhost for local automation. Project links open in your browser.</p></section>
           <section className="border-t border-[#c7c7c7] pt-4"><h3 className="font-bold text-[#141414]">Project &amp; credits</h3><p className="mt-1 leading-relaxed">KADOWAZ Deck Studio and its contributors. See the project and asset credits for third-party icon attribution.</p>
