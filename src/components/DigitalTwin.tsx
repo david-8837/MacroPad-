@@ -97,7 +97,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
     <div className="workspace-arrival w-full flex flex-col items-center">
 
       {/* ── section header: label + readout ─────────────────────── */}
-      <div className="w-full flex items-end justify-between border-b border-[#C7C7C7] pb-2 mb-5">
+      <div className="w-full max-w-[624px] flex items-end justify-between border-b border-[#C7C7C7] pb-2 mb-5">
         <div className="flex items-baseline gap-3">
           <span className="eyebrow eyebrow--ink">Deck · 09</span>
           <span className="idx whitespace-nowrap">9 keys · 1 encoder · 128×32</span>
@@ -107,7 +107,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
         </span>
       </div>
 
-      <div className="flex flex-wrap items-start justify-center gap-6">
+      <div className="flex items-start justify-center gap-6">
 
         {/* ── the physical object: an ink slab ──────────────────── */}
         <div className="chassis relative w-[352px] shrink-0 select-none">
@@ -256,7 +256,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
         </div>
       </div>
 
-      <p className="mt-5 w-full text-[10px] font-mono uppercase tracking-[0.12em] text-[#646464] border-t border-[#C7C7C7] pt-3">
+      <p className="mt-5 w-full max-w-[624px] text-[10px] font-mono uppercase tracking-[0.12em] text-[#646464] border-t border-[#C7C7C7] pt-3">
         Tap a switch to actuate · long-press for alternate · open a drawer to rebind
       </p>
     </div>
