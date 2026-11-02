@@ -163,6 +163,7 @@ bash scripts/test-all.sh --arm  # Also cross-compile; requires the Pico SDK and 
 
 ```text
 src/                 React editor and UI
+website/             Standalone product website (static HTML/CSS/JS)
 electron/            Electron main process, native integrations and bundled UF2s
 host/                MPAD3 host protocol and tests
 firmware/            Pico SDK firmware and host-side firmware tests
@@ -175,6 +176,7 @@ tools/               Generators and validation scripts
 - [Complete wiring guide](docs/Macropad_Complete_Wiring_Guide.pdf) — the combined V1 and V2 build reference
 - [Hardware overview](docs/HARDWARE.md) — components, pinout and electrical notes
 - [User guide](docs/USER_GUIDE.md) — editor and device workflows
+- [Product website](website/README.md) — local preview and static deployment instructions
 - [Architecture](docs/ARCHITECTURE.md) and [MPAD3 protocol](docs/PROTOCOL.md) — how the pieces communicate
 - [OLED modes](docs/OLED_MODES.md) and [lighting page](docs/LIGHTING_PAGE.md) — feature details and limitations
 - [Preset shortcut sources](docs/PRESET_SHORTCUT_SOURCES.md) — sources and shortcut caveats
