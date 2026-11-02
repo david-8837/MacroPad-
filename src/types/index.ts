@@ -153,13 +153,16 @@ export interface OLEDState {
   cpuTemp: number | null;
   nowPlayingTrack: string | null;
   nowPlayingArtist: string | null;
+  /** Runtime-only state: never mistake a failed probe for an empty session. */
+  mediaStatus?: 'checking' | 'ready' | 'unavailable' | 'error';
+  mediaError?: string | null;
   isPlaying: boolean;
   trackProgress: number | null; // 0 to 100, null when there is no timeline
   /** WM_SESSION / SMTC extras the drawer shows but the 128px panel does not. */
   nowPlayingApp?: string | null;
   trackPositionS?: number | null;
   trackDurationS?: number | null;
-  /** Which subsystem answered for each metric: { cpu: 'typeperf', gpu: 'NVIDIA' }. */
+  /** Which subsystem answered for each metric. */
   metricsSource?: { cpu: string | null; gpu: string | null; temp: string | null } | null;
   customTitle?: string;
   customSubtitle?: string;

@@ -55,10 +55,6 @@
     height: 100%;
   }
 
-html {
-  zoom: 0.9;
-}
-
   body {
     margin: 0;
     background: var(--cream);
@@ -335,6 +331,38 @@ html {
   .preset-card:hover, .btn:hover, .premium-action:hover { transform: none; }
 }
 
+/* A single, short entrance after startup. No real choices are made on the
+   user's behalf; the class is removed as soon as they interact. */
+@keyframes startup-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .startup-entrance .workspace-arrival { animation: none; }
+  .startup-entrance .app-header,
+  .startup-entrance [aria-label="Getting started"],
+  .startup-entrance .workspace-rail > *,
+  .startup-entrance .startup-deck-heading,
+  .startup-entrance .startup-deck-chassis,
+  .startup-entrance .startup-deck-controls > *,
+  .startup-entrance .startup-keycode-tray,
+  .startup-entrance .designer-inspector:not(.designer-inspector--editing) > * {
+    animation: startup-rise 420ms cubic-bezier(.22, 1, .36, 1) backwards;
+  }
+  .startup-entrance .app-header { animation-delay: 0ms; }
+  .startup-entrance [aria-label="Getting started"] { animation-delay: 55ms; }
+  .startup-entrance .workspace-rail > * { animation-delay: 75ms; }
+  .startup-entrance .startup-deck-heading { animation-delay: 110ms; }
+  .startup-entrance .startup-deck-chassis { animation-delay: 170ms; }
+  .startup-entrance .startup-deck-controls > :nth-child(1) { animation-delay: 230ms; }
+  .startup-entrance .startup-deck-controls > :nth-child(2) { animation-delay: 280ms; }
+  .startup-entrance .startup-deck-controls > :nth-child(n+3) { animation-delay: 330ms; }
+  .startup-entrance .startup-keycode-tray { animation-delay: 340ms; }
+  .startup-entrance .designer-inspector:not(.designer-inspector--editing) > * { animation-delay: 290ms; }
+  .startup-entrance .designer-inspector:not(.designer-inspector--editing) > :nth-child(2) { animation-delay: 340ms; }
+  .startup-entrance .designer-inspector:not(.designer-inspector--editing) > :nth-child(n+3) { animation-delay: 390ms; }
+}
+
 /* Drawers slide within their clipped column; the preset dialog moves separately
    from its fixed overlay so that the backdrop stays in place. */
 @keyframes editor-slide-in {
@@ -399,6 +427,19 @@ html {
 .tester-page { scrollbar-gutter: stable; }
 .tester-readout { height: 128px; overflow-y: auto; scrollbar-gutter: stable; }
 
+/* At laptop widths, overlay the editor instead of clipping its right edge when
+   the pad, sidebar and full-width drawer do not fit side by side. */
+@media (min-width: 901px) and (max-width: 1399px) {
+  .designer-layout { position: relative; }
+  .designer-inspector--editing {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(480px, 100%);
+    box-shadow: -12px 0 28px #14141426;
+    z-index: 10;
+  }
+}
+
 /* Keep the workspace usable without sacrificing the layer/tools rail on laptops
    and narrow windows. The editor becomes an overlay rather than a 360px column. */
 @media (max-width: 900px) {
@@ -407,7 +448,7 @@ html {
   .workspace-rail { position: absolute; top: 37px; bottom: 0; left: 0; z-index: 40; box-shadow: 8px 0 20px #14141420; }
   .workspace-rail:not(.workspace-rail--open) { display: none; }
   .designer-layout { flex-direction: column; overflow-y: auto; }
-  .designer-pad { flex: none; width: 100%; padding: 1rem; overflow: visible; }
+  .designer-pad { flex: none; width: 100%; min-width: 0; padding: 1rem; overflow: visible; }
   .designer-inspector { flex: none; width: 100%; min-width: 0; overflow: visible; }
   .designer-inspector--editing { position: fixed; z-index: 45; inset: 64px 0 0; width: 100%; overflow: hidden; }
 }

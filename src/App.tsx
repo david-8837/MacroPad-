@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Deck, Layer, KeyBinding, DialBinding, OLEDState, ActionDefinition, DiscoveredApp } from './types';
 import { defaultDeck } from './data/defaultDeck';
 import { TopNavbar } from './components/TopNavbar';
+import { HelpPanel } from './components/HelpPanel';
+import { shouldShowWelcome } from './utils/welcome';
 import { DigitalTwin } from './components/DigitalTwin';
 import { KeyConfigDrawer } from './components/KeyConfigDrawer';
 import { KnobConfigDrawer } from './components/KnobConfigDrawer';
@@ -46,7 +48,7 @@ import { UploadSheet } from './components/UploadSheet';
 import { CommandPalette } from './components/CommandPalette';
 import { PresetsPage } from './components/PresetsPage';
 import { applyLayerPreset, LayerPreset } from './data/layerPresets';
-import type { ElectronHardwareEvent, NowPlayingInfo, SystemMetrics } from './types/electron';
+import type { ElectronHardwareEvent, NowPlayingResult, SystemMetrics } from './types/electron';
 import {
   Trash2,
   Activity,
@@ -162,6 +164,19 @@ export const App: React.FC = () => {
     }));
   };
 
+  // Never show onboarding over settings from an existing installation.
+  const [showWelcome, setShowWelcome] = useState(() => shouldShowWelcome(localStorage));
+  const [showHelp, setShowHelp] = useState(false);
+  const dismissWelcome = () => {
+    setShowWelcome(false);
+    try { localStorage.setItem('kadowaz_guide_seen', '1'); } catch { /* storage may be unavailable */ }
+  };
+  // The entrance is visual only, runs once, and yields immediately to input.
+  const [isStarting, setIsStarting] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIsStarting(false), 900);
+    return () => window.clearTimeout(timer);
+  }, []);
   const [railOpen, setRailOpen] = useState(false);
   const [backupRevision, setBackupRevision] = useState(0);
   const [selectedKeyIndex, setSelectedKeyIndex] = useState<number | null>(0);
@@ -215,6 +230,8 @@ export const App: React.FC = () => {
     cpuTemp: null,
     nowPlayingTrack: null,
     nowPlayingArtist: null,
+    mediaStatus: window.electronAPI?.onMediaState ? 'checking' : 'unavailable',
+    mediaError: null,
     isPlaying: false,
     trackProgress: null,
     // Preferences, with the same defaults the drawer's reset button restores, so
@@ -682,11 +699,17 @@ export const App: React.FC = () => {
     const api = window.electronAPI;
     if (!api?.onMediaState) return;
 
-    const apply = (state: NowPlayingInfo | null) => {
+    let active = true;
+    let receivedBroadcast = false;
+    const apply = (result: NowPlayingResult) => {
+      if (!active) return;
+      const state = result.ok ? result.value ?? null : null;
       setOledState(prev => ({
         ...prev,
-        nowPlayingTrack: state?.title || null,
-        nowPlayingArtist: state?.artist || null,
+        mediaStatus: result.ok ? 'ready' : 'error',
+        mediaError: result.ok ? null : result.error || 'Could not read the Windows media session.',
+        nowPlayingTrack: state?.title || state?.artist || null,
+        nowPlayingArtist: state?.title ? state.artist || null : null,
         nowPlayingApp: state?.app ?? null,
         isPlaying: Boolean(state?.isPlaying),
         trackProgress: state ? state.progress : null,
@@ -695,13 +718,12 @@ export const App: React.FC = () => {
       }));
     };
 
-    // One immediate read, so the panel is right before the first poll lands.
+    const unsubscribe = api.onMediaState(result => { receivedBroadcast = true; apply(result); });
+    // Ignore an older initial response if a newer broadcast already arrived.
     api.getNowPlaying?.()
-      .then(res => { if (res.ok) apply(res.value ?? null); })
-      .catch(() => { /* the panel simply stays at NO MEDIA */ });
-
-    const unsubscribe = api.onMediaState(apply);
-    return () => unsubscribe();
+      .then(res => { if (!receivedBroadcast) apply(res); })
+      .catch(() => { if (!receivedBroadcast) apply({ ok: false, error: 'Could not contact the media service.' }); });
+    return () => { active = false; unsubscribe(); };
   }, []);
 
   // Events from the Electron main process: tray menu, localhost webhook, launcher status.
@@ -926,7 +948,9 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="app-shell flex flex-col h-screen w-screen bg-[#E3E2DE] text-[#141414] overflow-hidden">
+    <div className={`app-shell ${isStarting ? 'startup-entrance' : ''} flex flex-col h-screen w-screen bg-[#E3E2DE] text-[#141414] overflow-hidden`}
+      onClickCapture={() => { if (isStarting) setIsStarting(false); }}
+      onKeyDownCapture={() => { if (isStarting) setIsStarting(false); }}>
       {/* Top Application Navbar */}
       <TopNavbar
         activeTab={activeTab}
@@ -937,8 +961,17 @@ export const App: React.FC = () => {
         onDisconnectHardware={() => hardwareBridge.disconnect()}
         onOpenDiagnostics={openHardwareDiagnostics}
         onOpenFirmwarePanel={openFirmwarePanel}
+        onOpenHelp={() => setShowHelp(true)}
       />
 
+
+      {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
+      {showWelcome && <div role="region" aria-label="Getting started" className="shrink-0 border-b border-[#aeb7c6] bg-[#f3f5f8] px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-[#343434]">
+        <strong className="text-[#1351AA] uppercase tracking-wider">Welcome</strong>
+        <span className="flex-1 min-w-[240px]">Connect your pad → assign keys and layers → review and upload. Nothing is assigned for you.</span>
+        <button type="button" onClick={() => setShowHelp(true)} className="font-bold underline">Quick guide</button>
+        <button type="button" onClick={dismissWelcome} className="border border-[#999] px-2 py-1 font-bold">Dismiss</button>
+      </div>}
 
       {/* ── LABEL RAIL · cols 1–2 of the 12-col workspace ─────────────
            The system's sidebar register: metadata only, never content. */}
@@ -1104,7 +1137,7 @@ export const App: React.FC = () => {
               />
 
               {/* VIA quick keycode tray */}
-              <div className="w-full max-w-[624px] mt-2">
+              <div className="startup-keycode-tray w-full max-w-[624px] mt-2">
                 <ViaKeycodePicker
                   selectedKeyIndex={selectedKeyIndex}
                   onAssignKeycode={handleAssignViaKeycode}
@@ -1117,6 +1150,7 @@ export const App: React.FC = () => {
             }`}>
               {editingKeyBinding ? (
                 <KeyConfigDrawer
+                  key={`${activeLayerId}-${editingKeyBinding.keyIndex}`}
                   keyBinding={editingKeyBinding}
                   totalKeys={activeLayer.keys.length}
                   onSelectKeyIndex={(idx) => {

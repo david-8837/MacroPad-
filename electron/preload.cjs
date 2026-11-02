@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  rendererReady: () => ipcRenderer.send('startup:ready'),
+  openHelpLink: (id) => ipcRenderer.invoke('help:open', id),
   windowControl: (action) => ipcRenderer.send('window-control', action),
   execAction: (action) => ipcRenderer.invoke('exec-action', action),
   onHardwareEvent: (callback) => {

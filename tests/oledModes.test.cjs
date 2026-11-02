@@ -382,6 +382,11 @@ async function runTests() {
       patch(noMedia, 0, 12, 128, 16),
       'an empty media session draws NO MEDIA and nothing else',
     );
+    const failedMedia = new engine.Frame();
+    engine.renderPanel(failedMedia, 'media', {time:0,frame:0,state:{...sampleState,nowPlayingTrack:null,mediaStatus:'error'},deckName:'PAD',layerName:'Layer 0',layerIndex:0,layerCount:4,track:null});
+    const errorLabel = new engine.Frame();
+    errorLabel.text(Math.round((128 - engine.textWidth('MEDIA ERROR')) / 2), 12, 'MEDIA ERROR');
+    assert.strictEqual(patch(failedMedia, 0, 12, 128, 7), patch(errorLabel, 0, 12, 128, 7), 'probe failures are not shown as no media');
   }
 
   console.log('oledModes: all assertions passed (12 modes, 7 baked loops, ' + flash + ' B of frames)');

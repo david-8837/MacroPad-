@@ -33,7 +33,7 @@ The target macropad has nine keys and an encoder. Full Deck optionally uses the 
 - **9 Mechanical Switches (direct GPIO):** one RP2040 pin per key, no 3×3 diode matrix in this build.
 - **1 EC11 Rotary Encoder:** Detented continuous dial with an integrated push switch.
 - **Full Deck OLED (SSD1306 128×32):** wire 3V3/GND and I²C0 GP28 SDA/GP29 SCL (0x3C). Firmware draws baked animations and offline live-mode fallbacks; the assembled panel is not yet bench-tested.
-- **9 planned addressable RGB pixel positions:** You intend to buy a cuttable strip; its exact chipset, per-pixel cut points, current and 5 V supply are unknown. Normal firmware gates physical data OFF after initialization. Lighting presets can be edited/saved but no physical LED output is approved yet.
+- **9 planned addressable RGB pixel positions:** You intend to buy a cuttable strip; its exact chipset, per-pixel cut points, current and 5 V supply are unknown. The current source defaults LED data off, but the bundled Full Deck binary has not been validated. Leave LED power and data disconnected; no physical LED output is approved yet.
 - **Waveshare RP2040-Zero:** Dual-core ARM Cortex-M0+ microcontroller with 2MB onboard flash memory.
 
 ---
@@ -42,7 +42,7 @@ The target macropad has nine keys and an encoder. Full Deck optionally uses the 
 
 Connect the macropad to your Windows PC using a **USB-C data cable** (ensure it is not a power-only charging cable).
 
-Open **KADOWAZ Deck Studio**. In the top right corner of the navigation bar, click **Connect**, then choose **USB serial**.
+Open **KADOWAZ Deck Studio**. The optional welcome strip can be dismissed; the **Help & About** button in the top bar always reopens the quick guide, version, credits, and privacy notes. In the top right corner of the navigation bar, click **Connect**, then choose **USB serial**.
 
 ### USB Serial / CDC Mode
 1. In the connection dropdown, select **USB Serial / COM Port**.

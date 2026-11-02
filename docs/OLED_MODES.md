@@ -100,20 +100,22 @@ measured is `null`, and the panel prints `--`.
 
 | Screen | Value | Source |
 | --- | --- | --- |
-| System Telemetry | CPU % | `typeperf.exe \Processor(_Total)\% Processor Time`, falling back to an `os.cpus()` tick delta |
+| System Telemetry | CPU % | `os.cpus()` active-time delta over the sample interval |
 | System Telemetry | RAM % | `os.totalmem()` / `os.freemem()` |
-| System Telemetry | GPU % | `nvidia-smi`, then `amd-smi`, then the Windows `\GPU Engine(*engtype_3D)` counters |
-| System Telemetry | °C | ACPI `MSAcpi_ThermalZoneTemperature`, else the GPU's own sensor |
+| System Telemetry | GPU % | Windows GPU Engine counters, summing processes per engine and reporting the busiest engine across available adapters; NVIDIA/AMD tools are a fallback |
+| System Telemetry | °C | ACPI `MSAcpi_ThermalZoneTemperature`, else a vendor GPU sensor; an ACPI zone is not necessarily CPU temperature |
 | Now Playing | title, artist, album, app | Windows media session (SMTC) via `GlobalSystemMediaTransportControlsSessionManager` |
 | Now Playing | transport state | `PlaybackInfo.PlaybackStatus` |
 | Now Playing | position | `TimelineProperties.Position` at `LastUpdatedTime`, extrapolated by the elapsed time while playing (capped at 5 s, so a stale timeline cannot jump the bar) |
 
 Consequences worth knowing:
 
-- On a laptop with no ACPI thermal zone and no vendor GPU tool, GPU and °C read
-  `--`. That is the correct answer; the alternative is a plausible fiction.
-- `media` needs an app that talks to SMTC (Spotify, browsers, VLC, iTunes). A
-  player that does not will leave the screen on `NO MEDIA`.
+- GPU and temperature show `--` when no corresponding source is available.
+  Vendor GPU utilization and Windows engine counters measure different things;
+  sampling times and the selected GPU can differ from Task Manager.
+- `media` needs a player that exposes an SMTC session to Windows. A player that
+  does not may leave the screen on `NO MEDIA`; a failed probe shows `MEDIA ERROR`
+  and an explanation in the display drawer instead.
 - CPU and RAM are real on every platform; GPU and temperature are Windows-only.
 
 ## Capacity: how many screens fit

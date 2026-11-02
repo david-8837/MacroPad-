@@ -69,7 +69,7 @@ export const FirmwarePanel: React.FC<FirmwarePanelProps> = ({ isExpanded, keepVi
     setFlashing(true);
     setFlashError(null);
     setFlashSuccess(null);
-    setFlashProgress({ stage: 'copying', percent: 0 });
+    setFlashProgress(null);
     try {
       // The main process rechecks the UF2 and drive before writing anything.
       const res = await window.electronAPI.flashBuiltinFirmware(selected.id, acknowledgedUntested);
@@ -124,14 +124,14 @@ export const FirmwarePanel: React.FC<FirmwarePanelProps> = ({ isExpanded, keepVi
         )}
       </section>
 
-      {flashing && flashProgress && (
+      {flashing && (
         <div role="status" className="border border-[#C7C7C7] px-2.5 py-2.5 bg-[#FFFFFF]">
           <p className="text-[10px] font-mono font-bold text-[#1351AA] break-words">
-            {flashProgress.stage === 'copying' ? 'Transferring UF2 blocks…' : 'Waiting for board reboot…'} {flashProgress.percent}%
+            {!flashProgress ? 'Checking firmware and BOOTSEL drive…' : flashProgress.stage === 'copying' ? `Transferring UF2 blocks… ${flashProgress.percent}%` : 'Transfer complete. Waiting for board reboot…'}
           </p>
-          <div className="mt-2 h-1.5 bg-[#E3E2DE] overflow-hidden">
+          {flashProgress?.stage === 'copying' && <div role="progressbar" aria-label="UF2 transfer" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.max(0, flashProgress.percent))} className="mt-2 h-1.5 bg-[#E3E2DE] overflow-hidden">
             <div className="h-full bg-[#1351AA]" style={{ width: `${Math.min(100, Math.max(0, flashProgress.percent))}%` }} />
-          </div>
+          </div>}
         </div>
       )}
       {flashSuccess && (

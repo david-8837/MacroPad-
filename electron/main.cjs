@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createWebhookServer, generateToken } = require('./webhookServer.cjs');
@@ -14,12 +14,18 @@ const util = require('./native/util.cjs');
 const firmware = require('./native/firmware.cjs');
 
 let mainWindow = null;
+let splashWindow = null;
+let startupTimer = null;
+let startupAttempt = 0;
+let startupFailed = false;
 let tray = null;
 let isQuitting = false;
 let webhookServer = null;
 let webhookToken = '';
 let metricsTimer = null;
+let metricsPollBusy = false;
 let mediaTimer = null;
+let mediaPollBusy = false;
 let lastMediaJson = '';
 const WEBHOOK_PORT = 38491;
 
@@ -76,13 +82,46 @@ function startLocalhostWebhookServer() {
   webhookServer = server;
 }
 
+function showStartupFailure() {
+  clearTimeout(startupTimer);
+  startupFailed = true;
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.webContents.send('startup:failure');
+    splashWindow.show();
+  } else if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    dialog.showErrorBox('KADOWAZ could not start', 'Quit and restart the app. If the problem continues, reinstall from a trusted release.');
+  }
+}
+
+function loadEditor() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const attempt = ++startupAttempt;
+  startupFailed = false;
+  clearTimeout(startupTimer);
+  // This is a failure threshold, not a minimum splash duration or fake progress.
+  startupTimer = setTimeout(showStartupFailure, 20000);
+  const packagedPage = () => mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  const loading = app.isPackaged ? packagedPage() :
+    mainWindow.loadURL('http://localhost:5173').catch(() => {
+      if (attempt === startupAttempt) return packagedPage();
+    });
+  loading.catch((err) => {
+    if (attempt !== startupAttempt) return;
+    console.error('[startup] Failed to load editor:', err);
+    showStartupFailure();
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 900,
     minHeight: 640,
+    show: false,
     frame: false,
+    icon: path.join(__dirname, 'assets/kadowaz.png'),
     backgroundColor: '#0C0E14',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -93,14 +132,25 @@ function createWindow() {
     title: 'KADOWAZ Deck Studio',
   });
 
-  const isDev = !app.isPackaged;
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173').catch(() => {
-      mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-    });
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-  }
+  splashWindow = new BrowserWindow({
+    width: 390, height: 245, resizable: false, frame: false,
+    show: false, skipTaskbar: true, backgroundColor: '#FFFFFF',
+    icon: path.join(__dirname, 'assets/kadowaz.png'),
+    webPreferences: { preload: path.join(__dirname, 'splash-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  const splash = splashWindow;
+  splash.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  splash.webContents.on('will-navigate', (event) => event.preventDefault());
+  splash.once('ready-to-show', () => { if (!splash.isDestroyed()) splash.show(); });
+  splash.webContents.on('did-finish-load', () => {
+    if (startupFailed) splash.webContents.send('startup:failure');
+  });
+  splash.loadFile(path.join(__dirname, 'splash.html')).catch((err) => {
+    console.error('[startup] Failed to load splash:', err);
+    if (!splash.isDestroyed()) splash.destroy();
+    if (splashWindow === splash) splashWindow = null;
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+  });
 
   // The UI is a closed local app: never open new windows or navigate away from it.
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -108,21 +158,51 @@ function createWindow() {
     const allowed = url.startsWith('http://localhost:5173') || url.startsWith('file://');
     if (!allowed) event.preventDefault();
   });
-
+  mainWindow.webContents.on('render-process-gone', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) showStartupFailure();
+    else dialog.showErrorBox('KADOWAZ stopped unexpectedly', 'Quit and restart the app. Your locally saved settings are not intentionally removed.');
+  });
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
       mainWindow.hide();
     }
   });
+  loadEditor();
 }
+
+ipcMain.on('startup:ready', (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return;
+  clearTimeout(startupTimer);
+  mainWindow.show();
+  if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
+  splashWindow = null;
+});
+ipcMain.on('startup:retry', (event) => {
+  if (splashWindow && event.sender === splashWindow.webContents) loadEditor();
+});
+ipcMain.on('startup:quit', (event) => {
+  if (splashWindow && event.sender === splashWindow.webContents) { isQuitting = true; app.quit(); }
+});
+
+const HELP_LINKS = Object.freeze({
+  project: 'https://github.com/david-8837/MacroPad-',
+  guide: 'https://github.com/david-8837/MacroPad-/blob/main/docs/USER_GUIDE.md',
+  credits: 'https://github.com/david-8837/MacroPad-/blob/main/src/assets/preset-icons/README.md',
+});
+ipcMain.handle('help:open', async (event, id) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || !Object.hasOwn(HELP_LINKS, id)) return false;
+  await shell.openExternal(HELP_LINKS[id]);
+  return true;
+});
 
 function buildTrayMenu() {
   return Menu.buildFromTemplate([
     {
       label: 'Open KADOWAZ Studio',
       click: () => {
-        if (mainWindow) {
+        if (splashWindow && !splashWindow.isDestroyed()) { splashWindow.show(); splashWindow.focus(); }
+        else if (mainWindow) {
           mainWindow.show();
           mainWindow.focus();
         }
@@ -142,7 +222,7 @@ function buildTrayMenu() {
 }
 
 function createTrayIcon() {
-  const pngPath = path.join(__dirname, '../b90a1e3c-36e8-45d6-8fec-2b4e8802a836.png');
+  const pngPath = path.join(__dirname, 'assets/kadowaz.png');
   try {
     const img = nativeImage.createFromPath(pngPath);
     if (!img.isEmpty()) return img.resize({ width: 16, height: 16 });
@@ -161,6 +241,7 @@ function createTray() {
   tray.setToolTip('KADOWAZ Deck Studio');
   tray.setContextMenu(buildTrayMenu());
   tray.on('click', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) { splashWindow.show(); splashWindow.focus(); return; }
     if (!mainWindow) return;
     if (mainWindow.isVisible()) mainWindow.hide();
     else {
@@ -309,15 +390,17 @@ ipcMain.handle('firmware:flashBuiltin', async (_event, id, acknowledgedUntested)
 function startMetricsBroadcasting() {
   if (metricsTimer) return;
   metricsTimer = setInterval(async () => {
-    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
-      try {
-        const res = await getMetrics();
-        if (res && res.ok && mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('system-metrics', res.value);
-        }
-      } catch (err) {
-        // silent recovery on next tick
+    if (metricsPollBusy || !mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+    metricsPollBusy = true;
+    try {
+      const res = await getMetrics();
+      if (res && res.ok && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('system-metrics', res.value);
       }
+    } catch (err) {
+      // Recover on the next tick.
+    } finally {
+      metricsPollBusy = false;
     }
   }, 1200);
 }
@@ -333,19 +416,22 @@ function startMetricsBroadcasting() {
 function startMediaBroadcasting() {
   if (mediaTimer) return;
   mediaTimer = setInterval(async () => {
-    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+    if (mediaPollBusy || !mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+    mediaPollBusy = true;
     try {
       const res = await audio.getNowPlaying({ cacheMs: 1500 });
-      if (!res.ok) return;
-      const payload = res.value || null;
-      const json = JSON.stringify(payload);
+      const json = JSON.stringify(res);
       if (json === lastMediaJson) return;
       lastMediaJson = json;
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('media-state-changed', payload);
+        mainWindow.webContents.send('media-state-changed', res);
       }
-    } catch {
-      // A media session disappearing mid-read is normal; try again next tick.
+    } catch (error) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('media-state-changed', { ok: false, error: `Media detection failed: ${error.message}` });
+      }
+    } finally {
+      mediaPollBusy = false;
     }
   }, 2000);
 }
@@ -419,7 +505,8 @@ if (!gotSingleInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
+    if (splashWindow && !splashWindow.isDestroyed()) { splashWindow.show(); splashWindow.focus(); }
+    else if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
@@ -436,6 +523,7 @@ if (!gotSingleInstanceLock) {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      else if (splashWindow && !splashWindow.isDestroyed()) splashWindow.show();
       else mainWindow?.show();
     });
   });

@@ -479,7 +479,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
 
           {/* Progress comes from the serial transaction, including readback. */}
           {isFlashing && (
-            <div className="p-4 bg-[#FFFFFF] border border-[#C7C7C7] space-y-2 font-mono text-[11px]">
+            <div role="status" aria-live="polite" className="p-4 bg-[#FFFFFF] border border-[#C7C7C7] space-y-2 font-mono text-[11px]">
               <div className="flex items-center gap-2 text-[#141414]">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#1351AA]" />
                 <span>
@@ -491,16 +491,13 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
                   {phase === null && 'Starting\u2026'}
                 </span>
               </div>
-              <div className="flex gap-1">
-                {Array.from({ length: progress?.total || 9 }, (_, i) => (
-                  <span
-                    key={i}
-                    className={`h-2 flex-1 ${
-                      phase !== 'sending' || i < (progress?.sent ?? 0) ? 'bg-[#1351AA]' : 'bg-[#EDECE8]'
-                    }`}
-                  />
-                ))}
-              </div>
+              {phase === 'sending' && progress && progress.total > 0 && (
+                <div role="progressbar" aria-label="Acknowledged configuration chunks" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.sent} className="flex gap-1">
+                  {Array.from({ length: progress.total }, (_, i) => (
+                    <span key={i} className={`h-2 flex-1 ${i < progress.sent ? 'bg-[#1351AA]' : 'bg-[#EDECE8]'}`} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

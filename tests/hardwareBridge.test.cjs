@@ -188,6 +188,23 @@ async function run() {
   assert.deepStrictEqual(written, ['link:OLED:MODE:9', 'OLED:CH:2\n']);
   hardwareBridge.serialPort = null;
   hardwareBridge.protocolInfo = null;
+  const oldNavigator = Object.getOwnPropertyDescriptor(global, 'navigator');
+  let rejectSelection;
+  let requests = 0;
+  Object.defineProperty(global, 'navigator', { configurable: true, value: { serial: {
+    requestPort: () => { requests++; return new Promise((_, reject) => { rejectSelection = reject; }); },
+  } } });
+  const pending = hardwareBridge.connectSerial();
+  assert.strictEqual(states.at(-1), 'connecting');
+  assert.strictEqual(await hardwareBridge.connectSerial(), false, 'duplicate connection attempts are blocked');
+  assert.strictEqual(requests, 1);
+  const previousConsoleError = console.error;
+  console.error = () => {};
+  rejectSelection(new Error('port unavailable'));
+  assert.strictEqual(await pending, false);
+  console.error = previousConsoleError;
+  assert.strictEqual(states.at(-1), 'error', 'failed connection offers a retry');
+  if (oldNavigator) Object.defineProperty(global, 'navigator', oldNavigator); else delete global.navigator;
   console.log('hardwareBridge: all assertions passed');
 }
 

@@ -6,6 +6,8 @@ const app = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8');
 const panel = fs.readFileSync(path.join(__dirname, '../src/components/FirmwarePanel.tsx'), 'utf8');
 const main = fs.readFileSync(path.join(__dirname, '../electron/main.cjs'), 'utf8');
 const preload = fs.readFileSync(path.join(__dirname, '../electron/preload.cjs'), 'utf8');
+assert.match(panel, /flashProgress\?\.stage === 'copying' && <div role="progressbar"/);
+assert.match(panel, /Transfer complete. Waiting for board reboot/);
 assert.match(panel, /name: 'Full Deck'/);
 assert.match(panel, /name: 'Keys & Knob'/);
 assert.match(panel, /type="radio"/);

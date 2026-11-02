@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { playKeyClick } from '../utils/soundEffects';
+import { appLibraryNeedsIconRefresh, loadAppLibrary, mergeAppLibrary, saveAppLibrary } from '../utils/appLibrary';
+import { DiscoveredAppIcon } from './DiscoveredAppIcon';
 import {
   Search,
   Package,
@@ -49,7 +51,6 @@ export interface AppLauncherPanelProps {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = 'kadowaz_app_library';
 const CACHE_TIMESTAMP_KEY = 'kadowaz_app_library_ts';
 
 type SortMode = 'az' | 'za' | 'recent';
@@ -145,22 +146,18 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   const electronAvailable = typeof window !== 'undefined' && !!(window as any).electronAPI?.discoverApps;
 
   // ── Cache helpers ──────────────────────────────────────────────────────────
-  const loadCache = useCallback((): DiscoveredApp[] | null => {
+  const loadCache = useCallback((): DiscoveredApp[] => {
     try {
-      const raw = localStorage.getItem(CACHE_KEY);
       const ts = localStorage.getItem(CACHE_TIMESTAMP_KEY);
-      if (raw) {
-        if (ts) setLastScanTimestamp(ts);
-        return JSON.parse(raw) as DiscoveredApp[];
-      }
+      if (ts) setLastScanTimestamp(ts);
     } catch { /* noop */ }
-    return null;
+    return loadAppLibrary();
   }, []);
 
-  const saveCache = useCallback((data: DiscoveredApp[]) => {
+  const saveCache = useCallback((data: DiscoveredApp[], refreshed = false) => {
+    saveAppLibrary(data, refreshed);
     try {
       const ts = new Date().toISOString();
-      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
       localStorage.setItem(CACHE_TIMESTAMP_KEY, ts);
       setLastScanTimestamp(ts);
     } catch { /* noop */ }
@@ -173,8 +170,13 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
     setScanError(null);
     try {
       const result: DiscoveredApp[] = await (window as any).electronAPI.discoverApps();
-      setApps(result);
-      saveCache(result);
+      if (!Array.isArray(result) || result.length === 0) {
+        setScanError('No applications found. The saved list was kept.');
+        return;
+      }
+      const merged = mergeAppLibrary(loadAppLibrary(), result);
+      setApps(merged);
+      saveCache(merged, true);
       setHasScannedOnce(true);
     } catch (err: any) {
       setScanError(err?.message ?? 'Unknown error during app discovery.');
@@ -186,12 +188,11 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   // ── Mount: load cache or scan ──────────────────────────────────────────────
   useEffect(() => {
     const cached = loadCache();
-    if (cached && cached.length > 0) {
+    if (cached.length > 0) {
       setApps(cached);
       setHasScannedOnce(true);
-    } else if (electronAvailable) {
-      runDiscovery();
     }
+    if (electronAvailable && appLibraryNeedsIconRefresh(cached)) runDiscovery();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -593,17 +594,8 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
                       {/* Icon + Validity dot */}
                       <div className="flex items-start gap-3 mb-2.5">
                         <div className="relative shrink-0">
-                          {app.iconDataUrl ? (
-                            <img
-                              src={app.iconDataUrl}
-                              alt={app.name}
-                              className="w-10 h-10 object-contain bg-[#F4F3F0] p-1"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 bg-[#F4F3F0] flex items-center justify-center">
-                              <CatIcon className="w-5 h-5 text-[#646464]" />
-                            </div>
-                          )}
+                          <DiscoveredAppIcon src={app.iconDataUrl} alt={app.name} className="w-10 h-10 object-contain bg-[#F4F3F0] p-1"
+                            fallback={<div className="w-10 h-10 bg-[#F4F3F0] flex items-center justify-center"><CatIcon className="w-5 h-5 text-[#646464]" /></div>} />
                           {/* Validity indicator */}
                           <span
                             className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-[#FFFFFF] ${
@@ -664,20 +656,11 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
               <div className="p-5 space-y-5">
                 {/* Header */}
                 <div className="flex items-start gap-4">
-                  {selectedApp.iconDataUrl ? (
-                    <img
-                      src={selectedApp.iconDataUrl}
-                      alt={selectedApp.name}
-                      className="w-14 h-14 object-contain bg-[#F4F3F0] p-1.5 shrink-0"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 bg-[#F4F3F0] flex items-center justify-center shrink-0">
-                      {(() => {
-                        const Icon = getCategoryIcon(selectedApp.category);
-                        return <Icon className="w-7 h-7 text-[#646464]" />;
-                      })()}
-                    </div>
-                  )}
+                  <DiscoveredAppIcon src={selectedApp.iconDataUrl} alt={selectedApp.name} className="w-14 h-14 object-contain bg-[#F4F3F0] p-1.5 shrink-0"
+                    fallback={<div className="w-14 h-14 bg-[#F4F3F0] flex items-center justify-center shrink-0">{(() => {
+                      const Icon = getCategoryIcon(selectedApp.category);
+                      return <Icon className="w-7 h-7 text-[#646464]" />;
+                    })()}</div>} />
                   <div className="min-w-0 flex-1">
                     <h3 className="text-base font-bold text-[#141414] leading-tight break-words">
                       {selectedApp.name}

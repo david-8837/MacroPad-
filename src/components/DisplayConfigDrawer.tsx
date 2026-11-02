@@ -310,7 +310,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-[#E3E2DE] px-6 pt-3 bg-[#FFFFFF]">
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-[#E3E2DE] px-6 pt-3 bg-[#FFFFFF] shrink-0 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
         <button
           onClick={() => setActiveTab('modes')}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-mono font-bold transition-all border-b-2 ${
@@ -697,11 +697,12 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
                 <LiveMeter label="CPU LOAD" value={oledState.cpuLoad} suffix="%" />
                 <LiveMeter label="RAM USAGE" value={oledState.ramUsage} suffix="%" />
                 <LiveMeter label="GPU LOAD" value={oledState.gpuLoad} suffix="%" />
-                <LiveMeter label="CPU TEMP" value={oledState.cpuTemp} suffix="°C" max={100} tone="ink" />
+                <LiveMeter label="TEMPERATURE" value={oledState.cpuTemp} suffix="°C" max={100} tone="ink" />
               </div>
 
               <div className="text-[10px] font-mono text-[#646464] leading-relaxed border-t border-[#E3E2DE] pt-2">
                 {sourceLine(oledState)}
+                <p className="mt-1">CPU is active time over the sampling interval. Windows GPU counters show the busiest engine across available adapters; vendor fallback uses a different measure. Readings may differ from Task Manager's selected GPU or update timing. Temperature is the reported ACPI zone or GPU sensor, not necessarily CPU temperature.</p>
               </div>
             </div>
 
@@ -742,11 +743,18 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
                     {oledState.nowPlayingApp ? `Session: ${oledState.nowPlayingApp}` : 'Session: unknown app'}
                   </div>
                 </div>
+              ) : oledState.mediaStatus === 'error' || oledState.mediaStatus === 'unavailable' ? (
+                <div role="status" className="text-[11px] font-mono text-[#9A3412] leading-relaxed">
+                  MEDIA UNAVAILABLE — {oledState.mediaError || 'Media detection requires the Windows desktop app.'}
+                  {' '}Try restarting the desktop app. Some players or browsers may not expose a Windows media session.
+                </div>
+              ) : oledState.mediaStatus === 'checking' ? (
+                <div role="status" className="text-[11px] font-mono text-[#646464]">Checking the Windows media session…</div>
               ) : (
                 <div className="text-[11px] font-mono text-[#646464] leading-relaxed">
-                  NO MEDIA — Windows reports no active media session. Press play in any
-                  player and this reads it: title, artist, transport state and position
-                  come from the OS media session (SMTC), not from this app.
+                  NO MEDIA — no readable Windows media session. Start playback in a player
+                  that exposes media information to Windows; title and playback details
+                  come from the OS media session (SMTC).
                 </div>
               )}
             </div>

@@ -402,10 +402,10 @@ rejects it. The required board and instruments are not available to these tests.
 
 ### The desktop side's Windows calls
 
-The same honesty applies to the Electron half. Everything that talks to Windows —
-`typeperf`, the GPU counters, the ACPI thermal zone, the media session (SMTC), the
-WASAPI interop in `audio.cs` — is a `powershell.exe` call, and none of it can run on
-a Linux runner or in this container.
+The same honesty applies to the Electron half. The Windows GPU counters, ACPI
+thermal zone, media session (SMTC), and WASAPI interop in `audio.cs` use
+`powershell.exe` and cannot be exercised on a Linux runner. CPU load uses an
+`os.cpus()` active-time delta instead.
 
 The split is deliberate: **the parsing is pure and tested, the call is not.**
 `tests/media.test.cjs` feeds `parseNowPlaying()` the payload shapes Windows actually

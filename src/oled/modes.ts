@@ -217,7 +217,9 @@ const nowPlaying: OLEDModeSpec = {
     const title = (ctx.state.nowPlayingTrack || '').trim();
     if (!title) {
       fb.text(1, 0, 'NOW PLAYING');
-      centre(fb, 12, 'NO MEDIA', 2);
+      if (ctx.state.mediaStatus === 'error' || ctx.state.mediaStatus === 'unavailable') centre(fb, 12, 'MEDIA ERROR', 1);
+      else if (ctx.state.mediaStatus === 'checking') centre(fb, 12, 'CHECKING...', 1);
+      else centre(fb, 12, 'NO MEDIA', 2);
       return;
     }
 

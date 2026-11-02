@@ -20,6 +20,13 @@ assert.match(css, /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.wor
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.workspace-arrival \{ animation: none/);
 assert.match(css, /:not\(:disabled\):hover/);
 assert.match(css, /:focus-visible/);
+assert.match(css, /@keyframes startup-rise[\s\S]*?translateY\(12px\)/);
+assert.match(css, /@media \(prefers-reduced-motion: no-preference\)[\s\S]*?\.startup-entrance/);
+assert.match(css, /startup-deck-heading \{ animation-delay: 110ms/);
+assert.match(css, /startup-deck-chassis \{ animation-delay: 170ms/);
+assert.match(read('src/App.tsx'), /onClickCapture=\{\(\) => \{ if \(isStarting\) setIsStarting\(false\); \}\}/);
+assert.match(read('electron/splash.html'), /background: #fff/);
+assert.match(read('index.html'), /#startup-screen \{[^}]*background: #fff/);
 console.log('premiumEffects: scoped visual feedback, selection and reduced motion are present');
 for (const component of ['KeyConfigDrawer', 'KnobConfigDrawer', 'DisplayConfigDrawer']) {
   assert.match(read(`src/components/${component}.tsx`), /editor-slide-in/,

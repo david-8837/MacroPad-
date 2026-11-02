@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { KeyBinding, ActionDefinition, DiscoveredApp } from '../types';
 import { playKeyClick } from '../utils/soundEffects';
+import { appLibraryNeedsIconRefresh, loadAppLibrary, mergeAppLibrary, saveAppLibrary } from '../utils/appLibrary';
+import { DiscoveredAppIcon } from './DiscoveredAppIcon';
 import { 
   X, 
   Play, 
@@ -16,7 +18,6 @@ import {
   ExternalLink,
   RefreshCw,
   Monitor,
-  Zap,
 } from 'lucide-react';
 
 interface KeyConfigDrawerProps {
@@ -125,13 +126,9 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   );
 
   // App Launcher Drawer State
-  const [drawerApps, setDrawerApps] = useState<DiscoveredApp[]>(() => {
-    try {
-      const raw = localStorage.getItem('kadowaz_app_library');
-      if (raw) return JSON.parse(raw);
-    } catch { /* noop */ }
-    return [];
-  });
+  const [drawerApps, setDrawerApps] = useState<DiscoveredApp[]>(loadAppLibrary);
+  const drawerAppsRef = useRef(drawerApps);
+  useEffect(() => { drawerAppsRef.current = drawerApps; }, [drawerApps]);
   const [drawerAppSearch, setDrawerAppSearch] = useState('');
   const [drawerAppCategory, setDrawerAppCategory] = useState('all');
   const [selectedDrawerApp, setSelectedDrawerApp] = useState<DiscoveredApp | null>(null);
@@ -148,6 +145,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     editedKey.tapAction?.category === 'app_launch' ? Boolean(editedKey.tapAction.payload?.launchMinimized) : false
   );
   const [isScanningDrawerApps, setIsScanningDrawerApps] = useState(false);
+  const [drawerScanError, setDrawerScanError] = useState('');
 
   // Sync state if active keyBinding changes from outside (e.g. clicking another key on 3x3 macropad)
   useEffect(() => {
@@ -163,19 +161,47 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     }
   }, [keyBinding]);
 
-  // Load apps if not loaded
+  const drawerMounted = useRef(false);
+  const drawerScanBusy = useRef(false);
   useEffect(() => {
-    if (drawerApps.length === 0 && typeof window !== 'undefined' && (window as any).electronAPI?.discoverApps) {
-      setIsScanningDrawerApps(true);
-      (window as any).electronAPI.discoverApps()
-        .then((discovered: DiscoveredApp[]) => {
-          setDrawerApps(discovered);
-          localStorage.setItem('kadowaz_app_library', JSON.stringify(discovered));
-        })
-        .catch(() => {})
-        .finally(() => setIsScanningDrawerApps(false));
-    }
+    drawerMounted.current = true;
+    return () => { drawerMounted.current = false; };
   }, []);
+
+  const refreshDrawerApps = async () => {
+    const api = (window as any).electronAPI;
+    if (!api?.discoverApps || drawerScanBusy.current) return;
+    drawerScanBusy.current = true;
+    setIsScanningDrawerApps(true);
+    setDrawerScanError('');
+    try {
+      const discovered: DiscoveredApp[] = await api.discoverApps();
+      if (!Array.isArray(discovered) || discovered.length === 0) {
+        if (drawerMounted.current) setDrawerScanError('No applications were found. Your saved list was kept; try Rescan or Browse.');
+        return;
+      }
+      const merged = mergeAppLibrary([...loadAppLibrary(), ...drawerAppsRef.current], discovered);
+      saveAppLibrary(merged, true);
+      if (drawerMounted.current) {
+        setDrawerApps(merged);
+        setSelectedDrawerApp(previous => {
+          const refreshed = previous && merged.find(item => item.id === previous.id);
+          return refreshed?.iconDataUrl ? { ...previous!, iconDataUrl: refreshed.iconDataUrl } : previous;
+        });
+      }
+    } catch {
+      if (drawerMounted.current) setDrawerScanError('Could not refresh applications. Your saved list was kept; try Rescan.');
+    } finally {
+      drawerScanBusy.current = false;
+      if (drawerMounted.current) setIsScanningDrawerApps(false);
+    }
+  };
+
+  // Existing caches may contain generic shortcut icons; refresh once after the
+  // icon extraction upgrade while keeping the old list usable during the scan.
+  useEffect(() => {
+    if (activeTab === 'app' && appLibraryNeedsIconRefresh(loadAppLibrary())) void refreshDrawerApps();
+  }, [activeTab]);
 
   // Base unit sizing for perfect fit without horizontal scrolling
   const UNIT_WIDTH = 20.5; // px per 1u
@@ -235,13 +261,13 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if ((captureOnlyWhenFocused && target !== shortcutCaptureRef.current) ||
-          (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'))) {
+          (typeof target?.closest === 'function' && target.closest('input, textarea, select, button, a, summary'))) {
         return;
       }
 
-      // Let keyboard users leave the dedicated field; Tab can still be chosen
-      // on the virtual keyboard or captured with a modifier.
-      if (captureOnlyWhenFocused && e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) return;
+      // Let keyboard users navigate the drawer; Tab can still be chosen on the
+      // virtual keyboard or captured with a modifier.
+      if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) return;
       e.preventDefault();
       e.stopPropagation();
       playKeyClick('down');
@@ -368,21 +394,58 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     onSave(updated);
   };
 
-  const handleManualSave = () => {
-    if (activeTab === 'text' && textSnippet) {
-      const updated = {
+  const selectedAppAction = (): ActionDefinition | null => selectedDrawerApp ? {
+    id: `app-launch-${Date.now()}`,
+    category: 'app_launch',
+    name: `Launch ${selectedDrawerApp.name}`,
+    payload: {
+      appId: selectedDrawerApp.appId || '',
+      appName: selectedDrawerApp.name,
+      exePath: selectedDrawerApp.exePath,
+      launchArgs: appCustomArgs,
+      focusExisting: appFocusExisting,
+      launchMinimized: appLaunchMinimized,
+      iconDataUrl: selectedDrawerApp.iconDataUrl,
+      targetType: selectedDrawerApp.targetType,
+      source: selectedDrawerApp.source,
+    },
+  } : null;
+
+  const assignedApp = editedKey.tapAction?.category === 'app_launch' ? editedKey.tapAction.payload : null;
+  const matchingAssignedApp = assignedApp && drawerApps.find(item =>
+    (assignedApp.appId && item.appId === assignedApp.appId) ||
+    (assignedApp.exePath && item.exePath?.toLowerCase() === assignedApp.exePath.toLowerCase()));
+  const assignedIcon = matchingAssignedApp?.iconDataUrl || assignedApp?.iconDataUrl;
+
+  const canAssign = activeTab === 'app' ? selectedDrawerApp !== null
+    : activeTab === 'text' ? textSnippet.trim().length > 0
+    : recordedKeys.length > 0;
+
+  const handleAssign = () => {
+    if (!canAssign) return;
+    if (activeTab === 'app' && selectedDrawerApp) {
+      const action = selectedAppAction();
+      if (!action) return;
+      playKeyClick('heavy');
+      onSave({
+        ...editedKey,
+        label: appCustomLabel.trim() || selectedDrawerApp.name.slice(0, 8),
+        sublabel: selectedDrawerApp.category.toUpperCase(),
+        iconName: 'Sparkles',
+        tapAction: action,
+      });
+    } else if (activeTab === 'text') {
+      onSave({
         ...editedKey,
         tapAction: {
           id: `text-${Date.now()}`,
-          category: 'script' as const,
+          category: 'script',
           name: `Type: "${textSnippet.slice(0, 15)}..."`,
-          payload: { command: textSnippet }
+          payload: { command: textSnippet },
         },
         label: textSnippet.slice(0, 8),
-        sublabel: 'Text Macro'
-      };
-      setEditedKey(updated);
-      onSave(updated);
+        sublabel: 'Text Macro',
+      });
     } else {
       onSave(editedKey);
     }
@@ -427,7 +490,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden editor-slide-in">
       
       {/* DRAWER TOP BAR: Switch Navigator & Direct Switch Selector */}
-      <div className="px-4 py-2.5 border-b border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between gap-3 max-[1463px]:flex-wrap">
+      <div className="px-4 py-2.5 border-b border-[#E3E2DE] bg-[#FFFFFF] flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2.5">
           {/* Key Index Badge */}
           <div
@@ -455,7 +518,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         {/* Quick Switch Switcher Pills (1 to 9) */}
         <div className="flex shrink-0 items-center gap-1">
           {onSelectKeyIndex && (
-            <div className="hidden sm:flex items-center gap-0.5 bg-[#EDECE8] p-0.5 border border-[#E3E2DE]">
+            <div className="flex items-center gap-0.5 bg-[#EDECE8] p-0.5 border border-[#E3E2DE]">
               {Array.from({ length: totalKeys }).map((_, idx) => (
                 <button
                   key={idx}
@@ -515,7 +578,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-[#E3E2DE] bg-[#FFFFFF] shrink-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-b border-[#E3E2DE] bg-[#FFFFFF] shrink-0">
         <label htmlFor="key-icon" className="text-[10px] font-bold uppercase tracking-wider text-[#444343]">Key icon</label>
         <select id="key-icon" value={editedKey.iconName || ''} onChange={event => {
           const updated = { ...editedKey, iconName: event.target.value };
@@ -568,7 +631,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
       </div>
 
       {/* DRAWER BODY */}
-      <div className="flex-1 p-3.5 overflow-y-auto space-y-3">
+      <div className="flex-1 min-h-0 p-3.5 overflow-y-auto space-y-3">
 
         {/* TAB 1: FULL SIZE KEYBOARD & MULTI-KEY COMBO BUILDER */}
         {activeTab === 'keyboard' && (
@@ -880,17 +943,8 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                 </div>
 
                 <div className="flex items-center gap-3 bg-[#EDECE8] p-3 border border-[#E3E2DE]">
-                  {editedKey.tapAction.payload?.iconDataUrl ? (
-                    <img
-                      src={editedKey.tapAction.payload.iconDataUrl}
-                      alt={editedKey.label}
-                      className="w-10 h-10 object-contain shrink-0 "
-                    />
-                  ) : (
-                    <div className="w-10 h-10 bg-[#F4F3F0] flex items-center justify-center shrink-0">
-                      <Sparkles className="w-5 h-5 text-[#1351AA]" />
-                    </div>
-                  )}
+                  <DiscoveredAppIcon src={assignedIcon} alt={editedKey.label} className="w-10 h-10 object-contain shrink-0"
+                    fallback={<div className="w-10 h-10 bg-[#F4F3F0] flex items-center justify-center shrink-0"><Sparkles className="w-5 h-5 text-[#1351AA]" /></div>} />
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -957,6 +1011,98 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               </div>
             )}
 
+            {/* Selected app and optional launch settings */}
+            {selectedDrawerApp && (
+              <div className="p-3.5 bg-[#FFFFFF] border border-[#C7C7C7] space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <DiscoveredAppIcon src={selectedDrawerApp.iconDataUrl} alt={selectedDrawerApp.name} className="w-6 h-6 object-contain"
+                      fallback={<Monitor className="w-5 h-5 text-[#646464]" />} />
+                    <span className="text-xs font-bold text-[#141414] truncate">
+                      Selected: {selectedDrawerApp.name}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDrawerApp(null)}
+                    aria-label="Clear selected application"
+                    className="p-1 text-[#646464] hover:text-[#141414]"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <details className="text-xs font-mono"><summary className="cursor-pointer font-bold text-[#1351AA]">Launch options</summary>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono mt-3">
+                  {/* Custom Label */}
+                  <div>
+                    <label className="text-[10px] text-[#646464] block mb-1">
+                      Key Label (Max 8 chars recommended)
+                    </label>
+                    <input
+                      type="text"
+                      value={appCustomLabel}
+                      onChange={(e) => setAppCustomLabel(e.target.value)}
+                      placeholder={selectedDrawerApp.name.slice(0, 8)}
+                      className="w-full px-2.5 py-1.5 bg-[#EDECE8] border border-[#E3E2DE] text-[#141414] font-mono text-xs focus:outline-none focus:border-[#1351AA]"
+                    />
+                  </div>
+
+                  {/* Launch Arguments */}
+                  <div>
+                    <label className="text-[10px] text-[#646464] block mb-1">
+                      Optional Launch Arguments
+                    </label>
+                    <input
+                      type="text"
+                      value={appCustomArgs}
+                      onChange={(e) => setAppCustomArgs(e.target.value)}
+                      placeholder="e.g. --new-window"
+                      className="w-full px-2.5 py-1.5 bg-[#EDECE8] border border-[#E3E2DE] text-[#141414] font-mono text-xs focus:outline-none focus:border-[#1351AA]"
+                    />
+                  </div>
+                </div>
+
+                {/* Advanced Launch Checkboxes */}
+                <div className="flex flex-wrap items-center gap-4 text-[11px] font-mono text-[#444343] pt-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={appFocusExisting}
+                      onChange={(e) => setAppFocusExisting(e.target.checked)}
+                      className="accent-[#1351AA]"
+                    />
+                    <span>Focus if already open</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={appLaunchMinimized}
+                      onChange={(e) => setAppLaunchMinimized(e.target.checked)}
+                      className="accent-[#1351AA]"
+                    />
+                    <span>Launch minimized</span>
+                  </label>
+                </div>
+
+                </details>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const action = selectedAppAction();
+                      if (action) onTestAction(action);
+                    }}
+                    className="py-2 px-3 bg-[#F4F3F0] hover:bg-[#EDECE8] text-[#444343] border border-[#E3E2DE] text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Test selected app</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Application Library Search & Browse Controls */}
             <div className="space-y-2.5">
               <div className="flex items-center justify-between">
@@ -976,12 +1122,14 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                             setDrawerApps(prev => {
                               const exists = prev.some(a => a.id === browsed.id);
                               const next = exists ? prev.map(a => a.id === browsed.id ? browsed : a) : [browsed, ...prev];
-                              localStorage.setItem('kadowaz_app_library', JSON.stringify(next));
+                              saveAppLibrary(next);
                               return next;
                             });
                             setSelectedDrawerApp(browsed);
                             setAppCustomLabel(browsed.name);
-                            setAppCustomArgs('');
+                            setAppCustomArgs(browsed.launchArgs || '');
+                            setAppFocusExisting(false);
+                            setAppLaunchMinimized(false);
                           }
                         } catch { /* noop */ }
                       }
@@ -994,19 +1142,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
                   <button
                     type="button"
-                    onClick={async () => {
-                      if ((window as any).electronAPI?.discoverApps) {
-                        setIsScanningDrawerApps(true);
-                        try {
-                          const result: DiscoveredApp[] = await (window as any).electronAPI.discoverApps();
-                          setDrawerApps(result);
-                          localStorage.setItem('kadowaz_app_library', JSON.stringify(result));
-                        } catch { /* noop */ }
-                        finally {
-                          setIsScanningDrawerApps(false);
-                        }
-                      }
-                    }}
+                    onClick={() => void refreshDrawerApps()}
                     disabled={isScanningDrawerApps}
                     className="flex items-center gap-1 px-2 py-1 bg-[#F4F3F0] hover:bg-[#EDECE8] text-[#444343] hover:text-[#141414] border border-[#E3E2DE] text-[10px] font-mono transition-all cursor-pointer disabled:opacity-40"
                     title="Rescan PC Applications"
@@ -1015,6 +1151,9 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                   </button>
                 </div>
               </div>
+
+              {isScanningDrawerApps && <p role="status" className="text-[10px] text-[#646464]">Refreshing applications and icons…</p>}
+              {drawerScanError && <p role="status" className="text-[10px] text-[#9A3412]">{drawerScanError}</p>}
 
               {/* Search Bar */}
               <div className="relative">
@@ -1092,32 +1231,27 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                 return filtered.map((app) => {
                   const isSelected = selectedDrawerApp?.id === app.id;
                   return (
-                    <div
+                    <button
                       key={app.id}
+                      type="button"
+                      aria-pressed={isSelected}
                       onClick={() => {
                         playKeyClick('down');
                         setSelectedDrawerApp(app);
                         setAppCustomLabel(app.name);
                         setAppCustomArgs(app.launchArgs || '');
+                        setAppFocusExisting(false);
+                        setAppLaunchMinimized(false);
                       }}
-                      className={`p-2.5 border transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                      className={`w-full text-left p-2.5 border transition-all flex items-center justify-between gap-3 cursor-pointer ${
  isSelected
  ? 'bg-[#EDECE8] border-[#1351AA]'
  : 'bg-[#FFFFFF] hover:bg-[#FFFFFF] border-[#E3E2DE] hover:border-[#C7C7C7]'
  }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        {app.iconDataUrl ? (
-                          <img
-                            src={app.iconDataUrl}
-                            alt={app.name}
-                            className="w-7 h-7 object-contain shrink-0"
-                          />
-                        ) : (
-                          <div className="w-7 h-7 bg-[#F4F3F0] flex items-center justify-center shrink-0">
-                            <Monitor className="w-4 h-4 text-[#646464]" />
-                          </div>
-                        )}
+                        <DiscoveredAppIcon src={app.iconDataUrl} alt={app.name} className="w-7 h-7 object-contain shrink-0"
+                          fallback={<div className="w-7 h-7 bg-[#F4F3F0] flex items-center justify-center shrink-0"><Monitor className="w-4 h-4 text-[#646464]" /></div>} />
 
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-bold text-[#141414] truncate">{app.name}</p>
@@ -1144,162 +1278,20 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                           {isSelected ? 'SELECTED' : 'SELECT'}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   );
                 });
               })()}
             </div>
 
-            {/* Selected App Customization & Assignment Panel */}
-            {selectedDrawerApp && (
-              <div className="p-3.5 bg-[#FFFFFF] border border-[#C7C7C7] space-y-3 animate-in fade-in duration-150">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {selectedDrawerApp.iconDataUrl && (
-                      <img
-                        src={selectedDrawerApp.iconDataUrl}
-                        alt={selectedDrawerApp.name}
-                        className="w-6 h-6 object-contain "
-                      />
-                    )}
-                    <span className="text-xs font-bold text-[#141414] truncate">
-                      Configure: {selectedDrawerApp.name}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDrawerApp(null)}
-                    className="p-1 text-[#646464] hover:text-[#141414]"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                  {/* Custom Label */}
-                  <div>
-                    <label className="text-[10px] text-[#646464] block mb-1">
-                      Key Label (Max 8 chars recommended)
-                    </label>
-                    <input
-                      type="text"
-                      value={appCustomLabel}
-                      onChange={(e) => setAppCustomLabel(e.target.value)}
-                      placeholder={selectedDrawerApp.name.slice(0, 8)}
-                      className="w-full px-2.5 py-1.5 bg-[#EDECE8] border border-[#E3E2DE] text-[#141414] font-mono text-xs focus:outline-none focus:border-[#1351AA]"
-                    />
-                  </div>
-
-                  {/* Launch Arguments */}
-                  <div>
-                    <label className="text-[10px] text-[#646464] block mb-1">
-                      Optional Launch Arguments
-                    </label>
-                    <input
-                      type="text"
-                      value={appCustomArgs}
-                      onChange={(e) => setAppCustomArgs(e.target.value)}
-                      placeholder="e.g. --new-window"
-                      className="w-full px-2.5 py-1.5 bg-[#EDECE8] border border-[#E3E2DE] text-[#141414] font-mono text-xs focus:outline-none focus:border-[#1351AA]"
-                    />
-                  </div>
-                </div>
-
-                {/* Advanced Launch Checkboxes */}
-                <div className="flex items-center gap-4 text-[11px] font-mono text-[#444343] pt-1">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={appFocusExisting}
-                      onChange={(e) => setAppFocusExisting(e.target.checked)}
-                      className="accent-[#1351AA]"
-                    />
-                    <span>Focus if already open</span>
-                  </label>
-
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={appLaunchMinimized}
-                      onChange={(e) => setAppLaunchMinimized(e.target.checked)}
-                      className="accent-[#1351AA]"
-                    />
-                    <span>Launch minimized</span>
-                  </label>
-                </div>
-
-                {/* Assign to Key Button */}
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playKeyClick('heavy');
-                      const updated: KeyBinding = {
-                        ...editedKey,
-                        label: appCustomLabel.trim() || selectedDrawerApp.name.slice(0, 8),
-                        sublabel: selectedDrawerApp.category.toUpperCase(),
-                        iconName: 'Sparkles',
-                        tapAction: {
-                          id: `app-launch-${Date.now()}`,
-                          category: 'app_launch',
-                          name: `Launch ${selectedDrawerApp.name}`,
-                          payload: {
-                            appId: selectedDrawerApp.appId || '',
-                            appName: selectedDrawerApp.name,
-                            exePath: selectedDrawerApp.exePath,
-                            launchArgs: appCustomArgs,
-                            focusExisting: appFocusExisting,
-                            launchMinimized: appLaunchMinimized,
-                            iconDataUrl: selectedDrawerApp.iconDataUrl,
-                            targetType: selectedDrawerApp.targetType,
-                            source: selectedDrawerApp.source,
-                          }
-                        }
-                      };
-                      setEditedKey(updated);
-                      onSave(updated);
-                    }}
-                    className="flex-1 py-2 px-3 bg-[#1351AA] hover:bg-[#1351AA] text-[#E3E2DE] text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  >
-                    <Zap className="w-4 h-4 fill-current" />
-                    <span>Assign to Switch #{editedKey.keyIndex + 1}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onTestAction({
-                        id: `test-${selectedDrawerApp.id}`,
-                        category: 'app_launch',
-                        name: `Launch ${selectedDrawerApp.name}`,
-                        payload: {
-                          appId: selectedDrawerApp.appId || '',
-                          appName: selectedDrawerApp.name,
-                          exePath: selectedDrawerApp.exePath,
-                          launchArgs: appCustomArgs,
-                          focusExisting: appFocusExisting,
-                          launchMinimized: appLaunchMinimized,
-                          iconDataUrl: selectedDrawerApp.iconDataUrl,
-                          targetType: selectedDrawerApp.targetType,
-                          source: selectedDrawerApp.source,
-                        }
-                      });
-                    }}
-                    className="py-2 px-3 bg-[#F4F3F0] hover:bg-[#EDECE8] text-[#444343] border border-[#E3E2DE] text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Test</span>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
       </div>
 
       {/* DRAWER FOOTER: Action Testing & Save Status */}
-      <div className="px-4 py-2.5 border-t border-[#E3E2DE] flex items-center justify-between bg-[#FFFFFF] shrink-0">
+      <div className="px-4 py-2.5 border-t border-[#E3E2DE] flex flex-wrap gap-2 items-center justify-between bg-[#FFFFFF] shrink-0">
         <button
           type="button"
           onClick={() => {
@@ -1307,25 +1299,28 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               onTestAction(editedKey.tapAction);
             }
           }}
-          className="flex items-center gap-1.5 text-xs text-[#1351AA] hover:underline font-mono cursor-pointer"
+          disabled={!editedKey.tapAction}
+          className="flex items-center gap-1.5 text-xs text-[#1351AA] hover:underline font-mono cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Play className="w-3.5 h-3.5" /> Test Switch Action
         </button>
 
         <div className="flex items-center gap-2">
-          {!hideCloseButton && <button
+          <button
             type="button"
             onClick={onClose}
             className="px-3.5 py-1.5 border border-[#E3E2DE] text-xs text-[#444343] hover:text-[#141414] hover:bg-[#F4F3F0] transition-colors cursor-pointer"
           >
-            Close
-          </button>}
+            {hideCloseButton ? 'Done' : 'Close'}
+          </button>
           <button
             type="button"
-            onClick={handleManualSave}
-            className="px-4 py-1.5 bg-[#1351AA] hover:bg-[#1351AA] text-[#E3E2DE] text-xs font-bold flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+            onClick={handleAssign}
+            disabled={!canAssign}
+            title={!canAssign ? (activeTab === 'app' ? 'Select an application first' : activeTab === 'text' ? 'Enter text first' : 'Choose a shortcut first') : undefined}
+            className="px-4 py-1.5 bg-[#1351AA] hover:bg-[#10458f] text-white text-xs font-bold flex items-center gap-1 transition-transform active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
           >
-            <Check className="w-3.5 h-3.5" /> Save Changes
+            <Check className="w-3.5 h-3.5" /> Assign
           </button>
         </div>
       </div>

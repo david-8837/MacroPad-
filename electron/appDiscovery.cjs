@@ -9,6 +9,7 @@ const electronModule = require('electron');
 const app = typeof electronModule === 'object' && electronModule ? electronModule.app : null;
 const shell = typeof electronModule === 'object' && electronModule ? electronModule.shell : null;
 const dialog = typeof electronModule === 'object' && electronModule ? electronModule.dialog : null;
+const nativeImage = typeof electronModule === 'object' && electronModule ? electronModule.nativeImage : null;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -226,7 +227,7 @@ function discoverFromStartMenu() {
         apps.push({
           name,
           exePath: target,
-          iconPath: lnk, // Prefer .lnk for icon extraction as Windows shell stores icon mapping
+          iconPath: details.icon || lnk,
           launchArgs: details.args || '',
           source: 'startmenu',
           targetType: 'shortcut',
@@ -348,7 +349,7 @@ function buildRegistryApp(displayName, displayIcon, installLocation) {
 async function discoverFromPackagedApps() {
   const apps = [];
   try {
-    const psCommand = 'Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress';
+    const psCommand = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress';
     const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-Command', psCommand], { timeout: 15000 });
     if (!stdout.trim()) return apps;
 
@@ -382,6 +383,21 @@ async function discoverFromPackagedApps() {
     warn('Packaged Apps (Get-StartApps) scan failed:', err.message);
   }
 
+  // Store apps use AUMIDs rather than executable paths. Read their manifest
+  // logos when available; discovery still works if Windows denies access.
+  if (apps.some(item => item.appId && item.appId.includes('!'))) {
+    try {
+      const script = fs.readFileSync(path.join(__dirname, 'native', 'packaged-app-icons.ps1'), 'utf8');
+      const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { timeout: 20000, maxBuffer: 2 * 1024 * 1024 });
+      const entries = JSON.parse(stdout || '[]');
+      const logos = new Map((Array.isArray(entries) ? entries : [entries])
+        .filter(entry => typeof entry?.id === 'string' && typeof entry?.path === 'string')
+        .map(entry => [entry.id.toLowerCase(), entry.path]));
+      for (const item of apps) item.logoPath = logos.get(item.appId.toLowerCase()) || '';
+    } catch (err) {
+      warn('Packaged app icons unavailable:', err.message);
+    }
+  }
   log(`Packaged Apps scan: found ${apps.length} apps`);
   return apps;
 }
@@ -496,6 +512,7 @@ async function deduplicateAndFinalize(rawApps) {
       name: raw.name,
       exePath: raw.exePath,
       iconPath: raw.iconPath || raw.exePath,
+      logoPath: raw.logoPath || '',
       iconDataUrl: '',
       category: categorise(raw.exePath, raw.name),
       source: raw.source,
@@ -512,17 +529,9 @@ async function deduplicateAndFinalize(rawApps) {
     const batch = results.slice(i, i + BATCH_SIZE);
     await Promise.all(
       batch.map(async (item) => {
-        try {
-          const target = item.iconPath || item.exePath;
-          if (app && app.getFileIcon && target && fs.existsSync(target)) {
-            const icon = await app.getFileIcon(target, { size: 'normal' });
-            if (icon && !icon.isEmpty()) {
-              item.iconDataUrl = icon.toDataURL();
-            }
-          }
-        } catch {
-          // Graceful fallback for icon extraction
-        }
+        item.iconDataUrl = await resolveAppIcon(item);
+        // Package logo paths are an internal discovery detail, not a launch target.
+        delete item.logoPath;
       })
     );
   }
@@ -535,7 +544,7 @@ async function deduplicateAndFinalize(rawApps) {
 /**
  * Discover installed Windows applications from all primary sources.
  */
-async function discoverApplications() {
+async function scanApplications() {
   log('Starting comprehensive application discovery…');
   const allApps = [];
 
@@ -584,20 +593,43 @@ async function discoverApplications() {
   return finalized;
 }
 
-/**
- * Extract icon as data URL for a specific file path.
- */
-async function getAppIcon(targetPath) {
-  if (!targetPath) return '';
-  try {
-    if (app && app.getFileIcon && fs.existsSync(targetPath)) {
-      const icon = await app.getFileIcon(targetPath, { size: 'normal' });
-      return icon.isEmpty() ? '' : icon.toDataURL();
-    }
-  } catch {
-    // Ignore
+let discoveryInFlight = null;
+async function discoverApplications() {
+  if (discoveryInFlight) return discoveryInFlight;
+  discoveryInFlight = scanApplications();
+  try { return await discoveryInFlight; }
+  finally { discoveryInFlight = null; }
+}
+
+/** Extract an icon, trying useful targets rather than trusting a generic .lnk
+ * file icon. Dependencies are injectable so fallback behavior can be tested. */
+async function resolveAppIcon(item, deps = {}) {
+  const electronApp = deps.app === undefined ? app : deps.app;
+  const images = deps.nativeImage === undefined ? nativeImage : deps.nativeImage;
+  const exists = deps.exists || fs.existsSync;
+  const logo = item.logoPath;
+  if (logo && images?.createFromPath && exists(logo)) {
+    try {
+      const image = images.createFromPath(logo);
+      if (image && !image.isEmpty()) return image.toDataURL();
+    } catch { /* fall through to the shell icon */ }
+  }
+  // A shortcut's Windows file icon may be a generic document with an arrow.
+  // Prefer an explicit .ico, then the executable, and only then the .lnk.
+  const customIco = /\.ico$/i.test(item.iconPath || '') ? item.iconPath : '';
+  const targets = [...new Set([customIco, item.exePath, item.iconPath].filter(Boolean))];
+  for (const target of targets) {
+    try {
+      if (!electronApp?.getFileIcon || !exists(target)) continue;
+      const image = await electronApp.getFileIcon(target, { size: 'normal' });
+      if (image && !image.isEmpty()) return image.toDataURL();
+    } catch { /* try the next target */ }
   }
   return '';
+}
+
+async function getAppIcon(targetPath) {
+  return resolveAppIcon({ exePath: targetPath });
 }
 
 /**
@@ -621,11 +653,13 @@ async function browseForApp() {
   const selectedPath = result.filePaths[0];
   let exePath = selectedPath;
   let targetType = 'executable';
+  let iconPath = selectedPath;
   let name = path.basename(selectedPath, path.extname(selectedPath));
 
   if (selectedPath.toLowerCase().endsWith('.lnk')) {
     try {
       const details = shell.readShortcutLink(selectedPath);
+      iconPath = details.icon || selectedPath;
       if (details.target && fs.existsSync(details.target)) {
         exePath = details.target;
         targetType = 'shortcut';
@@ -635,21 +669,13 @@ async function browseForApp() {
     }
   }
 
-  let iconDataUrl = '';
-  try {
-    iconDataUrl = await getAppIcon(selectedPath);
-    if (!iconDataUrl && exePath !== selectedPath) {
-      iconDataUrl = await getAppIcon(exePath);
-    }
-  } catch {
-    // Fallback
-  }
+  const iconDataUrl = await resolveAppIcon({ exePath, iconPath });
 
   return {
     id: makeId(name, exePath),
     name,
     exePath,
-    iconPath: selectedPath,
+    iconPath,
     iconDataUrl,
     category: categorise(exePath, name),
     source: 'custom',
@@ -747,6 +773,8 @@ async function launchApplication(appInfo) {
 module.exports = {
   discoverApplications,
   getAppIcon,
+  resolveAppIcon,
+  deduplicateAndFinalize,
   browseForApp,
   launchApplication,
 };

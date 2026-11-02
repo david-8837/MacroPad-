@@ -41,7 +41,9 @@ function runTests() {
   const audioCsPath = path.join(__dirname, '../electron/native/audio.cs');
   assert.ok(fs.existsSync(audioCsPath), 'electron/native/audio.cs must exist on disk');
 
-  const iconPath = path.join(__dirname, '../b90a1e3c-36e8-45d6-8fec-2b4e8802a836.png');
+  assert.strictEqual(pkg.build.win.icon, 'electron/assets/kadowaz.ico');
+  assert.ok(fs.existsSync(path.join(__dirname, '..', pkg.build.win.icon)), 'Windows icon must exist');
+  const iconPath = path.join(__dirname, '../electron/assets/kadowaz.png');
   assert.ok(fs.existsSync(iconPath), 'Application icon PNG must exist on disk');
   console.log('✓ All referenced packaging assets and icons verified on disk');
 

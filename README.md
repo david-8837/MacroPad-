@@ -44,9 +44,6 @@ The editor, the configuration stored on the pad, and actions executed by the PC 
 
 ### Run from source
 
-> [!WARNING]
-> **Clean installation is currently blocked.** `package.json` requests `pdf-lib@^1.17.9`, which is not published in the npm registry, and the lockfile does not include the recently added dependencies. As a result, `npm ci` fails at this revision. The dependency version and lockfile need to be corrected before the commands below can work on a clean checkout.
-
 ```bash
 git clone https://github.com/david-8837/MacroPad-.git
 cd MacroPad-
@@ -67,6 +64,8 @@ The browser version is useful for exploring the interface, but it is not a subst
 2. Connect a compatible pad and open **Upload to Deck**. Review the action ownership and compatibility information, then upload the layers.
 3. Use **Tester** to check keyboard input. The physical pad inspector is separate; it requires compatible event reporting, and its readback does not import the pad's settings into the editor.
 4. Edit and upload again whenever you want to change the layout. Back up your editor configuration separately if you want a portable copy.
+
+For **Open App** assignments, the app list refreshes older cached icons in the background. Use the rescan button to refresh it again. Manually browsed entries are kept; apps whose icons Windows cannot provide use a generic fallback.
 
 **Backups are not full device images.** They do not include macro definitions, display settings, or lighting settings. Backup validation rejects `script` and `macro` action categories; export or import can fail when those actions are present. Backup files can contain personal paths and action details, so share them carefully.
 
@@ -158,7 +157,7 @@ bash scripts/test-all.sh        # Host-side firmware and protocol checks
 bash scripts/test-all.sh --arm  # Also cross-compile; requires the Pico SDK and ARM toolchain
 ```
 
-`npm test` can generate host artifacts using `make` and a C compiler if they are missing. Packaging requires a suitable Electron build environment. CI is configured for Node 20 on Windows, Linux, and macOS, with a Windows packaging check; the [installation issue above](#run-from-source) also affects clean CI installs until fixed. Automated checks do not replace testing the actual board, USB connection, display, or operating-system integrations.
+`npm test` can generate host artifacts using `make` and a C compiler if they are missing. Packaging requires a suitable Electron build environment. CI is configured for Node 20 on Windows, Linux, and macOS, with a Windows packaging check. Automated checks do not replace testing the actual board, USB connection, display, or operating-system integrations.
 
 ### Project map
 
@@ -179,6 +178,7 @@ tools/               Generators and validation scripts
 - [Architecture](docs/ARCHITECTURE.md) and [MPAD3 protocol](docs/PROTOCOL.md) — how the pieces communicate
 - [OLED modes](docs/OLED_MODES.md) and [lighting page](docs/LIGHTING_PAGE.md) — feature details and limitations
 - [Preset shortcut sources](docs/PRESET_SHORTCUT_SOURCES.md) — sources and shortcut caveats
+- [Release checklist](docs/RELEASE_CHECKLIST.md) — pending Windows and physical-device checks
 - [Bundled firmware](electron/firmware/README.md) — UF2 provenance, checksums and testing status
 
 Some detailed documents describe earlier stages of development; where they conflict with current behavior, check the source and the current safety notes above.

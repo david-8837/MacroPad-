@@ -10,6 +10,7 @@ import {
   Power,
   Activity,
   Zap,
+  CircleHelp,
 } from 'lucide-react';
 
 interface TopNavbarProps {
@@ -21,6 +22,7 @@ interface TopNavbarProps {
   onDisconnectHardware?: () => void;
   onOpenDiagnostics?: () => void;
   onOpenFirmwarePanel?: () => void;
+  onOpenHelp: () => void;
 }
 
 // The Applications page is deliberately not a tab: it is a launcher you visit to
@@ -44,9 +46,11 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onDisconnectHardware,
   onOpenDiagnostics,
   onOpenFirmwarePanel,
+  onOpenHelp,
 }) => {
   const [showConnectMenu, setShowConnectMenu] = useState(false);
 
+  const connecting = hardwareState === 'connecting';
   const connected = hardwareState === 'connected';
 
   return (
@@ -110,17 +114,21 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               <>
                 <button
                   onClick={() => setShowConnectMenu(!showConnectMenu)}
-                  aria-label="Connect macropad"
+                  disabled={connecting}
+                  aria-label={connecting ? "Connecting macropad" : "Connect macropad"}
+                  aria-expanded={showConnectMenu}
+                  aria-busy={connecting}
                   className="flex items-center gap-2 h-8 px-2 border border-[#C7C7C7] hover:border-[#141414] transition-colors"
                 >
                   <span className="mark mark--off" />
                   <Usb className="w-3 h-3 text-[#646464]" />
-                  <span className="font-mono text-[9px] font-bold tracking-[0.1em] text-[#444343]">CONNECT</span>
+                  <span className="font-mono text-[9px] font-bold tracking-[0.1em] text-[#444343]">{connecting ? 'CONNECTING…' : hardwareState === 'error' ? 'RETRY CONNECT' : 'CONNECT'}</span>
                   <ChevronDown className="w-3 h-3 text-[#646464]" />
                 </button>
 
                 {showConnectMenu && (
                   <div className="absolute top-full right-0 mt-2 w-[248px] bg-[#FFFFFF] border border-[#C7C7C7] z-50">
+                    {hardwareState === 'error' && <p role="alert" className="px-3 py-2 text-[11px] text-[#a13224] border-b border-[#E3E2DE]">No port selected or connection failed. Check the USB cable and close other apps using the port, then try again.</p>}
                     <div className="px-3 py-2 border-b border-[#C7C7C7]">
                       <span className="eyebrow">Connect device</span>
                     </div>
@@ -157,12 +165,14 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
           {/* tool squares */}
           {[
+            { icon: <CircleHelp className="w-3.5 h-3.5" />, title: 'Help & About', fn: onOpenHelp },
             { icon: <Activity className="w-3.5 h-3.5" />, title: 'Expand Hardware Status & Diagnostics', fn: onOpenDiagnostics },
           ].map((b) => (
             <button
               key={b.title}
               onClick={b.fn}
               title={b.title}
+              aria-label={b.title}
               className="w-8 h-8 flex items-center justify-center border border-[#C7C7C7] text-[#444343] hover:border-[#141414] hover:bg-[#141414] hover:text-[#E3E2DE] transition-colors"
             >
               {b.icon}

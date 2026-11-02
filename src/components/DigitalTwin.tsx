@@ -97,7 +97,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
     <div className="workspace-arrival w-full flex flex-col items-center">
 
       {/* ── section header: label + readout ─────────────────────── */}
-      <div className="w-full max-w-[624px] flex items-end justify-between border-b border-[#C7C7C7] pb-2 mb-5">
+      <div className="startup-deck-heading w-full max-w-[624px] flex items-end justify-between border-b border-[#C7C7C7] pb-2 mb-5">
         <div className="flex items-baseline gap-3">
           <span className="eyebrow eyebrow--ink">Deck · 09</span>
           <span className="idx whitespace-nowrap">9 keys · 1 encoder · 128×32</span>
@@ -110,7 +110,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
       <div className="flex items-start justify-center gap-6">
 
         {/* ── the physical object: an ink slab ──────────────────── */}
-        <div className="chassis relative w-[352px] shrink-0 select-none">
+        <div className="startup-deck-chassis chassis relative w-[352px] shrink-0 select-none">
 
           {/* top edge: usb-c notch */}
           <div className="absolute -top-[1px] left-1/2 -translate-x-1/2 w-11 h-[5px] bg-[#E3E2DE]" />
@@ -156,7 +156,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
         </div>
 
         {/* ── control dock: flat panels, 1px rules ──────────────── */}
-        <div className="flex flex-col gap-3 w-[248px] shrink-0 grow-0">
+        <div className="startup-deck-controls flex flex-col gap-3 w-[248px] shrink-0 grow-0">
 
           {/* layer selector — one cell per layer, 0-based */}
           <div className="panel">

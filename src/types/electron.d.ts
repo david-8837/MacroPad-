@@ -22,13 +22,19 @@ export interface NowPlayingInfo {
   progress: number;
 }
 
+export interface NowPlayingResult {
+  ok: boolean;
+  value?: NowPlayingInfo | null;
+  error?: string;
+}
+
 export interface SystemMetrics {
   /** null = not measured on this machine. The panel draws `--` for null. */
   cpu: number | null;
   ram: number | null;
   gpu: number | null;
   temp: number | null;
-  /** Which subsystem answered for each value, e.g. {cpu:'typeperf',gpu:'NVIDIA'}. */
+  /** Which subsystem answered for each value. */
   sources?: { cpu: string | null; gpu: string | null; temp: string | null };
   detail?: {
     cores?: number;
@@ -40,6 +46,8 @@ export interface SystemMetrics {
 }
 
 export interface ElectronAPI {
+  rendererReady?: () => void;
+  openHelpLink?: (id: 'project' | 'guide' | 'credits') => Promise<boolean>;
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   execAction: (action: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
   onHardwareEvent: (callback: (value: ElectronHardwareEvent) => void) => () => void;
@@ -50,8 +58,8 @@ export interface ElectronAPI {
   reportDeck: (deck: { id: string; name: string }) => void;
   onSystemMetrics?: (callback: (metrics: SystemMetrics) => void) => () => void;
 
-  getNowPlaying?: () => Promise<{ ok: boolean; value?: NowPlayingInfo | null; error?: string }>;
-  onMediaState?: (callback: (state: NowPlayingInfo | null) => void) => () => void;
+  getNowPlaying?: () => Promise<NowPlayingResult>;
+  onMediaState?: (callback: (result: NowPlayingResult) => void) => () => void;
 
   getMasterVolume?: () => Promise<{ ok: boolean; value?: number; error?: string }>;
   setMasterVolume?: (percent: number) => Promise<{ ok: boolean; value?: number; error?: string }>;

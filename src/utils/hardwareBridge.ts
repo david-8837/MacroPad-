@@ -166,6 +166,8 @@ class HardwareBridgeManager {
   // Request user to select the RP2040 virtual COM port (USB CDC). The OS
   // receives HID keystrokes automatically; only CDC carries MPAD3 pad events.
   public async connectSerial(): Promise<boolean> {
+    // Different UI entry points share one bridge; never open two choosers/ports.
+    if (this.connectionState === 'connecting' || this.connectionState === 'connected') return false;
     if (typeof navigator === 'undefined' || !('serial' in navigator)) {
       alert('Web Serial API is not supported in this browser. Please use Chrome, Edge, or the native Electron app.');
       return false;
@@ -206,7 +208,8 @@ class HardwareBridgeManager {
       return true;
     } catch (err) {
       console.error('Serial Connection Error:', err);
-      this.connectionState = 'disconnected';
+      // No port selected (including a dismissed chooser) and open errors are retryable.
+      this.connectionState = 'error';
       this.notify();
       return false;
     }
