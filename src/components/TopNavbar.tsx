@@ -51,10 +51,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
   return (
     <header className="app-header h-16 shrink-0 border-b border-[#C7C7C7] bg-[#E3E2DE] select-none z-50">
-      <div className="h-full flex items-stretch min-w-0">
+      <div className="navbar-layout h-full flex items-stretch min-w-0">
 
         {/* ── identity · brand + deck ───────────────────────────── */}
-        <div className="flex items-center gap-3 pl-4 pr-4 border-r border-[#C7C7C7] shrink-0 min-w-0">
+        <div className="navbar-brand flex items-center gap-3 pl-4 pr-4 border-r border-[#C7C7C7] shrink-0 min-w-0">
           <div className="flex items-center gap-2 shrink-0">
             <span className="brand-mark w-6 h-6 bg-[#141414] text-[#E3E2DE] font-mono text-[11px] font-bold flex items-center justify-center">
               K
@@ -89,7 +89,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </nav>
 
         {/* ── cols 10–12 · hardware + actions ────────────────────── */}
-        <div className="flex items-center justify-end gap-1.5 pr-3 pl-3 border-l border-[#C7C7C7] shrink-0">
+        <div className="navbar-actions flex items-center justify-end gap-1.5 pr-3 pl-3 border-l border-[#C7C7C7] shrink-0">
           {/* hardware state */}
           <div className="relative">
             {connected ? (

@@ -35,14 +35,15 @@ and encoder wiring. Do not connect OLED or LED hardware for this model.
 2. [Key Architecture & Dual-Engine Model](#key-architecture--dual-engine-model)
 3. [Core Feature Breakdown](#core-feature-breakdown)
    - [1. Automatic Application Discovery & Launcher](#1-automatic-application-discovery--smart-launcher)
-   - [2. Three Independent Layers (Layer 1, Layer 2, Layer 3)](#2-three-independent-layers-layer-1-layer-2-layer-3)
+   - [2. Four Independent Layers](#2-four-independent-layers-layer-03)
    - [3. Digital Twin & Visual Keycaps](#3-digital-twin--visual-keycaps)
    - [4. Switch Configuration Drawer](#4-switch-configuration-drawer)
    - [5. Rotary Encoder Engine](#5-rotary-encoder-engine)
    - [6. OLED Display Control (SSD1306)](#6-oled-display-control-ssd1306)
-   - [7. PC Shortcuts Vault](#7-pc-shortcuts-vault)
-   - [8. VIA Hardware Suite](#8-via-hardware-suite)
-   - [9. Safety Isolation (Long-Press Protection)](#9-safety-isolation-long-press-protection)
+   - [7. Key assignments, PC macros and editor layers](#7-key-assignments-pc-macros-and-editor-layers)
+   - [8. PC Shortcuts Vault](#8-pc-shortcuts-vault)
+   - [9. VIA Hardware Suite](#9-via-hardware-suite)
+   - [10. Legacy Safety Bindings](#10-legacy-safety-bindings)
    - [10. Embedded Localhost REST & Webhook Daemon](#10-embedded-localhost-rest--webhook-daemon)
    - [11. Live OLED Hardware Telemetry (CPU, GPU, RAM, Temp)](#live-oled-telemetry)
    - [12. Foreground Window Tracking & Auto-Profile Switching](#auto-profile-switching)
@@ -172,11 +173,12 @@ The **Digital Twin** provides a pixel-perfect, interactive representation of you
 ### 4. Switch Configuration Drawer
 
 Clicking any switch in Deck Studio opens the unified Configuration Drawer:
-- **Tab 1: Keyboard & Combos:** Full 15u visual keyboard supporting ANSI/ISO layout, modifiers (`Ctrl`, `Alt`, `Shift`, `Win`), and dual recording modes (`append` and `chord`).
-- **Tab 2: Keystroke Recorder:** Records live hardware key chords directly from your computer keyboard.
-- **Tab 3: Text Macro:** Types out boilerplate text snippets, code templates, or emails upon pressing the switch.
-- **Tab 4: Safety Hold:** Isolates destructive actions (e.g. terminating a broadcast or closing processes) behind a sustained long-press (500ms to 4000ms) with animated visual filling.
-- **Tab 5: Open App:** Dedicated application picker featuring instant search, category filters, browse fallback, custom label overrides, and launch arguments.
+- **Keyboard:** Assign a single key or combination; the visual keyboard also has append/chord entry modes. Unsupported sequences are flagged in upload review.
+- **Text:** Assign text; available routes depend on firmware and content.
+- **Open App:** Select an application and configure launch settings. App launching is PC-owned and requires the desktop app and compatible USB event reporting.
+- **Key icon:** Set an app-only visual label or None. Recorder, Media and Safety controls are no longer in this editor.
+
+The Shortcuts page can also assign a supported single chord to a selected layer and switch after confirmation. It replaces that switch's tap action only, not its other gestures or the pad's configuration. The app marks unmappable chords; shortcut behavior may vary across OS, application, layout and keymap.
 
 ---
 
@@ -212,6 +214,12 @@ The MPAD3 quick tray offers **92 reviewed assignments**: 63 keyboard taps, 7 con
 
 Sidebar, command palette and Digital Twin layer selectors choose an **editing preview** only. The pad's reported layer is displayed separately and remains unknown until it sends a `CHANNEL_CHANGE` event. Hold the physical knob or press an uploaded on-pad layer key to change the actual pad channel; the editor no longer sends an unacknowledged `OLED:CH` command and calls it a switch. The app keeps one local configuration; edit any of its four layers and upload to apply it. Connecting does not import the pad’s existing bindings into the editor. OLED NEXT writes firmware action 13 and requires an SSD1306 detected by the target pad; it never needs a PC macro or native key injector.
 
+### Backup and read-only pad inspection
+
+Use **Backup & restore** in the left rail (or **Layers, firmware & backup** on narrow windows) to download four editor layers, knob settings and locally saved preset overrides/custom presets. The file does not include macros, display or lighting settings. Restore validates the file, requires confirmation and never uploads to the pad; older deck-only exports leave presets unchanged. Back up existing data before replacing it. Files can contain private paths, text and executable actions: only restore trusted files.
+
+On the Tester page, **Read pad configuration** reads a CRC-checked device snapshot without changing either the pad or editor. It compares encoded key/knob slots against a projected upload and reports the event setting at the time of the read. Labels, icons, presets and PC-only bindings are not in device config, so this is not an import or a complete equivalence check. Read again after changes. Upload review still replaces all four pad layers.
+
 ### 8. PC Shortcuts Vault
 
 A built-in curated vault of shortcuts categorized by application:
@@ -225,20 +233,16 @@ A built-in curated vault of shortcuts categorized by application:
 ### 9. VIA Hardware Suite
 
 A VIA-inspired editor for **custom MPAD3 firmware, not QMK**:
-- **Key Tester:** OS keyboard-event visualizer (fresh keydowns vs auto-repeat), not a physical-pad scan/USB latency or contact-chatter measurement.
+- **Key Tester:** OS keyboard-event visualizer (fresh keydowns vs auto-repeat), plus a separate physical pad event inspector for compatible, enabled serial reports. Neither measures scan/USB latency or contact chatter, and lack of events does not prove a fault. Physical actions still run while testing.
 - **Lighting Studio:** Preview and save supported effects; physical LED data remains default-off pending the separate electrical gate.
 - **Macro Editor:** Up to 16 saved **PC-only** macros (`M0`–`M15`) with explicit event/native-shell requirements.
 - **Quick Assignments:** Curated keyboard, media, absolute-channel and on-pad OLED NEXT actions; arbitrary raw QMK/hex codes are not accepted.
 
 ---
 
-### 10. Safety Isolation (Long-Press Protection)
+### 10. Legacy Safety Bindings
 
-Destructive commands (such as stopping a recording, closing active apps, or resetting channels) can be flagged with **Destructive Safety**:
-- Normal taps are ignored.
-- The switch must be continuously held down for the user-configured duration (default: 1500ms).
-- A radial progress indicator fills the keycap before the action is dispatched.
-
+Safety Hold controls are no longer offered in the key editor. Earlier saved safety bindings remain in local data and are PC-owned; they require the desktop app, compatible event reporting and a verified hold duration. Upload review reports this limitation. Do not rely on a safety binding as a substitute for testing.
 ---
 
 ### 11. Embedded Localhost REST & Webhook Daemon
@@ -371,7 +375,7 @@ desktop-app/
 │   │   ├── AppLauncherPanel.tsx    # Full Application Library browser & assignment panel
 │   │   ├── DigitalTwin.tsx         # Interactive hardware visualizer & layer controls
 │   │   ├── DisplayConfigDrawer.tsx # OLED display settings drawer
-│   │   ├── KeyConfigDrawer.tsx     # Switch remap drawer (Keyboard, Macro, Safety, Open App)
+│   │   ├── KeyConfigDrawer.tsx     # Switch remap drawer (Keyboard, Text, Open App)
 │   │   ├── KeyMatrix.tsx           # 3x3 Keycaps with dynamic app icons & LED underglow
 │   │   ├── KnobConfigDrawer.tsx    # Rotary knob curves, sensitivity & layer hold config
 │   │   ├── OLEDDisplay.tsx         # OLED display component (visualizer, media, system)

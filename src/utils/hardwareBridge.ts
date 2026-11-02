@@ -4,7 +4,7 @@
 type SerialPort = any;
 
 import { Mpad3Link, LinkError, type DeviceInfo, type LinkEvent } from './mpad3Link';
-import type { OledState } from '../../host/protocol/mpad3-protocol.mjs';
+import type { Cfg, OledState } from '../../host/protocol/mpad3-protocol.mjs';
 import { CHUNK_COUNT } from '../../host/protocol/mpad3-protocol.mjs';
 import { deckToConfig, hasOledNextAction, type UnsupportedBinding } from './deckToConfig';
 import { loadStoredMacros } from './executeDeckAction';
@@ -303,6 +303,15 @@ class HardwareBridgeManager {
     this.requestedModeIndex = null;
     this.inflightModeIndex = null;
     this.notify();
+  }
+
+  /** Read-only, CRC-validated configuration snapshot. Never changes the editor or pad. */
+  public async readDeviceConfig(): Promise<Cfg> {
+    const link = this.link;
+    if (!link || !this.protocolInfo?.hasFlash) throw new LinkError('Connect a compatible MPAD3 pad with flash first.');
+    const config = await link.readConfig();
+    if (this.link !== link) throw new LinkError('The pad disconnected while reading.');
+    return config;
   }
 
   // Send deck / keymap configuration packet to the physical microcontroller EEPROM

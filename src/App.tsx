@@ -40,6 +40,8 @@ import { AudioMixerPanel } from './components/AudioMixerPanel';
 import { HardwareDiagnosticsPanel, ActionHistoryEntry } from './components/HardwareDiagnosticsPanel';
 import { AnimatedDetails } from './components/AnimatedDetails';
 import { FirmwarePanel } from './components/FirmwarePanel';
+import { BackupPanel } from './components/BackupPanel';
+import { PadInspector } from './components/PadInspector';
 import { UploadSheet } from './components/UploadSheet';
 import { CommandPalette } from './components/CommandPalette';
 import { PresetsPage } from './components/PresetsPage';
@@ -160,6 +162,8 @@ export const App: React.FC = () => {
     }));
   };
 
+  const [railOpen, setRailOpen] = useState(false);
+  const [backupRevision, setBackupRevision] = useState(0);
   const [selectedKeyIndex, setSelectedKeyIndex] = useState<number | null>(0);
   const [editingKeyBinding, setEditingKeyBinding] = useState<KeyBinding | null>(null);
   const [isEditingKnob, setIsEditingKnob] = useState<boolean>(false);
@@ -912,9 +916,12 @@ export const App: React.FC = () => {
   const openFirmwarePanel = () => {
     setIsCommandPaletteOpen(false);
     setIsFirmwareExpanded(true);
-    // The sidebar persists on every tab. Move to its heading, not a separate page.
-    firmwareDisclosureRef.current?.querySelector('summary')?.focus({ preventScroll: true });
-    firmwareDisclosureRef.current?.querySelector('summary')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    setRailOpen(true);
+    // Narrow windows keep the rail collapsed until it is explicitly opened.
+    window.setTimeout(() => {
+      firmwareDisclosureRef.current?.querySelector('summary')?.focus({ preventScroll: true });
+      firmwareDisclosureRef.current?.querySelector('summary')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 0);
   };
 
   return (
@@ -934,8 +941,8 @@ export const App: React.FC = () => {
 
       {/* ── LABEL RAIL · cols 1–2 of the 12-col workspace ─────────────
            The system's sidebar register: metadata only, never content. */}
-      <div className="flex-1 flex overflow-hidden">
-        <aside className="w-[228px] shrink-0 border-r border-[#C7C7C7] flex flex-col overflow-y-auto bg-[#E3E2DE]">
+      <div className="workspace flex-1 flex overflow-hidden">
+        <aside id="workspace-rail" className={`workspace-rail ${railOpen ? 'workspace-rail--open' : ''} w-[228px] shrink-0 border-r border-[#C7C7C7] flex flex-col overflow-y-auto bg-[#E3E2DE]`}>
 
           <div className="px-4 pt-4 pb-3 border-b border-[#C7C7C7]">
             <span className="eyebrow">Your macropad</span>
@@ -1016,6 +1023,11 @@ export const App: React.FC = () => {
             </div>}
           </AnimatedDetails>
 
+          <BackupPanel deck={deck} onRestored={restored => {
+            setDeck(restored); setBackupRevision(n => n + 1);
+            setEditingKeyBinding(null); setIsEditingKnob(false); setIsEditingDisplay(false);
+          }} />
+
           {/* foot */}
           <div className="mt-auto px-4 py-3 border-t border-[#C7C7C7]">
             <p className="font-mono text-[8.5px] uppercase tracking-[0.14em] text-[#646464] leading-relaxed">
@@ -1026,16 +1038,20 @@ export const App: React.FC = () => {
         </aside>
 
         {/* ── CONTENT · cols 3–12 ─────────────────────────────────────── */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="mobile-rail-toggle hidden shrink-0 border-b border-[#C7C7C7] bg-[#EDECE8] px-3 py-2">
+            <button aria-expanded={railOpen} aria-controls="workspace-rail" onClick={() => setRailOpen(open => !open)} className="text-xs font-bold text-[#1351AA]">{railOpen ? 'Close layers & tools' : 'Layers, firmware & backup'}</button>
+          </div>
+          <div className="flex-1 flex min-h-0 overflow-hidden">
 
         {/* TAB 1: DECK STUDIO */}
         {activeTab === 'designer' && (
-          <div className="flex-1 flex overflow-hidden">
+          <div className="designer-layout flex-1 flex overflow-hidden">
             {/* A desktop studio rail needs 352px pad + 248px dock + 24px gap,
                 plus 48px padding/borders. Keep it at 676px so the controls
                 never drop below the pad on laptop-sized full-screen windows;
                 larger screens grow the inspector instead of stretching the deck. */}
-            <div className="flex-1 min-w-0 min-[1264px]:w-[676px] min-[1264px]:flex-none flex flex-col items-center justify-start p-6 border-r border-[#E3E2DE] overflow-y-auto space-y-4">
+            <div className="designer-pad flex-1 min-w-0 min-[1264px]:w-[676px] min-[1264px]:flex-none flex flex-col items-center justify-start p-6 border-r border-[#E3E2DE] overflow-y-auto space-y-4">
               <DigitalTwin
                 layer={activeLayer}
                 channelIndex={activeChannelIdx}
@@ -1096,7 +1112,7 @@ export const App: React.FC = () => {
             </div>
 
             {/* Right Column: Key Config Drawer OR Knob Config Drawer OR Display Config Drawer OR Switch Inspector + Telemetry */}
-            <div className={`w-[560px] min-w-[360px] shrink min-[1264px]:flex-1 flex flex-col bg-[#FFFFFF] border-l border-[#E3E2DE] ${
+            <div className={`designer-inspector ${editingKeyBinding || isEditingKnob || isEditingDisplay ? 'designer-inspector--editing' : ''} w-[560px] min-w-[360px] shrink min-[1264px]:flex-1 flex flex-col bg-[#FFFFFF] border-l border-[#E3E2DE] ${
  editingKeyBinding || isEditingKnob || isEditingDisplay ? 'overflow-hidden' : 'p-4 overflow-x-hidden overflow-y-auto'
  }`}>
               {editingKeyBinding ? (
@@ -1323,7 +1339,7 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'presets' && (
-          <PresetsPage layers={layers} activeLayerId={activeLayerId}
+          <PresetsPage key={backupRevision} layers={layers} activeLayerId={activeLayerId}
             onApply={(preset: LayerPreset, layerId: string) => {
               setDeck(current => ({ ...current, layers: current.layers.map(layer =>
                 layer.id === layerId ? applyLayerPreset(layer, preset) : layer) }));
@@ -1340,6 +1356,7 @@ export const App: React.FC = () => {
         {activeTab === 'tester' && (
           <div className="tester-page flex-1 min-w-0 p-4 sm:p-6 md:p-8 overflow-y-auto bg-[#F4F3F0]">
             <ViaKeyTester />
+            <PadInspector deck={deck} state={hardwareState} info={deviceInfo} />
           </div>
         )}
 
@@ -1348,7 +1365,14 @@ export const App: React.FC = () => {
         {/* TAB 3: PC SHORTCUTS VAULT */}
         {activeTab === 'shortcuts' && (
           <div className="flex-1 overflow-y-auto">
-            <ShortcutsPanel />
+            <ShortcutsPanel layers={layers} activeLayerId={activeLayerId} onAssign={(shortcut, layer, keyIndex) => {
+              setEditingKeyBinding(null);
+              setDeck(current => ({ ...current, layers: current.layers.map((item, index) => index !== layer ? item : {
+                ...item, isExample: false, keys: item.keys.map(key => key.keyIndex !== keyIndex ? key : {
+                  ...key, tapAction: { id: `shortcut-${shortcut.id}`, name: shortcut.name, category: 'hotkey', payload: { keys: [...shortcut.keys] } },
+                }),
+              }) }));
+            }} />
           </div>
         )}
 
@@ -1399,6 +1423,7 @@ export const App: React.FC = () => {
           </div>
         )}
 
+          </div>
         </div>
       </div>
 

@@ -32,7 +32,7 @@ export function newPresetId(): string {
 }
 
 const categories = new Set(['hotkey', 'media', 'audio_session', 'midi', 'script', 'macro', 'text', 'navigation', 'oled', 'app_launch']);
-function validAction(value: unknown): value is ActionDefinition | null {
+export function validAction(value: unknown): value is ActionDefinition | null {
   if (value === null) return true;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const a = value as Record<string, unknown>;
@@ -52,7 +52,7 @@ function validAction(value: unknown): value is ActionDefinition | null {
   }
   return true;
 }
-function validBinding(value: unknown, index: number): value is KeyBinding {
+export function validBinding(value: unknown, index: number): value is KeyBinding {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const b = value as Record<string, unknown>;
   return b.keyIndex === index && typeof b.label === 'string' && typeof b.iconName === 'string' &&
