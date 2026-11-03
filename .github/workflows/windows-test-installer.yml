@@ -51,3 +51,32 @@ jobs:
           path: release/ZERO-Deck-Studio-*-x64.exe
           if-no-files-found: error
           retention-days: 14
+      - name: Smoke-test installed app startup
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem -Path release -Filter 'ZERO-Deck-Studio-*-x64.exe' -File).FullName
+          $installDir = Join-Path $env:RUNNER_TEMP 'zero-test-install'
+          $install = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installDir") -PassThru -Wait
+          if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)" }
+          $exe = Join-Path $installDir 'ZERO Deck Studio.exe'
+          if (-not (Test-Path $exe)) { throw 'Installed executable was not found.' }
+          $app = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 20
+            $app.Refresh()
+            if ($app.HasExited) { throw "App exited during startup with code $($app.ExitCode)" }
+          } finally {
+            if (-not $app.HasExited) { taskkill /PID $app.Id /T /F | Out-Null }
+          }
+      - name: Diagnose Windows test suite
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          cmd /c 'npm test > windows-tests.log 2>&1'
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $tail = (Get-Content windows-tests.log -Tail 35) -join "`n"
+            $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Windows test failure::$escaped"
+            exit $code
+          }
