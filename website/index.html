@@ -17,6 +17,77 @@
       location.replace(home.href);
     }
   </script>
+  <!-- Critical loader styles are inline so it appears before site assets arrive. -->
+  <style>
+    .zero-loader{display:none}
+    .zero-loading .zero-loader{display:grid;place-items:center;position:fixed;inset:0;z-index:10000;background:#f5f2e9;color:#262622;transition:opacity .32s ease,visibility .32s ease}
+    .zero-loading .zero-loader.is-leaving{opacity:0;visibility:hidden;pointer-events:none}
+    .zero-loader-symbols{display:flex;align-items:center;justify-content:center;font:700 18px/1 monospace;letter-spacing:0;white-space:nowrap}
+    .zero-loader-symbols span{display:inline-block;width:.61em;text-align:center}
+    .zero-loader-symbols span::before{content:'-';display:inline-block;animation:zero-symbol 1.2s steps(1,end) infinite}
+    .zero-loader-symbols span:nth-child(1)::before{animation-delay:-.12s}
+    .zero-loader-symbols span:nth-child(2)::before{animation-delay:-.78s}
+    .zero-loader-symbols span:nth-child(3)::before{animation-delay:-.44s}
+    .zero-loader-symbols span:nth-child(4)::before{animation-delay:-.21s}
+    .zero-loader-symbols span:nth-child(5)::before{animation-delay:-.96s}
+    .zero-loader-symbols span:nth-child(6)::before{animation-delay:-.63s}
+    .zero-loader-symbols span:nth-child(7)::before{animation-delay:-.03s}
+    .zero-loader-symbols span:nth-child(8)::before{animation-delay:-.84s}
+    .zero-loader-symbols span:nth-child(9)::before{animation-delay:-.33s}
+    .zero-loader-symbols span:nth-child(10)::before{animation-delay:-.69s}
+    .zero-loader-symbols span:nth-child(11)::before{animation-delay:-.53s}
+    @keyframes zero-symbol{0%,100%{content:'=';transform:translateY(0)} 16%{content:'-';transform:translateY(0)} 33%{content:'+';transform:translate(1px,-1px)} 50%{content:'=';transform:translate(-1px,0)} 66%{content:'-';transform:translate(1px,1px)} 83%{content:'-';transform:translateY(0)}}
+    .zero-loader-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    @media(prefers-reduced-motion:reduce){.zero-loading .zero-loader{display:none}}
+  </style>
+  <script>
+    // A short, optional first-entry transition. Never gate the page on network
+    // images, and do not replay it on ordinary Home/Cases navigation.
+    (() => {
+      const root = document.documentElement;
+      try {
+        const nav = performance.getEntriesByType?.('navigation')?.[0]?.type;
+        const lastPage = sessionStorage.getItem('zero-scroll-last-page-v1');
+        const reload = nav === 'reload' || (!nav && performance.navigation?.type === 1) ||
+          (window.parent !== window && nav !== 'back_forward' && lastPage === root.dataset.introPage);
+        const legacy = /\/(?:cases|index)\.html$/.test(location.pathname);
+        if (legacy) return;
+        const seen = sessionStorage.getItem('zero-loader-seen-v1');
+        // An anchor or reduced-motion entry still counts as a visit; clicking
+        // to another page should not introduce a loading screen afterward.
+        if (location.hash || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          sessionStorage.setItem('zero-loader-seen-v1', '1');
+          return;
+        }
+        if (seen && !reload) return;
+        sessionStorage.setItem('zero-loader-seen-v1', '1');
+        root.classList.add('zero-loading');
+        const started = Date.now();
+        let done = false, closing = false;
+        const finish = skipped => {
+          if (done) return;
+          done = true;
+          root.classList.remove('zero-loading');
+          window.removeEventListener('keydown', onKey, true);
+          window.dispatchEvent(new CustomEvent('zero-loader-done', { detail: { skipped } }));
+        };
+        const leave = skipped => {
+          if (done || (closing && !skipped)) return;
+          if (skipped) return finish(true);
+          closing = true;
+          document.querySelector('.zero-loader')?.classList.add('is-leaving');
+          setTimeout(() => finish(false), 320);
+        };
+        const onKey = event => { if (event.key === 'Tab' || event.key === 'Escape') leave(true); };
+        window.addEventListener('keydown', onKey, true);
+        document.addEventListener('click', event => { if (event.target.closest?.('.zero-loader')) leave(true); });
+        document.addEventListener('DOMContentLoaded', () => setTimeout(() => leave(false), Math.max(0, 2680 - (Date.now() - started))), { once: true });
+        window.addEventListener('pagehide', () => finish(true), { once: true });
+        // Even if deferred scripts or DOM parsing stall, the page is released.
+        setTimeout(() => finish(false), 4000);
+      } catch (_) { root.classList.remove('zero-loading'); }
+    })();
+  </script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%231b1b19'/%3E%3Ctext x='11' y='29' font-family='Arial' font-size='25' font-weight='700' fill='white'%3EZ%3C/text%3E%3Ccircle cx='30' cy='28' r='2.5' fill='%23f57646'/%3E%3C/svg%3E">
   <script>
     // Hide the first frame only until the real elements have been measured.
@@ -33,7 +104,8 @@
         (window.parent !== window && navType !== 'back_forward' && lastPage === document.documentElement.dataset.introPage);
       if ((!alreadyPlayed || refreshed) && !matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
         document.documentElement.classList.add('site-intro-preparing');
-        setTimeout(() => document.documentElement.classList.remove('site-intro-preparing'), 1800);
+        setTimeout(() => document.documentElement.classList.remove('site-intro-preparing'),
+          document.documentElement.classList.contains('zero-loading') ? 4500 : 1800);
       }
     } catch (_) { /* The ordinary site remains visible. */ }
   </script>
@@ -41,14 +113,18 @@
   <link rel="prefetch" href="./cases/" as="document">
   <link rel="prefetch" href="./cases-data.js?v=1" as="script">
   <link rel="prefetch" href="./cases.js?v=2" as="script">
-  <link rel="stylesheet" href="./styles.css?v=scroll-build-23">
-  <link rel="stylesheet" href="./intro.css?v=scroll-build-23">
+  <link rel="stylesheet" href="./styles.css?v=scroll-build-24">
+  <link rel="stylesheet" href="./intro.css?v=scroll-build-24">
   <link rel="stylesheet" href="./assets/specular-button.css?v=1">
-  <script src="./script.js?v=scroll-build-23" defer></script>
+  <script src="./script.js?v=scroll-build-24" defer></script>
   <script src="./assets/specular-button.js?v=2" defer></script>
-  <script src="./intro.js?v=scroll-build-23" defer></script>
+  <script src="./intro.js?v=scroll-build-24" defer></script>
 </head>
 <body>
+  <div class="zero-loader">
+    <div class="zero-loader-symbols" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <span class="zero-loader-status" role="status">Loading ZERO. Press Escape or Tab to skip.</span>
+  </div>
   <div id="site-content">
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="announcement" role="region" aria-label="Project announcement"><span class="status-dot"></span> A LITTLE DECK FOR BIG IDEAS <span class="announcement-right">DESIGNED FOR YOUR WORKFLOW <span>↗</span></span></div>

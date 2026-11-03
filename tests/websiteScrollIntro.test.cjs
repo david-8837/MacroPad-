@@ -250,3 +250,5 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
   dom.window.close();
 }
 console.log('website scroll intro: all text, scroll safety, replay, reduced motion and fail-open passed');
+
+require('./websiteLoader.test.cjs');

@@ -486,5 +486,13 @@
   }
   // Back/forward cache must restore a completed page, not paused cursors.
   window.addEventListener('pagehide',finishAll);
-  if(alreadyPlayed()&&!refreshed)clearPreparing();else play();
+  const begin = skipped => {
+    if(alreadyPlayed()&&!refreshed)clearPreparing();
+    else if(skipped){play();finishAll();}
+    else play();
+  };
+  // Wait until the entry screen leaves so the first cursor work is visible.
+  if(document.documentElement.classList.contains('zero-loading'))
+    window.addEventListener('zero-loader-done', event => begin(!!event.detail?.skipped), {once:true});
+  else begin(false);
 })();
