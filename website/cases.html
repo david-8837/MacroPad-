@@ -8,19 +8,34 @@
   <title>Cases — ZERO Deck Studio</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%231b1b19'/%3E%3Ctext x='11' y='29' font-family='Arial' font-size='25' font-weight='700' fill='white'%3EZ%3C/text%3E%3Ccircle cx='30' cy='28' r='2.5' fill='%23f57646'/%3E%3C/svg%3E">
   <script>
-    // Let the Home page distinguish returning from Cases from an embedded refresh.
-    try { sessionStorage.setItem('zero-scroll-last-page-v1', 'cases'); } catch (_) { /* Storage is optional. */ }
+    // Hide the first frame only until the real elements have been measured.
+    // If setup fails, the watchdog always reveals the site again.
+    try {
+      let alreadyPlayed = false, lastPage = '';
+      try {
+        alreadyPlayed = sessionStorage.getItem('zero-scroll-intro-v1:' + document.documentElement.dataset.introPage) === 'played';
+        lastPage = sessionStorage.getItem('zero-scroll-last-page-v1') || '';
+      } catch (_) { /* Storage can be unavailable. */ }
+      const navType = performance.getEntriesByType?.('navigation')?.[0]?.type;
+      // Refreshing an embedded preview recreates its iframe as a navigation.
+      const refreshed = navType === 'reload' || (!navType && performance.navigation?.type === 1) ||
+        (window.parent !== window && navType !== 'back_forward' && lastPage === document.documentElement.dataset.introPage);
+      if ((!alreadyPlayed || refreshed) && !matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+        document.documentElement.classList.add('site-intro-preparing');
+        setTimeout(() => document.documentElement.classList.remove('site-intro-preparing'), 1800);
+      }
+    } catch (_) { /* The ordinary site remains visible. */ }
   </script>
   <!-- Prepare Home's animation assets in the background, without delaying this page. -->
   <link rel="prefetch" href="./index.html" as="document">
-  <link rel="prefetch" href="./intro.css?v=scroll-build-21" as="style">
   <link rel="prefetch" href="./assets/specular-button.css?v=1" as="style">
-  <link rel="prefetch" href="./intro.js?v=scroll-build-21" as="script">
   <link rel="prefetch" href="./assets/specular-button.js?v=2" as="script">
-  <link rel="stylesheet" href="./styles.css?v=scroll-build-21">
-  <script src="./script.js?v=scroll-build-21" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=scroll-build-22">
+  <link rel="stylesheet" href="./intro.css?v=scroll-build-22">
+  <script src="./script.js?v=scroll-build-22" defer></script>
   <script src="./cases-data.js?v=1" defer></script>
   <script src="./cases.js?v=1" defer></script>
+  <script src="./intro.js?v=scroll-build-22" defer></script>
 </head>
 <body>
   <div id="site-content">
@@ -30,6 +45,7 @@
       <a class="brand" href="./index.html"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a>
       <nav class="desktop-nav" aria-label="Main navigation"><a href="./index.html">Home</a><a href="./index.html#studio">The studio</a><a href="./index.html#hardware">The hardware</a><a href="./cases.html" aria-current="page">Cases</a><a href="./index.html#faq">FAQ</a></nav>
       <a class="nav-cta" href="./index.html#download">Get the app <span>↓</span></a>
+      <button class="intro-replay" type="button" aria-label="Replay scroll animations">↻ <span>REPLAY</span></button>
       <details class="mobile-menu"><summary class="menu-toggle" aria-label="Navigation"><span></span><span></span></summary>
       <nav id="mobile-menu" class="mobile-nav" aria-label="Mobile navigation"><a href="./index.html">Home</a><a href="./index.html#studio">The studio</a><a href="./index.html#hardware">The hardware</a><a href="./cases.html" aria-current="page">Cases</a><a href="#build-guide">Build guide</a><a href="./index.html#faq">FAQ</a><a href="./index.html#download">Get the app ↓</a></nav></details>
     </header>

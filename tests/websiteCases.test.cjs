@@ -28,17 +28,17 @@ function create(models) {
   for (const name of ['./cases-data.js?v=1', './cases.js?v=1']) assert.ok(homePrefetches.includes(name), `Home can warm ${name}`);
   const casePrefetches = [...dom.window.document.querySelectorAll('link[rel="prefetch"]')].map(link => link.getAttribute('href'));
   assert.ok(casePrefetches.includes('./index.html'), 'Cases can warm the Home document');
-  for (const el of homeDoc.querySelectorAll('link[href*="intro.css"], link[href*="specular-button.css"], script[src*="intro.js"], script[src*="specular-button.js"]')) {
+  for (const el of homeDoc.querySelectorAll('link[href*="specular-button.css"], script[src*="specular-button.js"]')) {
     const url = el.getAttribute('href') || el.getAttribute('src');
     assert.ok(casePrefetches.includes(url), `Cases prefetch matches the active Home asset version: ${url}`);
   }
   const document = dom.window.document;
-  assert.equal(document.querySelector('script[src*="intro.js"]'), null, 'Cases does not load the construction animation');
-  assert.equal(document.querySelector('link[rel="stylesheet"][href*="intro.css"]'), null, 'Cases does not apply animation styles');
-  assert.equal(document.querySelector('.intro-replay'), null, 'Cases has no replay control');
+  assert.ok(document.querySelector('script[src*="intro.js"]'), 'Cases loads the construction animation');
+  assert.ok(document.querySelector('link[rel="stylesheet"][href*="intro.css"]'), 'Cases applies animation styles');
+  assert.ok(document.querySelector('.intro-replay'), 'Cases provides a replay control');
   assert.ok(document.querySelector('.mobile-menu > summary.menu-toggle'), 'mobile navigation uses native details');
   assert.equal(document.querySelector('#mobile-menu').hasAttribute('hidden'), false, 'navigation does not depend on JavaScript to open');
-  assert.doesNotMatch(html, /site-intro-preparing/, 'Cases is never hidden while animation prepares');
+  assert.match(html, /site-intro-preparing/, 'Cases prevents unfinished content flashing before setup');
   assert.equal(document.querySelectorAll('.guide-step').length, 5, 'build guide covers case, wiring, software, firmware and setup');
   assert.match(document.querySelector('.guide-steps').textContent, /BOOT/);
   assert.match(document.querySelector('.guide-steps').textContent, /Keys & Knob/);
@@ -76,9 +76,69 @@ function create(models) {
   assert.equal(document.querySelectorAll('.case-card h3 img').length, 0, 'titles render as text');
   dom.window.close();
 }
+// Cases uses the shared construction engine with independent per-page state.
+function createAnimatedCases({ visited = false, reload = false, reduced = false } = {}) {
+  const dom = new JSDOM(html, { url: 'https://example.test/cases.html', runScripts: 'outside-only', pretendToBeVisual: true });
+  const { window } = dom;
+  if (visited) window.sessionStorage.setItem('zero-scroll-intro-v1:cases', 'played');
+  if (reload) window.performance.getEntriesByType = () => [{ type: 'reload' }];
+  const rect = { left: 20, top: 20, right: 220, bottom: 70, width: 200, height: 50, x: 20, y: 20, toJSON() { return this; } };
+  window.HTMLElement.prototype.getBoundingClientRect = () => rect;
+  window.Range.prototype.getBoundingClientRect = () => rect;
+  const inert = new WeakMap();
+  Object.defineProperty(window.HTMLElement.prototype, 'inert', { configurable: true, get() { return inert.get(this) || false; }, set(value) { inert.set(this, !!value); } });
+  window.matchMedia = () => ({ matches: reduced, addEventListener() {} });
+  window.requestAnimationFrame = () => 1;
+  window.cancelAnimationFrame = () => {};
+  let observer;
+  window.IntersectionObserver = class {
+    constructor(callback) { this.callback = callback; observer = this; }
+    observe() {} unobserve() {} disconnect() {}
+  };
+  window.console.warn = () => {};
+  window.eval(dataScript);
+  window.eval(renderScript);
+  window.eval(readFileSync(join(root, 'website/script.js'), 'utf8'));
+  const originalText = window.document.getElementById('site-content').textContent;
+  window.eval(readFileSync(join(root, 'website/intro.js'), 'utf8'));
+  return { dom, window, document: window.document, observer: () => observer, originalText };
+}
 {
-  const dom = new JSDOM(html, { url: 'https://example.test/cases.html', runScripts: 'dangerously' });
-  assert.equal(dom.window.sessionStorage.getItem('zero-scroll-last-page-v1'), 'cases', 'Cases marks navigation so embedded Home revisits do not replay');
+  const { dom, window, document, observer, originalText } = createAnimatedCases();
+  assert.equal(window.sessionStorage.getItem('zero-scroll-intro-v1:cases'), 'played');
+  assert.equal(window.sessionStorage.getItem('zero-scroll-last-page-v1'), 'cases');
+  assert.ok(document.querySelectorAll('[data-build-text]').length > 50, 'Cases text is scheduled for typing');
+  assert.equal(document.querySelector('.guide-safety').style.opacity, '0', 'unvisited wiring warnings wait for their section');
+  observer().callback([{ target: document.querySelector('.cases-hero'), isIntersecting: true }]);
+  assert.ok(document.querySelector('[data-build-stage="cases-hero"]'), 'Cases hero builds on entering the viewport');
+  observer().callback([{ target: document.querySelector('.cases-hero'), isIntersecting: false }]);
+  assert.equal(document.querySelector('[data-build-stage="cases-hero"]'), null, 'off-screen construction finishes');
+  observer().callback([{ target: document.querySelector('.guide-steps'), isIntersecting: true }]);
+  assert.ok(document.querySelector('[data-build-stage="case-guide-steps"]'), 'guide builds independently on scroll');
+  window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'keyboard navigation completes all stages');
+  assert.equal(document.getElementById('site-content').textContent, originalText, 'completion restores the original text');
+  assert.equal(document.querySelector('.guide-safety').style.opacity, '');
+  document.querySelector('.intro-replay').click();
+  assert.ok(document.querySelectorAll('[data-build-text]').length > 50, 'Replay starts Cases again');
+  document.querySelector('.site-build-skip').click();
   dom.window.close();
 }
-console.log('website cases: empty state, safe model listing and download links passed');
+{
+  const { dom, document } = createAnimatedCases({ visited: true });
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'Cases does not replay on a return visit');
+  dom.window.close();
+}
+{
+  const { dom, document } = createAnimatedCases({ visited: true, reload: true });
+  assert.ok(document.querySelectorAll('[data-build-text]').length > 50, 'refresh replays Cases');
+  document.querySelector('.site-build-skip').click();
+  dom.window.close();
+}
+{
+  const { dom, document } = createAnimatedCases({ reduced: true });
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'Cases respects reduced motion');
+  assert.equal(document.querySelector('.intro-replay').disabled, true);
+  dom.window.close();
+}
+console.log('website cases: safe gallery, build guide and scroll animation passed');

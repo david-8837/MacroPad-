@@ -126,8 +126,8 @@
       visual:[{s:'.closing-symbol',t:1600,label:'Mark'}]
     }},
     {id:'cases-hero',trigger:'.cases-hero',tracks:{
-      interface:[{s:'.site-header',t:0,d:350,frame:true,label:'Header'}],
-      content:[{s:'.announcement',t:0,d:350,frame:true,label:'Top bar'}, {s:'.site-header .brand',t:1200,label:'Brand'}, {s:'.cases-hero .eyebrow',t:1550,label:'Introduction'}, {s:'.cases-hero h1',t:2150,d:1700,type:true,label:'Typing'}, {s:'.cases-hero p',t:4000,d:1150,type:true,label:'Typing'}, {s:'.case-guide-jump',t:5350,label:'Guide link'}],
+      interface:[{s:'.site-header',t:0,d:350,frame:true,label:'Header'}, {s:'.case-guide-jump',t:1100,label:'Guide link'}],
+      content:[{s:'.announcement',t:0,d:350,frame:true,label:'Top bar'}, {s:'.site-header .brand',t:1200,label:'Brand'}, {s:'.cases-hero .eyebrow',t:1550,label:'Introduction'}, {s:'.cases-hero h1',t:2150,d:1700,type:true,label:'Typing'}, {s:'.cases-hero p',t:4000,d:1150,type:true,label:'Typing'}],
       details:[{s:'.desktop-nav',t:350,d:180,label:'Navigation'}, {s:'.cases-hero-index',t:1800,label:'Index'}]
     }},
     {id:'cases-gallery',trigger:'.cases-gallery',tracks:{
