@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" data-intro-page="cases">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore downloadable case models for the ZERO macropad.">
+  <meta name="theme-color" content="#f5f2e9">
+  <title>Cases — ZERO Deck Studio</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%231b1b19'/%3E%3Ctext x='11' y='29' font-family='Arial' font-size='25' font-weight='700' fill='white'%3EZ%3C/text%3E%3Ccircle cx='30' cy='28' r='2.5' fill='%23f57646'/%3E%3C/svg%3E">
+  <script>
+    // Let the Home page distinguish returning from Cases from an embedded refresh.
+    try { sessionStorage.setItem('zero-scroll-last-page-v1', 'cases'); } catch (_) { /* Storage is optional. */ }
+  </script>
+  <!-- Prepare Home's animation assets in the background, without delaying this page. -->
+  <link rel="prefetch" href="./index.html" as="document">
+  <link rel="prefetch" href="./intro.css?v=scroll-build-21" as="style">
+  <link rel="prefetch" href="./assets/specular-button.css?v=1" as="style">
+  <link rel="prefetch" href="./intro.js?v=scroll-build-21" as="script">
+  <link rel="prefetch" href="./assets/specular-button.js?v=2" as="script">
+  <link rel="stylesheet" href="./styles.css?v=scroll-build-21">
+  <script src="./script.js?v=scroll-build-21" defer></script>
+  <script src="./cases-data.js?v=1" defer></script>
+  <script src="./cases.js?v=1" defer></script>
+</head>
+<body>
+  <div id="site-content">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="announcement" role="region" aria-label="Project announcement"><span class="status-dot"></span> A LITTLE DECK FOR BIG IDEAS <span class="announcement-right">DESIGNED FOR YOUR WORKFLOW <span>↗</span></span></div>
+    <header class="site-header">
+      <a class="brand" href="./index.html"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a>
+      <nav class="desktop-nav" aria-label="Main navigation"><a href="./index.html">Home</a><a href="./index.html#studio">The studio</a><a href="./index.html#hardware">The hardware</a><a href="./cases.html" aria-current="page">Cases</a><a href="./index.html#faq">FAQ</a></nav>
+      <a class="nav-cta" href="./index.html#download">Get the app <span>↓</span></a>
+      <details class="mobile-menu"><summary class="menu-toggle" aria-label="Navigation"><span></span><span></span></summary>
+      <nav id="mobile-menu" class="mobile-nav" aria-label="Mobile navigation"><a href="./index.html">Home</a><a href="./index.html#studio">The studio</a><a href="./index.html#hardware">The hardware</a><a href="./cases.html" aria-current="page">Cases</a><a href="#build-guide">Build guide</a><a href="./index.html#faq">FAQ</a><a href="./index.html#download">Get the app ↓</a></nav></details>
+    </header>
+    <main id="main">
+      <section class="cases-hero section-wrap" id="top">
+        <div><div class="eyebrow"><span class="orange-square"></span> MADE FOR YOUR DECK <span class="eyebrow-line"></span> THE CASE LIBRARY</div><h1>Make it feel<br>like <em>yours.</em></h1><p>Case models for the little deck. Pick a design and download the files when they’re available.</p><a class="case-guide-jump" href="#build-guide">SEE THE BUILD GUIDE <span>↘</span></a></div>
+        <div class="cases-hero-index" aria-hidden="true"><span>ZERO / CASES</span><span>✳</span></div>
+      </section>
+      <section class="cases-gallery section-wrap" aria-labelledby="cases-gallery-title">
+        <div class="cases-gallery-heading"><h2 id="cases-gallery-title">The case library<span class="orange-text">.</span></h2><p>MODEL PICTURE / DOWNLOAD</p></div>
+        <div class="case-list-area">
+          <div class="cases-empty" id="cases-empty">
+            <article class="case-card case-preview-card">
+              <img src="./assets/macropad-hero.webp" alt="Concept render used as an example picture, not a case model">
+              <div class="case-card-info"><span class="case-preview-label">EXAMPLE IMAGE</span><h3>Case model coming soon</h3><p>This is a placeholder picture. No model file is available yet.</p><button class="button button-dark" type="button" disabled>Download model <span aria-hidden="true">↓</span></button></div>
+            </article>
+          </div>
+          <div class="case-grid" id="case-grid"></div>
+        </div>
+      </section>
+      <section class="case-guide section-wrap" id="build-guide" aria-labelledby="case-guide-title">
+        <div class="case-guide-intro"><div class="eyebrow"><span class="orange-square"></span> FROM PARTS TO SHORTCUTS <span class="eyebrow-line"></span> THE BUILD GUIDE</div><h2 id="case-guide-title">Make it.<br><em>Set it up.</em></h2><p>A quick overview of the build, firmware, and desktop setup. Take your time and check the complete wiring guide before connecting power.</p></div>
+        <div class="guide-steps">
+          <article class="guide-step"><div class="guide-step-number">01 <span>THE CASE</span></div><h3>Choose a case.</h3><p>Pick a case model from the library above when files are available. Print it and check the fit of your switches, board, and knob before final assembly.</p></article>
+          <article class="guide-step"><div class="guide-step-number">02 <span>THE WIRING</span></div><h3>Wire the deck.</h3><p>With power disconnected, follow the diagram for your build. Check the board silkscreen, component terminals, and continuity before connecting USB.</p><a class="guide-link" href="#wiring">SEE THE DIAGRAMS <span>↘</span></a></article>
+          <article class="guide-step"><div class="guide-step-number">03 <span>THE SOFTWARE</span></div><h3>Get Deck Studio.</h3><p>The Windows desktop app is used for setup and flashing. An installer has not been released yet; check the releases page for updates.</p><a class="guide-link" href="https://github.com/david-8837/MacroPad-/releases" target="_top" rel="noreferrer">WINDOWS RELEASES <span>↗</span></a></article>
+          <article class="guide-step"><div class="guide-step-number">04 <span>THE FIRMWARE</span></div><h3>Flash the firmware.</h3><p>Unplug USB, hold the RP2040-Zero’s BOOT button while reconnecting, then release. In the desktop app, open <strong>RP2040 Firmware &amp; Bootloader</strong>, select <strong>Keys &amp; Knob</strong> for V2 or <strong>Full Deck</strong> for V1, review the warning, and flash. Afterward, verify the board reconnects.</p></article>
+          <article class="guide-step"><div class="guide-step-number">05 <span>YOUR SHORTCUTS</span></div><h3>Make it yours.</h3><p>Once the compatible pad is connected, assign keys and the knob across your layers. Review your setup in <strong>Upload to deck</strong>, then upload all layers.</p></article>
+        </div>
+        <aside class="guide-safety"><strong>Before you begin.</strong> The hardware and both firmware images have not been physically tested. Verify your board and wiring before flashing. For V1, the RGB power design is not approved; leave LED power and data disconnected. The PDF also depicts an unapproved RGB circuit: low brightness does not make it safe. The website itself cannot flash the device.</aside>
+      </section>
+      <section class="case-wiring section-wrap" id="wiring" aria-labelledby="case-wiring-title">
+        <div class="case-wiring-intro"><div><div class="eyebrow"><span class="orange-square"></span> THE CONNECTIONS <span class="eyebrow-line"></span> WIRING</div><h2 id="case-wiring-title">A closer look<br>at the <em>connections.</em></h2></div><p>Illustrative wiring references for the Waveshare RP2040-Zero. Verify real pin labels and switch terminals with a meter.</p></div>
+        <div class="guide-diagrams">
+          <figure class="guide-diagram"><img src="./assets/wiring-v2-photo.webp" alt="V2 photo-style wiring diagram from the supplied guide, showing RP2040-Zero, nine switches and a rotary encoder; no display or LEDs" loading="lazy"><figcaption><div><span class="guide-diagram-tag">V2 / KEYS + KNOB</span><h3>The simple build.</h3><p>Nine switches and a clickable rotary encoder. No display or external LEDs.</p></div><a class="guide-link" href="./assets/wiring-v2-photo.webp" target="_top">OPEN DIAGRAM <span>↗</span></a></figcaption></figure>
+          <figure class="guide-diagram"><img src="./assets/wiring-v1-photo.webp" alt="V1 photo-style wiring diagram from the supplied guide, showing RP2040-Zero, nine switches, a rotary encoder and OLED; RGB is not wired" loading="lazy"><figcaption><div><span class="guide-diagram-tag">V1 / DISPLAY + PLANNED RGB</span><h3>The display build.</h3><p>Adds a 3.3 V OLED. RGB power and data must remain disconnected until the design is approved.</p></div><a class="guide-link" href="./assets/wiring-v1-photo.webp" target="_top">OPEN DIAGRAM <span>↗</span></a></figcaption></figure>
+        </div>
+        <div class="guide-reference"><p>These pictures are illustrative, not a substitute for checking actual parts. Unplug power before soldering and confirm connections before powering the board. The PDF’s V1 + RGB page is unapproved: do not connect LED power or data, even at low brightness.</p><a class="button button-dark" href="./assets/Macropad_Complete_Wiring_Guide.pdf" target="_top" rel="noreferrer">Read the complete wiring guide <span>↗</span></a></div>
+      </section>
+    </main>
+    <footer><a class="brand footer-brand" href="./index.html"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a><p>A LITTLE DECK FOR THE SHORTCUTS YOU USE A LOT.</p><div><a href="./index.html">HOME</a><a href="./index.html#hardware">HARDWARE</a><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">GITHUB ↗</a></div></footer>
+  </div>
+</body>
+</html>

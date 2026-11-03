@@ -1,13 +1,8 @@
-const toggle = document.querySelector('.menu-toggle');
+// Native details keeps mobile navigation usable without JavaScript.
+const mobileMenu = document.querySelector('.mobile-menu');
 const menu = document.querySelector('#mobile-menu');
-if (toggle && menu) {
-  const closeMenu = () => { toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-label', 'Open navigation'); menu.hidden = true; };
-  toggle.addEventListener('click', () => {
-    const open = toggle.getAttribute('aria-expanded') !== 'true';
-    toggle.setAttribute('aria-expanded', String(open));
-    toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
-    menu.hidden = !open;
-  });
+if (mobileMenu && menu) {
+  const closeMenu = () => { mobileMenu.open = false; };
   menu.addEventListener('click', event => { if (event.target.closest('a')) closeMenu(); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') closeMenu(); });
 }
@@ -45,3 +40,20 @@ previewKnob?.addEventListener('click', () => {
   selectedLayer = (selectedLayer + 1) % selectedKeys.length;
   updatePreview();
 });
+
+// Frontend-only preview: never send or clear a visitor's feedback.
+const feedbackForm = document.querySelector('.feedback-form');
+if (feedbackForm) {
+  const message = feedbackForm.querySelector('#feedback-message');
+  const status = feedbackForm.querySelector('.feedback-status');
+  message.addEventListener('input', () => { message.setCustomValidity(''); });
+  feedbackForm.addEventListener('submit', event => {
+    event.preventDefault();
+    if (!message.value.trim()) {
+      message.setCustomValidity('Please write your feedback first.');
+      message.reportValidity();
+      return;
+    }
+    status.textContent = 'Sending is not available yet. Your feedback is still here, but it has not been sent or saved.';
+  });
+}

@@ -12,19 +12,18 @@
   const definitions = [
     {id:'hero',trigger:'.hero',tracks:{
       interface:[
-        {s:'.announcement',t:0,d:350,frame:true,label:'Top bar'},
-        {s:'.site-header',t:420,d:700,frame:true,label:'Header'},
-        {s:'.desktop-nav a',t:1450,stagger:430,label:'Navigation'},
-        {s:'.nav-cta, .intro-replay, .menu-toggle',t:2850,stagger:400,label:'Tools'}
+        {s:'.site-header',t:0,d:350,frame:true,label:'Header'},
+        {s:'.hero-download-mount > a, .hero-actions > a',t:1100,stagger:450,label:'Action'},
+        {s:'.hero-download-note',t:2200,label:'Availability'}
       ],
       content:[
+        {s:'.announcement',t:0,d:350,frame:true,label:'Top bar'},
         // Interface draws the header; Content fills its brand.
         {s:'.site-header .brand',t:1200,label:'Brand'},
         {s:'.hero-copy > .eyebrow',t:1700,label:'Introduction'},
         {s:'.hero-copy .intro-heading-line',t:2200,stagger:1000,d:850,type:true,label:'Typing'},
         {s:'.hero-copy > p',t:5400,d:1700,type:true,label:'Typing'},
-        {s:'.hero-actions > a',t:7300,stagger:550,label:'Action'},
-        {s:'.hero-note',t:8700,label:'Details'}
+        {s:'.hero-note',t:9100,label:'Details'}
       ],
       visual:[
         {s:'.hero-art',t:400,d:900,frame:true,label:'Artwork frame'},
@@ -32,6 +31,9 @@
         {s:'.visual-footer > span',t:4300,stagger:550,label:'Caption'}
       ],
       details:[
+        // Draw the nav as one frame; its labels still type separately, but
+        // real links become usable as soon as the navigation is visible.
+        {s:'.desktop-nav',t:350,d:180,label:'Navigation'},
         // Details writes into the artwork frame drawn by Visual.
         {s:'.hero-art .art-label',t:1550,d:750,type:true,label:'Typing'},
         {s:'.hero-art .art-caption',t:2450,d:1000,type:true,label:'Typing'}
@@ -72,17 +74,19 @@
       details:[{s:'.mock-caption',t:5400,label:'Caption'}]
     }},
     {id:'features',trigger:'.features',tracks:{
-      interface:[{s:'.features article',t:0,stagger:550,d:500,frame:true,label:'Feature'}],
+      interface:[{s:'.features',t:0,d:450,frame:true,label:'Features frame'}, {s:'.features article',t:500,stagger:550,d:500,frame:true,label:'Feature'}],
       content:[{s:'.features .feature-top',t:650,stagger:550,label:'Label'}, {s:'.features h3',t:2500,stagger:1100,d:900,type:true,label:'Typing'}],
       details:[{s:'.features p',t:3700,stagger:1100,d:900,type:true,label:'Typing'}]
     }},
+    {id:'how-background',trigger:'.how-section',tracks:{
+      visual:[{s:'.how-backdrop',t:0,d:700,frame:true,label:'Section background'}]
+    }},
     {id:'how-heading',trigger:'.how-heading',tracks:{
-      visual:[{s:'.how-section',t:0,d:700,frame:true,label:'Section frame'}],
       content:[{s:'.how-heading .eyebrow',t:800,label:'Introduction'}, {s:'.how-heading h2',t:1250,d:1500,type:true,label:'Typing'}],
       details:[{s:'.how-heading > p',t:1600,d:1100,type:true,label:'Typing'}]
     }},
     {id:'steps',trigger:'.steps',tracks:{
-      interface:[{s:'.steps article',t:0,stagger:550,d:500,frame:true,label:'Step'}],
+      interface:[{s:'.steps',t:0,d:450,frame:true,label:'Steps frame'}, {s:'.steps article',t:500,stagger:550,d:500,frame:true,label:'Step'}],
       content:[{s:'.step-number',t:650,stagger:550,label:'Number'}, {s:'.steps h3',t:2500,stagger:850,d:700,type:true,label:'Typing'}],
       details:[{s:'.steps p',t:3450,stagger:900,d:1000,type:true,label:'Typing'}, {s:'.how-bottom',t:6700,label:'Details'}]
     }},
@@ -91,10 +95,69 @@
       content:[{s:'.hardware-copy .eyebrow',t:300,label:'Introduction'}, {s:'.hardware-copy h2',t:800,d:1500,type:true,label:'Typing'}, {s:'.hardware-copy > p',t:2500,d:1650,type:true,label:'Typing'}],
       details:[{s:'.hardware-tag',t:1900,label:'Caption'}, {s:'.hardware-facts',t:2800,d:550,frame:true,label:'Specifications'}, {s:'.hardware-facts > div',t:3450,stagger:500,label:'Build'}, {s:'.safety-note',t:4800,d:1500,type:true,label:'Typing'}, {s:'.hardware-copy > a',t:6500,label:'Guide'}]
     }},
+    {id:'faq-heading',trigger:'.faq-section',tracks:{
+      interface:[{s:'.faq-border',t:0,d:450,frame:true,label:'Section divider'}, {s:'.faq-heading .eyebrow',t:500,label:'Introduction'}],
+      content:[{s:'.faq-heading h2',t:500,d:1500,type:true,label:'Typing'}, {s:'.faq-heading > p',t:2200,d:950,type:true,label:'Typing'}],
+      visual:[{s:'.faq-aside',t:1000,label:'Mark'}]
+    }},
+    {id:'faq-list',trigger:'.faq-list',tracks:{
+      interface:[{s:'.faq-list',t:0,d:450,frame:true,label:'Questions frame'}, {s:'.faq-item',t:500,stagger:500,d:400,frame:true,label:'Question frame'}],
+      content:[{s:'.faq-item summary',t:550,stagger:500,label:'Question'}]
+    }},
+    {id:'feedback-background',trigger:'.feedback-section',tracks:{
+      visual:[{s:'.feedback-backdrop',t:0,d:700,frame:true,label:'Section background'}]
+    }},
+    {id:'feedback-heading',trigger:'.feedback-header',tracks:{
+      interface:[{s:'.feedback-header .eyebrow',t:0,label:'Introduction'}],
+      content:[{s:'.feedback-header h2',t:500,d:1500,type:true,label:'Typing'}, {s:'.feedback-header > p',t:2200,d:1100,type:true,label:'Typing'}]
+    }},
+    {id:'feedback-form',trigger:'.feedback-form',tracks:{
+      interface:[{s:'.feedback-form',t:0,d:550,frame:true,label:'Form frame'}, {s:'.feedback-field',t:700,stagger:650,d:450,frame:true,label:'Field'}, {s:'.feedback-submit',t:2600,label:'Action'}],
+      content:[{s:'.feedback-field label',t:1200,stagger:700,label:'Label'}, {s:'.feedback-bottom > p',t:2650,d:1150,type:true,label:'Typing'}]
+    }},
+    {id:'support',trigger:'.support-card',tracks:{
+      interface:[{s:'.support-card',t:0,d:700,frame:true,label:'Support frame'}, {s:'.support-actions button',t:4250,stagger:500,label:'Support option'}],
+      visual:[{s:'.support-mark',t:850,label:'Mark'}],
+      content:[{s:'.support-eyebrow',t:900,label:'Introduction'}, {s:'.support-card h2',t:1450,d:1200,type:true,label:'Typing'}, {s:'.support-copy',t:2800,d:1100,type:true,label:'Typing'}, {s:'.support-availability',t:5000,d:900,type:true,label:'Typing'}]
+    }},
     {id:'closing',trigger:'.closing',tracks:{
       interface:[{s:'.closing',t:0,d:750,frame:true,label:'Section frame'}, {s:'.closing-top',t:850,label:'Introduction'}, {s:'.closing-bottom',t:5250,label:'Details'}],
       content:[{s:'.closing h2',t:1100,d:1500,type:true,label:'Typing'}, {s:'.closing-main p',t:2850,d:1300,type:true,label:'Typing'}, {s:'.closing-actions > a',t:4400,stagger:500,label:'Action'}],
       visual:[{s:'.closing-symbol',t:1600,label:'Mark'}]
+    }},
+    {id:'cases-hero',trigger:'.cases-hero',tracks:{
+      interface:[{s:'.site-header',t:0,d:350,frame:true,label:'Header'}],
+      content:[{s:'.announcement',t:0,d:350,frame:true,label:'Top bar'}, {s:'.site-header .brand',t:1200,label:'Brand'}, {s:'.cases-hero .eyebrow',t:1550,label:'Introduction'}, {s:'.cases-hero h1',t:2150,d:1700,type:true,label:'Typing'}, {s:'.cases-hero p',t:4000,d:1150,type:true,label:'Typing'}, {s:'.case-guide-jump',t:5350,label:'Guide link'}],
+      details:[{s:'.desktop-nav',t:350,d:180,label:'Navigation'}, {s:'.cases-hero-index',t:1800,label:'Index'}]
+    }},
+    {id:'cases-gallery',trigger:'.cases-gallery',tracks:{
+      interface:[{s:'.cases-gallery-heading',t:0,d:550,frame:true,label:'Gallery frame'}, {s:'.case-card, .cases-empty',t:650,stagger:550,d:600,frame:true,label:'Case frame'}],
+      visual:[{s:'.case-card img',t:1350,stagger:700,d:800,frame:true,label:'Model picture'}, {s:'.case-preview-label',t:1400,label:'Label'}],
+      content:[{s:'.cases-gallery-heading h2, .cases-gallery-heading p',t:800,stagger:600,label:'Label'}, {s:'.case-card h3, .cases-empty h3',t:2200,stagger:600,label:'Model name'}, {s:'.cases-empty p',t:2900,d:900,type:true,label:'Typing'}, {s:'.case-card a, .case-card button',t:3500,stagger:500,label:'Download'}]
+    }},
+    {id:'case-guide-intro',trigger:'.case-guide-intro',tracks:{
+      interface:[{s:'.case-guide-intro .eyebrow',t:0,label:'Introduction'}],
+      content:[{s:'.case-guide-intro h2',t:500,d:1450,type:true,label:'Typing'}, {s:'.case-guide-intro > p',t:2100,d:1200,type:true,label:'Typing'}]
+    }},
+    {id:'case-guide-steps',trigger:'.guide-steps',tracks:{
+      interface:[{s:'.guide-steps',t:0,d:500,frame:true,label:'Steps frame'}, {s:'.guide-step',t:600,stagger:450,d:450,frame:true,label:'Step'}],
+      content:[{s:'.guide-step-number',t:1100,stagger:500,label:'Step label'}, {s:'.guide-step h3',t:2500,stagger:700,label:'Heading'}, {s:'.guide-step p',t:3900,stagger:800,d:900,type:true,label:'Typing'}, {s:'.guide-step a',t:7500,stagger:550,label:'Link'}]
+    }},
+    {id:'case-guide-safety',trigger:'.guide-safety',tracks:{
+      details:[{s:'.guide-safety',t:0,d:1400,type:true,label:'Safety note'}]
+    }},
+    {id:'case-wiring-intro',trigger:'.case-wiring-intro',tracks:{
+      interface:[{s:'.case-wiring-intro .eyebrow',t:0,label:'Introduction'}],
+      content:[{s:'.case-wiring-intro h2',t:500,d:1450,type:true,label:'Typing'}, {s:'.case-wiring-intro > p',t:2100,d:1200,type:true,label:'Typing'}]
+    }},
+    {id:'case-diagrams',trigger:'.guide-diagrams',tracks:{
+      interface:[{s:'.guide-diagram',t:0,stagger:700,d:600,frame:true,label:'Diagram frame'}, {s:'.guide-diagram a',t:4100,stagger:600,label:'Open diagram'}],
+      visual:[{s:'.guide-diagram img',t:800,stagger:700,d:1000,frame:true,label:'Wiring picture'}],
+      content:[{s:'.guide-diagram-tag',t:1950,stagger:650,label:'Label'}, {s:'.guide-diagram h3',t:2800,stagger:650,label:'Title'}, {s:'.guide-diagram p',t:3500,stagger:650,d:900,type:true,label:'Typing'}]
+    }},
+    {id:'case-reference',trigger:'.guide-reference',tracks:{
+      interface:[{s:'.guide-reference',t:0,d:500,frame:true,label:'Reference frame'}, {s:'.guide-reference a',t:1900,label:'Guide link'}],
+      content:[{s:'.guide-reference p',t:600,d:1100,type:true,label:'Typing'}]
     }},
     {id:'footer',trigger:'footer',tracks:{
       interface:[{s:'footer',t:0,d:600,frame:true,label:'Footer'}, {s:'footer .brand',t:700,label:'Brand'}],
@@ -110,6 +173,21 @@
   const save=(el,prop)=>({value:el.style.getPropertyValue(prop),priority:el.style.getPropertyPriority(prop)});
   const restore=(el,prop,old)=>old.value?el.style.setProperty(prop,old.value,old.priority):el.style.removeProperty(prop);
   let stages=[],observer=null,raf=0,skipButton=null,active=new Set(),pending=new Set(),keyHandler=null,resizeHandler=null,interactionHandler=null;
+  // Navigation does not replay a visited page; refresh and explicit replay do.
+  const pageId=document.documentElement.dataset.introPage || 'home';
+  const sessionKey=`zero-scroll-intro-v1:${pageId}`;
+  const lastPageKey='zero-scroll-last-page-v1';
+  let lastPage='';
+  try{lastPage=sessionStorage.getItem(lastPageKey)||'';}catch(_){/* Storage can be unavailable. */}
+  let navType;
+  try{navType=performance.getEntriesByType?.('navigation')?.[0]?.type;}catch(_){/* No navigation timing. */}
+  const refreshed=navType==='reload'||(!navType&&performance.navigation?.type===1)||
+    (window.parent!==window&&navType!=='back_forward'&&lastPage===pageId);
+  try{sessionStorage.setItem(lastPageKey,pageId);}catch(_){/* Site stays usable without storage. */}
+  let playedHere=false;
+  const alreadyPlayed=()=>{try{return playedHere||sessionStorage.getItem(sessionKey)==='played';}catch(_){return playedHere;}};
+  const rememberPlayed=()=>{playedHere=true;try{sessionStorage.setItem(sessionKey,'played');}catch(_){/* Site stays usable without storage. */}};
+
 
   function textPoints(element,rect){
     const result=[],walker=document.createTreeWalker(element,NodeFilter.SHOW_TEXT),range=document.createRange();
@@ -184,11 +262,18 @@
     const overlay=document.createElement('div');overlay.className='site-build-overlay';overlay.setAttribute('aria-hidden','true');overlay.dataset.buildStage=stage.id;overlay.dataset.buildDuration=String(stage.endAt);
     overlay.innerHTML=stage.tracks.map(({id})=>{const role=roles[id];return `<div class="site-build-guide" data-guide="${id}" style="color:${role.color}"><span></span><i></i><i></i><i></i><i></i></div><div class="site-build-cursor" data-cursor="${id}" style="color:${role.color}"><svg width="22" height="28" viewBox="0 0 22 28" fill="none"><path d="M2 1.5V22L7.7 16.8L11.7 25.7L15 24.2L11.1 15.6L19 15.3L2 1.5Z" fill="currentColor" stroke="#141414" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="site-build-cursor-label">${role.label}</span></div>`}).join('');
     document.body.appendChild(overlay);stage.overlay=overlay;
+    for(const track of stage.tracks){
+      track.cursor=overlay.querySelector(`[data-cursor="${track.id}"]`);
+      track.guide=overlay.querySelector(`[data-guide="${track.id}"]`);
+      track.guideLabel=track.guide.querySelector('span');
+      track.finishedAt=track.targets[track.targets.length-1].start+track.targets[track.targets.length-1].duration;
+      track.nextTarget=0;track.lastGuideTarget=null;
+    }
   }
   function measureStage(stage){
     const anchor=stage.trigger.getBoundingClientRect();
     stage.center={x:anchor.left+scrollX+anchor.width/2,y:anchor.top+scrollY+Math.min(anchor.height,innerHeight)/2};
-    for(const track of stage.tracks)for(const t of track.targets)measure(t);
+    for(const track of stage.tracks){for(const t of track.targets)measure(t);track.lastGuideTarget=null;}
   }
   function startStage(stage){
     if(stage.started||stage.done)return;
@@ -202,9 +287,17 @@
     try{
       for(const stage of [...active]){
         const elapsed=now-stage.startedAt;
-        for(const {id,targets} of stage.tracks){
-          for(const t of targets)applyTarget(t,elapsed);
-          const cursor=stage.overlay.querySelector(`[data-cursor="${id}"]`),guide=stage.overlay.querySelector(`[data-guide="${id}"]`);
+        for(const track of stage.tracks){
+          const {id,targets,cursor,guide}=track;
+          // Targets in a track are sequential. Completed and future targets
+          // need no per-frame work; only paint the current one.
+          while(track.nextTarget<targets.length){
+            const target=targets[track.nextTarget];
+            if(elapsed<target.start)break;
+            applyTarget(target,elapsed);
+            if(elapsed<target.start+target.duration)break;
+            track.nextTarget++;
+          }
           let index=targets.findIndex(t=>elapsed<t.start+t.duration*(t.type||t.frame?1:.8));if(index<0)index=targets.length-1;
           const t=targets[index],prev=index?targets[index-1].rect:null;
           const point=r=>({x:r.left+r.width*.55,y:r.top+r.height*.52});
@@ -220,11 +313,13 @@
             x=Math.max(scrollX+8,Math.min(scrollX+innerWidth-28,x));
             y=Math.max(scrollY+8,Math.min(scrollY+innerHeight-30,y));
           }
-          const finished=Math.max(...targets.map(target=>target.start+target.duration)),exit=smooth((elapsed-finished-140)/650);
+          const finished=track.finishedAt,exit=smooth((elapsed-finished-140)/650);
           x=lerp(x,center.x,exit);y=lerp(y,center.y,exit);
           const opacity=smooth((elapsed-Math.max(100,targets[0].start-500))/350)*(1-smooth((elapsed-finished-200)/450));
           cursor.style.transform=`translate3d(${x}px,${y}px,0)`;cursor.style.opacity=String(opacity);
-          guide.style.transform=`translate3d(${t.rect.left}px,${t.rect.top}px,0)`;guide.style.width=`${t.rect.width}px`;guide.style.height=`${t.rect.height}px`;guide.querySelector('span').textContent=t.label;
+          if(track.lastGuideTarget!==t){
+            guide.style.transform=`translate3d(${t.rect.left}px,${t.rect.top}px,0)`;guide.style.width=`${t.rect.width}px`;guide.style.height=`${t.rect.height}px`;track.guideLabel.textContent=t.label;track.lastGuideTarget=t;
+          }
           const age=elapsed-t.start,pulse=age>=-80&&age<t.duration?clamp(1-Math.abs(age-t.duration*.32)/(t.duration*.68)):0;guide.style.opacity=String(pulse*opacity);
         }
         // Release each visible real control as soon as its own elements are
@@ -242,7 +337,10 @@
     for(const stage of stages)for(const track of stage.tracks)for(const target of track.targets)owners.set(target.element,{stage,track,target});
     const textNodes=[],walker=document.createTreeWalker(content,NodeFilter.SHOW_TEXT);
     while(walker.nextNode())if(walker.currentNode.data.trim())textNodes.push(walker.currentNode);
-    const byOwner=new Map();
+    const byOwner=new Map(),candidates=[];
+    // Gather all layout/style information before adding any wrappers. Mixing
+    // reads and writes here forces a full layout for nearly every text node,
+    // delaying navigation to a page with many sections.
     for(const node of textNodes){
       let owner=null,typedParent=false;
       for(let parent=node.parentElement;parent&&parent!==content;parent=parent.parentElement){
@@ -250,15 +348,23 @@
         if(candidate){if(candidate.target.type)typedParent=true;if(!owner)owner=candidate;}
       }
       if(!owner||typedParent||!node.parentElement)continue;
-      const parent=node.parentElement,style=getComputedStyle(parent);
+      const parent=node.parentElement;
+      // Closed native mobile menus can still report text ranges even though
+      // their contents are not visible; do not schedule those hidden labels.
+      if(parent.closest('.mobile-menu:not([open]) .mobile-nav'))continue;
+      const style=getComputedStyle(parent);
       if(style.visibility==='hidden'||style.display==='none')continue;
       const range=document.createRange();range.selectNodeContents(node);const rect=range.getBoundingClientRect();range.detach();
       if(rect.width<1||rect.height<1)continue;
+      candidates.push({node,parent,owner,textColor:style.color});
+    }
+    // Wrap in one write-only pass; the original text node stays intact.
+    for(const {node,parent,owner,textColor} of candidates){
       const wrapper=document.createElement('zero-build-text');wrapper.dataset.buildText='';
       parent.insertBefore(wrapper,node);wrapper.appendChild(node);
       owner.stage.wrappers.push({wrapper,node});
       const characters=Math.max(1,Array.from(node.data.trim()).length);
-      const target={element:wrapper,label:'Typing',frame:false,type:true,inlineText:true,textColor:style.color,characters,
+      const target={element:wrapper,label:'Typing',frame:false,type:true,inlineText:true,textColor,characters,
         start:owner.target.start+owner.target.duration+50,duration:Math.max(150,Math.min(650,characters*35)),baseOpacity:1,original:{},lastRaw:-1,owner:owner.target};
       for(const prop of ['opacity','clip-path','translate','transition','pointer-events'])target.original[prop]=save(wrapper,prop);
       if(!byOwner.has(owner.target))byOwner.set(owner.target,[]);
@@ -294,7 +400,7 @@
   }
   function prepare(){
     finishAll();
-    if(!ENABLE_INTRO||!content||motion.matches||!('IntersectionObserver'in window)){clearPreparing();return;}
+    if(!ENABLE_INTRO||!content||motion.matches||!('IntersectionObserver'in window)){clearPreparing();return false;}
     try{
       const used=new Set();
       // First collect original styles and controls, then hide targets without moving layout.
@@ -311,8 +417,8 @@
               const opacity=parseFloat(computed.opacity),t={element,label:step.label,frame:!!step.frame,type:!!step.type,start:step.t+visible++*(step.stagger||0),duration:step.d||360,baseOpacity:Number.isFinite(opacity)?opacity:1,original:{},lastRaw:-1};
               for(const prop of ['opacity','clip-path','translate','transition','pointer-events'])t.original[prop]=save(element,prop);
               used.add(element);targets.push(t);
-              if(element.matches('a,button,input,select,textarea'))stage.controls.set(element,element.inert);
-              element.querySelectorAll('a,button,input,select,textarea').forEach(el=>{if(!stage.controls.has(el))stage.controls.set(el,el.inert)});
+              if(element.matches('a,button,input,select,textarea,summary'))stage.controls.set(element,element.inert);
+              element.querySelectorAll('a,button,input,select,textarea,summary').forEach(el=>{if(!stage.controls.has(el))stage.controls.set(el,el.inert)});
             }
           }
           if(targets.length)stage.tracks.push({id,targets:targets.sort((a,b)=>a.start-b.start)});
@@ -325,20 +431,23 @@
         const targets=stage.tracks.flatMap(track=>track.targets).filter(target=>!target.inlineText);
         for(const control of stage.controls.keys()){
           const ancestors=targets.filter(target=>target.element===control||target.element.contains(control));
-          stage.controlReady.set(control,Math.max(0,...ancestors.map(target=>target.start+Math.min(90,target.duration*.1))));
+          // The header is clipped while its frame draws, and the navigation
+          // moves into place. Wait for both to settle before accepting input,
+          // so a first pointer click cannot land outside the restored control.
+          stage.controlReady.set(control,Math.max(0,...ancestors.map(target=>target.start+(target.element.matches('.site-header, .desktop-nav')?target.duration:Math.min(90,target.duration*.1)))));
         }
       }
       for(const stage of stages){
         pending.add(stage);stage.controls.forEach((_,el)=>{el.inert=true});
         for(const track of stage.tracks)for(const t of track.targets){t.element.style.setProperty('transition','none');t.element.style.setProperty('pointer-events','none');t.element.style.setProperty('opacity','0');}
       }
-      if(!stages.length){clearPreparing();return;}
+      if(!stages.length){clearPreparing();return false;}
       skipButton=document.createElement('button');skipButton.type='button';skipButton.className='site-build-skip';skipButton.innerHTML='Skip effects <span>ESC</span>';skipButton.addEventListener('click',finishAll);document.body.appendChild(skipButton);
       // A real click or keyboard activation finishes only that section before
       // the native event reaches its button. No synthetic actions are sent.
       const finishForControl=element=>{
         if(!(element instanceof Element))return;
-        const control=element.closest('a,button,input,select,textarea');
+        const control=element.closest('a,button,input,select,textarea,summary');
         if(!control||control.inert)return;
         for(const stage of [...active])if(stage.controls.has(control))finishStage(stage);
       };
@@ -347,20 +456,35 @@
       document.addEventListener('click',interactionHandler,true);
       keyHandler=event=>{
         if(event.key==='Escape'){event.preventDefault();finishAll();}
+        // Release every control before the browser advances keyboard focus.
+        else if(event.key==='Tab')finishAll();
         else if(event.key==='Enter'||event.key===' ')finishForControl(event.target);
       };
       window.addEventListener('keydown',keyHandler,true);
       resizeHandler=()=>{for(const stage of active)measureStage(stage)};window.addEventListener('resize',resizeHandler);
-      observer=new IntersectionObserver(entries=>{try{for(const entry of entries)if(entry.isIntersecting){const stage=stages.find(item=>item.trigger===entry.target);if(stage)startStage(stage);}}catch(error){console.warn('[website scroll build] Could not start section.',error);finishAll();}},{threshold:0,rootMargin:'0px 0px -8% 0px'});
+      observer=new IntersectionObserver(entries=>{try{
+        for(const entry of entries){
+          const stage=stages.find(item=>item.trigger===entry.target);
+          if(!stage)continue;
+          if(entry.isIntersecting)startStage(stage);
+          // Once a viewed section leaves the viewport, finish it instead of
+          // running cursors and layout updates off-screen during long jumps.
+          else if(stage.started&&!stage.done)finishStage(stage);
+        }
+      }catch(error){console.warn('[website scroll build] Could not start section.',error);finishAll();}},{threshold:0,rootMargin:'0px 0px -8% 0px'});
       stages.forEach(stage=>observer.observe(stage.trigger));
       clearPreparing();
       if(document.fonts?.ready)document.fonts.ready.then(()=>{if(resizeHandler)resizeHandler()}).catch(()=>{});
-    }catch(error){console.warn('[website scroll build] Setup failed; opening site.',error);finishAll();}
+      return true;
+    }catch(error){console.warn('[website scroll build] Setup failed; opening site.',error);finishAll();return false;}
   }
+  const play=()=>{if(prepare())rememberPlayed();};
   if(replay){
     const updateMotion=()=>{replay.disabled=motion.matches;replay.title=motion.matches?'Effects are disabled while reduced motion is enabled':'';if(motion.matches)finishAll();};
-    updateMotion();replay.addEventListener('click',()=>{if(!motion.matches)prepare()});
+    updateMotion();replay.addEventListener('click',()=>{if(!motion.matches)play()});
     motion.addEventListener?.('change',updateMotion);
   }
-  prepare();
+  // Back/forward cache must restore a completed page, not paused cursors.
+  window.addEventListener('pagehide',finishAll);
+  if(alreadyPlayed()&&!refreshed)clearPreparing();else play();
 })();

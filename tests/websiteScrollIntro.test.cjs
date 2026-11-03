@@ -8,9 +8,12 @@ const html = readFileSync(join(root, 'website/index.html'), 'utf8');
 const script = readFileSync(join(root, 'website/intro.js'), 'utf8');
 const siteScript = readFileSync(join(root, 'website/script.js'), 'utf8');
 
-function setup({ reduced = false, failAfter = Infinity } = {}) {
+function setup({ reduced = false, failAfter = Infinity, visited = false, storageBlocked = false, reload = false } = {}) {
   const dom = new JSDOM(html, { url: 'https://example.test/', runScripts: 'outside-only', pretendToBeVisual: true });
   const { window } = dom;
+  if (visited) window.sessionStorage.setItem('zero-scroll-intro-v1:home', 'played');
+  if (reload) window.performance.getEntriesByType = () => [{ type: 'reload' }];
+  if (storageBlocked) Object.defineProperty(window, 'sessionStorage', { get() { throw new Error('blocked'); } });
   let calls = 0;
   const rect = { left: 20, top: 20, right: 220, bottom: 70, width: 200, height: 50, x: 20, y: 20, toJSON() { return this; } };
   window.HTMLElement.prototype.getBoundingClientRect = () => rect;
@@ -43,18 +46,96 @@ function setup({ reduced = false, failAfter = Infinity } = {}) {
   assert.equal(content.inert, false, 'scrolling and the page are never globally blocked');
   assert.equal(document.documentElement.style.overflow, '', 'scrollbar is never locked');
   assert.equal(document.querySelector('.mock-keys button').inert, true, 'unfinished controls cannot be activated');
+  for (const selector of ['.how-backdrop', '.feedback-backdrop', '.features', '.steps', '.faq-border', '.faq-list', '.support-card', '.closing', 'footer']) {
+    assert.equal(document.querySelector(selector).style.opacity, '0', `${selector} stays hidden until its scroll stage starts`);
+  }
+
   observer().callback([{ target: document.querySelector('.hero'), isIntersecting: true }]);
   assert.ok(document.querySelector('[data-build-stage="hero"]'), 'the visible section starts building');
   window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'skip removes temporary wrappers');
   assert.equal(content.textContent, originalText, 'skip restores the same text');
   assert.equal(document.querySelector('.mock-keys button').inert, false, 'skip restores control input');
+  for (const selector of ['.how-backdrop', '.feedback-backdrop', '.features', '.steps', '.faq-border', '.faq-list']) assert.equal(document.querySelector(selector).style.opacity, '', `skip restores ${selector}`);
   assert.equal(document.querySelectorAll('.site-build-overlay').length, 0, 'skip removes cursors and guides');
   document.querySelector('.intro-replay').click();
   assert.ok(document.querySelectorAll('[data-build-text]').length > 100, 'replay re-arms the sections');
   document.querySelector('.site-build-skip').click();
   assert.equal(document.querySelectorAll('[data-build-text]').length, 0);
   assert.equal(content.textContent, originalText);
+  dom.window.close();
+}
+{
+  const { dom, window, document, observer, advance } = setup();
+  observer().callback([{ target: document.querySelector('.hero'), isIntersecting: true }]);
+  advance(800);
+  const navLink = document.querySelector('.desktop-nav a[href="./cases.html"]');
+  const menuButton = document.querySelector('.menu-toggle');
+  assert.equal(navLink.inert, false, 'navigation is usable soon after its frame settles, without waiting for all labels');
+  assert.equal(menuButton.inert, false, 'mobile navigation becomes usable early as well');
+  menuButton.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+  menuButton.click();
+  assert.equal(document.querySelector('.mobile-menu').open, true, 'the first mobile menu click opens it while the hero is building');
+  dom.window.close();
+}
+{
+  const { dom, window, document, observer, advance } = setup();
+  observer().callback([{ target: document.querySelector('.hero'), isIntersecting: true }]);
+  advance(4000);
+  assert.equal(document.querySelector('.hero-download-mount a').inert, false, 'the primary action is available early in the hero build');
+  assert.ok(document.querySelector('[data-build-stage="hero"]'), 'the rest of the hero can still animate');
+  window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'keyboard navigation finishes the decorative animation');
+  assert.equal(document.querySelector('#feedback-message').inert, false, 'off-screen controls can be reached by keyboard');
+  dom.window.close();
+}
+{
+  const { dom, document, observer } = setup();
+  const editor = document.querySelector('.studio-showcase');
+  observer().callback([{ target: editor, isIntersecting: true }]);
+  assert.ok(document.querySelector('[data-build-stage="editor"]'));
+  observer().callback([{ target: editor, isIntersecting: false }]);
+  assert.equal(document.querySelector('[data-build-stage="editor"]'), null, 'a section stops running when it leaves the viewport');
+  assert.equal(document.querySelector('.mock-keys button').inert, false, 'leaving restores the section controls');
+  assert.equal(document.querySelector('.support-card').style.opacity, '0', 'unvisited sections remain hidden until scrolled to');
+  document.querySelector('.site-build-skip').click();
+  dom.window.close();
+}
+{
+  const { dom, window, document, observer } = setup();
+  assert.equal(window.sessionStorage.getItem('zero-scroll-intro-v1:home'), 'played', 'the first play is remembered');
+  observer().callback([{ target: document.querySelector('.hero'), isIntersecting: true }]);
+  window.dispatchEvent(new window.Event('pagehide'));
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'leaving restores a complete page for back/forward cache');
+  assert.equal(document.querySelector('.mock-keys button').inert, false);
+  dom.window.close();
+}
+{
+  const { dom, document } = setup({ visited: true });
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'a returning page does not replay automatically');
+  assert.equal(document.querySelectorAll('.site-build-overlay').length, 0);
+  assert.equal(document.querySelector('.mock-keys button').inert, false);
+  document.querySelector('.intro-replay').click();
+  assert.ok(document.querySelectorAll('[data-build-text]').length > 100, 'explicit replay still works on a returning page');
+  document.querySelector('.site-build-skip').click();
+  dom.window.close();
+}
+{
+  const { dom, document } = setup({ visited: true, reload: true });
+  assert.ok(document.querySelectorAll('[data-build-text]').length > 100, 'refresh replays the current page despite a previous visit');
+  document.querySelector('.site-build-skip').click();
+  dom.window.close();
+}
+{
+  const { dom, document } = setup({ visited: true, reload: true, reduced: true });
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'refresh still respects reduced motion');
+  dom.window.close();
+}
+{
+  const { dom, document } = setup({ storageBlocked: true });
+  assert.ok(document.querySelectorAll('[data-build-text]').length > 100, 'storage restrictions do not break the page');
+  document.querySelector('.site-build-skip').click();
+  assert.equal(document.querySelector('.mock-keys button').inert, false);
   dom.window.close();
 }
 {
@@ -78,9 +159,74 @@ function setup({ reduced = false, failAfter = Infinity } = {}) {
   dom.window.close();
 }
 {
+  const { dom, document, observer, advance } = setup();
+  const list = document.querySelector('.faq-list');
+  observer().callback([{ target: list, isIntersecting: true }]);
+  const summary = list.querySelector('summary');
+  const detail = summary.parentElement;
+  assert.equal(list.querySelectorAll('details').length, 6, 'FAQ has six expandable answers');
+  assert.equal(summary.inert, true, 'unrevealed questions cannot be activated');
+  for (let time = 0; time < 25000 && summary.inert; time += 100) advance(time);
+  assert.equal(summary.inert, false, 'revealed FAQ questions become usable');
+  assert.ok(document.querySelector('[data-build-stage="faq-list"]'));
+  summary.click();
+  assert.equal(document.querySelector('[data-build-stage="faq-list"]'), null, 'opening a question completes its section');
+  assert.equal(detail.open, true, 'native summary activation opens its answer');
+  summary.click();
+  assert.equal(detail.open, false, 'native summary activation closes its answer');
+  document.querySelector('.site-build-skip').click();
+  dom.window.close();
+}
+{
+  const { dom, window, document, observer, advance } = setup();
+  const form = document.querySelector('.feedback-form');
+  observer().callback([{ target: form, isIntersecting: true }]);
+  const field = document.querySelector('#feedback-message');
+  for (let time = 0; time < 25000 && field.inert; time += 100) advance(time);
+  assert.equal(field.inert, false, 'feedback field is usable before its section finishes');
+  assert.ok(document.querySelector('[data-build-stage="feedback-form"]'));
+  field.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  assert.equal(document.querySelector('[data-build-stage="feedback-form"]'), null, 'interaction completes form construction');
+  field.value = 'A useful idea';
+  document.querySelector('#feedback-contact').value = '@visitor';
+  const event = new window.Event('submit', { bubbles: true, cancelable: true });
+  form.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, true, 'frontend-only form does not submit');
+  assert.match(document.querySelector('.feedback-status').textContent, /not available yet/i);
+  assert.equal(field.value, 'A useful idea', 'feedback remains in the field');
+  assert.equal(document.querySelector('#feedback-contact').value, '@visitor');
+  assert.equal(field.hasAttribute('name'), false, 'fallback navigation cannot send feedback fields');
+  assert.equal(document.querySelector('#feedback-contact').hasAttribute('name'), false);
+  document.querySelector('.site-build-skip').click();
+  dom.window.close();
+}
+{
+  const { dom, document, observer, advance } = setup();
+  const card = document.querySelector('.support-card');
+  observer().callback([{ target: card, isIntersecting: true }]);
+  assert.ok(document.querySelector('[data-build-stage="support"]'), 'support builds when scrolled into view');
+  const buttons = [...card.querySelectorAll('.support-actions button')];
+  assert.equal(buttons.length, 2);
+  assert.ok(buttons.every(button => button.disabled), 'payment controls stay disabled without verified destinations');
+  assert.match(card.querySelector('#support-availability').textContent, /aren’t connected yet/i);
+  advance(30000);
+  assert.equal(document.querySelector('[data-build-stage="support"]'), null, 'support construction completes');
+  assert.ok(buttons.every(button => button.disabled), 'animation does not enable unavailable payments');
+  document.querySelector('.site-build-skip').click();
+  dom.window.close();
+}
+{
   const { dom, document } = setup({ reduced: true });
   const externalLinks = [...document.querySelectorAll('a[href^="https://github.com/"]')];
   assert.ok(externalLinks.length >= 6, 'desktop, mobile and section GitHub links exist');
+  const download = document.querySelector('#download a.button-orange');
+  assert.equal(download.href, 'https://github.com/david-8837/MacroPad-/releases', 'Windows download opens the real releases page');
+  assert.match(document.getElementById('download-status').textContent, /no Windows installer has been released yet/i, 'availability is not overstated');
+  const heroDownload = document.querySelector('.hero-actions a.button');
+  assert.equal(heroDownload.href, download.href, 'hero and download section link to the same Windows releases page');
+  assert.match(heroDownload.textContent, /download for windows/i);
+  assert.match(document.getElementById('hero-download-status').textContent, /not released yet/i);
+  assert.ok(document.querySelector('.mobile-nav a[href="#download"]'), 'download is accessible from mobile navigation');
   for (const link of externalLinks) {
     assert.equal(link.target, '_top', 'external links navigate the top-level page without a popup');
     assert.ok(link.rel.split(/\s+/).includes('noreferrer'));
@@ -91,6 +237,8 @@ function setup({ reduced = false, failAfter = Infinity } = {}) {
   const { dom, document } = setup({ reduced: true });
   assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'reduced motion bypasses writing');
   assert.equal(document.querySelector('.intro-replay').disabled, true);
+  assert.equal(dom.window.sessionStorage.getItem('zero-scroll-intro-v1:home'), null, 'reduced motion is not marked as an animation play');
+  assert.equal(document.querySelector('.feedback-backdrop').style.opacity, '', 'reduced motion keeps backgrounds visible');
   dom.window.close();
 }
 {
@@ -98,6 +246,7 @@ function setup({ reduced = false, failAfter = Infinity } = {}) {
   assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'failed measurement removes partial wrappers');
   assert.equal(document.getElementById('site-content').textContent, originalText, 'failed setup leaves the site intact');
   assert.equal(document.querySelector('.mock-keys button').inert, false, 'failed setup leaves controls usable');
+  assert.equal(dom.window.sessionStorage.getItem('zero-scroll-intro-v1:home'), null, 'failed setup is not marked as played');
   dom.window.close();
 }
 console.log('website scroll intro: all text, scroll safety, replay, reduced motion and fail-open passed');
