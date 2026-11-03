@@ -22,6 +22,11 @@ The support section is a frontend placeholder: both payment buttons are disabled
 
 Home section backgrounds and dividers are part of their own scroll construction. A started section completes when it leaves the viewport so off-screen cursors do not continue consuming resources. The Cases page displays immediately without the construction animation or replay control. Mobile navigation uses native details and remains usable without JavaScript. Background layers are independent of content so direct links and deep scrolling still work; skipping or reduced motion restores everything immediately.
 
+
+## GitHub Pages
+
+The `Deploy ZERO website` workflow publishes the contents of `website/` with GitHub Actions, without building the Electron app. In repository **Settings → Pages**, select **GitHub Actions** as the build source. The intended URL is `https://david-8837.github.io/MacroPad-/`; it becomes available only after a successful deployment. The workflow runs when website files change on `main` or `arena/d088a202-macropad`, and can also be run manually once the workflow is available on the default branch. If the `github-pages` environment restricts deployment branches, allow the session branch or deploy after merging to `main`.
+
 ## Case model library
 
 `cases.html` is a separate page for case pictures and downloadable files. Until real models are added, it shows a labeled conceptual example picture with a disabled download button; it does not advertise a model file that hasn't been supplied. This is a static frontend, not an upload service: adding files through a browser and storing them online will require backend work later.
