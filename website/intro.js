@@ -116,7 +116,7 @@
       content:[{s:'.feedback-field label',t:1200,stagger:700,label:'Label'}, {s:'.feedback-bottom > p',t:2650,d:1150,type:true,label:'Typing'}]
     }},
     {id:'support',trigger:'.support-card',tracks:{
-      interface:[{s:'.support-card',t:0,d:700,frame:true,label:'Support frame'}, {s:'.support-topline',t:800,label:'Details'}, {s:'.support-actions button',t:4250,stagger:500,label:'Support option'}, {s:'.support-bottomline',t:6000,label:'Details'}],
+      interface:[{s:'.support-card',t:0,d:700,frame:true,label:'Support frame'}, {s:'.support-topline',t:800,label:'Details'}, {s:'.support-actions button, .support-actions a',t:4250,stagger:500,label:'Support option'}, {s:'.support-bottomline',t:6000,label:'Details'}],
       visual:[{s:'.support-art',t:700,d:600,frame:true,label:'Artwork frame'}, {s:'.support-mark',t:1450,label:'Mark'}],
       content:[{s:'.support-eyebrow',t:900,label:'Introduction'}, {s:'.support-card h2',t:1450,d:1200,type:true,label:'Typing'}, {s:'.support-copy',t:2800,d:1100,type:true,label:'Typing'}, {s:'.support-availability',t:5000,d:900,type:true,label:'Typing'}]
     }},

@@ -8,7 +8,7 @@ const html = readFileSync(join(root, 'website/index.html'), 'utf8');
 const script = readFileSync(join(root, 'website/intro.js'), 'utf8');
 const siteScript = readFileSync(join(root, 'website/script.js'), 'utf8');
 
-function setup({ reduced = false, failAfter = Infinity, visited = false, storageBlocked = false, reload = false, loaderActive = false, loaderSkipped = false } = {}) {
+function setup({ reduced = false, failAfter = Infinity, visited = false, storageBlocked = false, reload = false, loaderActive = false, loaderSkipped = false, unconfigured = false } = {}) {
   const dom = new JSDOM(html, { url: 'https://example.test/', runScripts: 'outside-only', pretendToBeVisual: true });
   const { window } = dom;
   if (visited) window.sessionStorage.setItem('zero-scroll-intro-v1:home', 'played');
@@ -37,8 +37,9 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
     window.document.querySelector('.zero-loader').classList.add('is-leaving');
   }
   if (loaderSkipped) window.__zeroLoaderOutcome = { skipped: true };
-  const originalText = window.document.getElementById('site-content').textContent;
+  if (unconfigured) window.document.querySelector('.feedback-form').dataset.web3formsKey = '';
   window.eval(siteScript);
+  const originalText = window.document.getElementById('site-content').textContent;
   window.eval(script);
   return { dom, window, document: window.document, originalText, observer: () => observer, advance: ms => { const callback = frame; if (callback) callback(window.performance.now() + ms); } };
 }
@@ -183,7 +184,7 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
   dom.window.close();
 }
 {
-  const { dom, window, document, observer, advance } = setup();
+  const { dom, window, document, observer, advance } = setup({ unconfigured: true });
   const form = document.querySelector('.feedback-form');
   observer().callback([{ target: form, isIntersecting: true }]);
   const field = document.querySelector('#feedback-message');
@@ -196,7 +197,7 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
   document.querySelector('#feedback-contact').value = '@visitor';
   const event = new window.Event('submit', { bubbles: true, cancelable: true });
   form.dispatchEvent(event);
-  assert.equal(event.defaultPrevented, true, 'frontend-only form does not submit');
+  assert.equal(event.defaultPrevented, true, 'unconfigured form does not submit');
   assert.match(document.querySelector('.feedback-status').textContent, /not available yet/i);
   assert.equal(field.value, 'A useful idea', 'feedback remains in the field');
   assert.equal(document.querySelector('#feedback-contact').value, '@visitor');
@@ -210,13 +211,20 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
   const card = document.querySelector('.support-card');
   observer().callback([{ target: card, isIntersecting: true }]);
   assert.ok(document.querySelector('[data-build-stage="support"]'), 'support builds when scrolled into view');
-  const buttons = [...card.querySelectorAll('.support-actions button')];
-  assert.equal(buttons.length, 2);
-  assert.ok(buttons.every(button => button.disabled), 'payment controls stay disabled without verified destinations');
-  assert.match(card.querySelector('#support-availability').textContent, /aren’t connected yet/i);
-  advance(30000);
-  assert.equal(document.querySelector('[data-build-stage="support"]'), null, 'support construction completes');
-  assert.ok(buttons.every(button => button.disabled), 'animation does not enable unavailable payments');
+  const coffee = card.querySelector('.support-actions button');
+  const paypal = card.querySelector('.support-actions a');
+  assert.equal(coffee.disabled, true, 'coffee stays disabled until a link is provided');
+  assert.equal(paypal.href, 'https://www.paypal.com/paypalme/ThongamDavid529');
+  assert.equal(paypal.target, '_top');
+  assert.match(card.querySelector('#support-availability').textContent, /coffee is coming soon/i);
+  advance(6000);
+  assert.equal(paypal.inert, false, 'PayPal becomes usable while its section is still building');
+  assert.ok(document.querySelector('[data-build-stage="support"]'));
+  paypal.addEventListener('click', event => event.preventDefault());
+  paypal.click();
+  assert.equal(document.querySelector('[data-build-stage="support"]'), null, 'clicking PayPal finishes its construction');
+  assert.equal(coffee.disabled, true, 'animation does not enable unavailable payments');
+  assert.equal(paypal.href, 'https://www.paypal.com/paypalme/ThongamDavid529', 'animation preserves PayPal destination');
   document.querySelector('.site-build-skip').click();
   dom.window.close();
 }

@@ -20,9 +20,11 @@ In the interactive illustration, select a key or layer, or click the knob to cyc
 
 The **Download for Windows** button downloads the unsigned Windows test installer from the GitHub pre-release `v1.0.0-test.1`. The app was built and smoke-tested on a hosted Windows runner; physical Windows devices, audio hardware, macropad hardware and firmware remain untested. Windows may show a warning because the installer is unsigned. The website does not host the installer itself.
 
-The feedback form is a frontend preview only. It validates the message and explains that sending is not connected; it does not transmit, save, or clear the visitor’s input. Connect a real submission service and update the on-page copy when backend work begins.
+## Feedback and support
 
-The header’s **Buy me a coffee** link opens the support section; it does not claim to take payments. The support section is a frontend placeholder: both payment buttons are disabled until the project owner supplies real donation URLs. Do not enable them without verified destinations.
+The feedback form is integrated with [Web3Forms](https://web3forms.com/) using the public access key supplied by the project owner. To change the receiving inbox, create a Web3Forms access key using the new email address, then put that public key in the `data-web3forms-key` attribute on the feedback form in `website/index.html`. Web3Forms describes this key as a public form identifier, not a secret. Run `node scripts/build-website-routes.cjs` and deploy the updated site. Confirm a real submission arrives in the recipient inbox (including its spam folder); a successful API response alone does not prove email delivery. Use Web3Forms' available anti-spam/domain controls as appropriate and review its privacy policy and terms before enabling. Feedback and optional contact details are sent to Web3Forms; the site advises visitors not to include sensitive information. The contact field supports both email addresses and social handles. The form shows sending, success, and failure states, prevents duplicate submissions, and keeps the message in the form for retry if sending fails. Until a valid key is set, no request is sent and the form explains that it is unavailable. The form requires JavaScript.
+
+The header’s **Buy me a coffee** link opens the support section. PayPal links to the owner's supplied PayPal.Me page in the top-level tab. The separate **Buy me a coffee** button remains disabled until its destination is supplied.
 
 Section backgrounds and dividers are part of their own scroll construction. A started section completes when it leaves the viewport so off-screen cursors do not continue consuming resources. Mobile navigation uses native details and remains usable without JavaScript. Background layers are independent of content so direct links and deep scrolling still work; skipping or reduced motion restores everything immediately.
 
@@ -35,9 +37,9 @@ The `Deploy ZERO website` workflow publishes the contents of `website/` with Git
 
 `/cases/` shows paid V1 (keys and knob, no screen or external LEDs) and V2 (screen and planned RGB) case model downloads priced at ₹150 each. Purchase is required before downloading. The illustrations are placeholders, the case designs and fit are unverified, and the purchase buttons are disabled until payment verification and protected file delivery are implemented. A static site cannot enforce purchases: do not put paid files in `website/`, Git, public storage, or `cases-data.js`. A backend or secure commerce service must verify payment and authorize access to privately stored files before delivery. The page also has a separate library for case pictures and downloadable files. Until additional models are added, the library shows decorative artwork and no download cards. This is a static frontend, not an upload service: adding files through a browser and storing them online will require backend work later.
 
-To add a model now:
+To add an **explicitly free** model to the separate public gallery (not a paid V1 or V2 file):
 
-1. Put a browser-readable picture and the model file (for example, STL, STEP, 3MF, or ZIP) in `website/assets/cases/`.
+1. Put a browser-readable picture and the free model file (for example, STL, STEP, 3MF, or ZIP) in `website/assets/cases/`. These files are public and cannot be protected by this gallery.
 2. Add an entry to `website/cases-data.js`, for example: `{ title: 'My case', image: './assets/cases/my-case.webp', file: './assets/cases/my-case.stl' }`.
 3. Deploy both files and the updated `cases-data.js` together. Use local same-site paths; invalid or incomplete entries are not displayed. Keep large models out of Git if they exceed the repository's storage conventions.
 

@@ -156,12 +156,12 @@
   <link rel="prefetch" href="./cases/" as="document">
   <link rel="prefetch" href="./cases-data.js?v=1" as="script">
   <link rel="prefetch" href="./cases.js?v=2" as="script">
-  <link rel="stylesheet" href="./styles.css?v=scroll-build-33">
-  <link rel="stylesheet" href="./intro.css?v=scroll-build-33">
+  <link rel="stylesheet" href="./styles.css?v=scroll-build-36">
+  <link rel="stylesheet" href="./intro.css?v=scroll-build-36">
   <link rel="stylesheet" href="./assets/specular-button.css?v=1">
-  <script src="./script.js?v=scroll-build-33" defer></script>
+  <script src="./script.js?v=scroll-build-36" defer></script>
   <script src="./assets/specular-button.js?v=3" defer></script>
-  <script src="./intro.js?v=scroll-build-33" defer></script>
+  <script src="./intro.js?v=scroll-build-36" defer></script>
 </head>
 <body>
   <div class="zero-loader">
@@ -232,10 +232,11 @@
           <h2 id="feedback-heading">Tell us what<br>you <em>think.</em></h2>
           <p>Found a bug or have an idea? We’d love to hear what you think.</p>
         </div>
-        <form class="feedback-form" action="#feedback" method="get" aria-describedby="feedback-note">
+        <form class="feedback-form" action="#feedback" method="get" aria-describedby="feedback-note" data-web3forms-key="478e34eb-09e1-4e97-a588-258f89b73c12">
           <div class="feedback-field"><label for="feedback-message">Your feedback or idea <span>REQUIRED</span></label><textarea id="feedback-message" placeholder="Tell us what’s on your mind..." rows="5" maxlength="4000" required></textarea></div>
           <div class="feedback-field"><label for="feedback-contact">Email or social handle <span>OPTIONAL</span></label><input id="feedback-contact" type="text" placeholder="If you’d like a reply" maxlength="254" autocomplete="email"></div>
-          <div class="feedback-bottom"><p id="feedback-note">Feedback sending isn’t connected yet. Nothing will be sent or saved.</p><button class="feedback-submit" type="submit">Send feedback <span aria-hidden="true">↗</span></button></div>
+          <div class="feedback-honeypot" aria-hidden="true"><label>Leave this field empty<input id="feedback-botcheck" type="checkbox" tabindex="-1" autocomplete="off"></label></div>
+          <div class="feedback-bottom"><p id="feedback-note">Feedback requires JavaScript. Nothing has been sent or saved.</p><button class="feedback-submit" type="submit"><span class="feedback-submit-label">Send feedback</span><span class="feedback-submit-icon" aria-hidden="true">↗</span></button></div>
           <p class="feedback-status" role="status" aria-live="polite"></p>
         </form>
       </div>
@@ -248,12 +249,12 @@
           <div class="support-main">
             <div class="eyebrow support-eyebrow"><span class="black-square"></span> A LITTLE SUPPORT GOES A LONG WAY</div>
             <h2 id="support-heading">Keep ZERO<br><em>going.</em></h2>
-            <p class="support-copy">If ZERO makes your day a little better, you’ll be able to support the project and help it grow.</p>
+            <p class="support-copy">If ZERO makes your day a little better, you can support the project and help it grow.</p>
             <div class="support-actions" aria-describedby="support-availability">
               <button type="button" disabled><span class="support-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 9h13v5a6.5 6.5 0 0 1-13 0V9Zm13 1h1.5a2.5 2.5 0 0 1 0 5H17M7 4v2m4-2v2m4-2v2M3 21h15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="support-action-text"><span class="support-action-name">Buy me a coffee</span><small>COMING SOON</small></span><span class="support-action-arrow" aria-hidden="true">↗</span></button>
-              <button type="button" disabled><span class="support-paypal-icon" aria-hidden="true">P</span><span class="support-action-text"><span class="support-action-name">PayPal</span><small>COMING SOON</small></span><span class="support-action-arrow" aria-hidden="true">↗</span></button>
+              <a href="https://www.paypal.com/paypalme/ThongamDavid529" target="_top" rel="noreferrer"><span class="support-paypal-icon" aria-hidden="true">P</span><span class="support-action-text"><span class="support-action-name">PayPal</span><small>SUPPORT WITH PAYPAL</small></span><span class="support-action-arrow" aria-hidden="true">↗</span></a>
             </div>
-            <p class="support-availability" id="support-availability">Support links aren’t connected yet. Thanks for being here.</p>
+            <p class="support-availability" id="support-availability">PayPal opens securely on PayPal. Buy me a coffee is coming soon. Thanks for being here.</p>
           </div>
           <div class="support-art" aria-hidden="true">
             <div class="support-art-orbit"></div>
