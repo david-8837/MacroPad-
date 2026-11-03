@@ -21,8 +21,7 @@ function create(models) {
 {
   const dom = create();
   assert.equal(dom.window.document.querySelectorAll('#case-grid .case-card').length, 0);
-  assert.ok(dom.window.document.querySelector('.case-preview-card img'), 'an example image is displayed');
-  assert.equal(dom.window.document.querySelector('.case-preview-card button').disabled, true, 'the placeholder cannot imply a download exists');
+  assert.equal(dom.window.document.querySelector('.case-preview-card'), null, 'the placeholder card is not shown');
   assert.equal(dom.window.document.querySelector('#cases-empty').hidden, false, 'an empty library never invents a download');
   assert.match(home, /href="\.\/cases\/"/, 'home links to the separate library page');
   const homeDoc = new JSDOM(home).window.document;
@@ -40,6 +39,28 @@ function create(models) {
     assert.ok(casePrefetches.includes(url), `Cases prefetch matches the active Home asset version: ${url}`);
   }
   const document = dom.window.document;
+  const saleCards = [...document.querySelectorAll('.case-sale-card')];
+  assert.equal(saleCards.length, 2, 'V1 and V2 each have their own case listing');
+  for (const [index, card] of saleCards.entries()) {
+    assert.match(card.querySelector('h3').textContent, new RegExp(`V${index + 1} case model`));
+    assert.match(card.querySelector('.case-sale-price').textContent, /₹100/);
+    assert.match(card.querySelector('.case-sale-visual small').textContent, /illustration \/ not final/i);
+    assert.match(card.querySelector('.case-sale-description').textContent, /not yet verified/i);
+    assert.equal(card.querySelector('button').disabled, true, 'purchase stays disabled without a checkout');
+    assert.match(card.querySelector('button').textContent, /buy & download/i);
+    assert.equal(card.querySelector('a[download]'), null, 'paid models have no unprotected public download');
+  }
+  assert.match(saleCards[0].querySelector('.case-sale-description').textContent, /without a screen or external LEDs/i);
+  assert.equal(saleCards[0].querySelector('.sale-display, .sale-rgb-indicators'), null, 'V1 illustration has no screen or LEDs');
+  assert.match(saleCards[1].querySelector('.case-sale-description').textContent, /screen and RGB/i);
+  assert.ok(saleCards[1].querySelector('.sale-display'), 'V2 illustration has a screen');
+  assert.ok(saleCards[1].querySelector('.sale-rgb-indicators'), 'V2 illustration indicates planned RGB');
+  assert.match(homeDoc.querySelector('.hardware-facts').textContent, /V1\s*KEYS \+ KNOB\s*V2\s*DISPLAY \+ PLANNED RGB/);
+  assert.match(document.querySelector('.case-wiring-intro p').textContent, /their V2 is now V1, and their V1 is now V2/i, 'old diagram labels are explained');
+  assert.match(document.querySelector('.guide-steps').textContent, /Keys & Knob for V1 or Full Deck for V2/);
+  assert.match(document.querySelector('.guide-safety').textContent, /For V2, the RGB power design is not approved/i);
+  assert.match(document.querySelector('#case-order-note').textContent, /purchase is required to download/i);
+  assert.match(document.querySelector('#case-order-note').textContent, /payment and secure file delivery aren’t connected/i);
   assert.ok(document.querySelector('script[src*="intro.js"]'), 'Cases loads the construction animation');
   assert.ok(document.querySelector('link[rel="stylesheet"][href*="intro.css"]'), 'Cases applies animation styles');
   assert.ok(document.querySelector('.intro-replay'), 'Cases provides a replay control');
@@ -75,6 +96,7 @@ function create(models) {
   ]);
   const document = dom.window.document;
   assert.equal(document.querySelector('#cases-empty').hidden, true);
+  assert.equal(document.querySelectorAll('.case-sale-card').length, 2, 'paid listings remain visible when downloadable models are added');
   assert.equal(document.querySelectorAll('#case-grid .case-card').length, 2, 'only complete local entries are listed');
   assert.equal(document.querySelector('#case-grid .case-card img').alt, 'My case case model');
   const link = document.querySelector('#case-grid .case-card a');
@@ -126,6 +148,9 @@ function createAnimatedCases({ visited = false, reload = false, reduced = false 
   assert.equal(window.sessionStorage.getItem('zero-scroll-last-page-v1'), 'cases');
   assert.ok(document.querySelectorAll('[data-build-text]').length > 50, 'Cases text is scheduled for typing');
   assert.equal(document.querySelector('.guide-safety').style.opacity, '0', 'unvisited wiring warnings wait for their section');
+  assert.equal(document.querySelector('.case-sale-card').style.opacity, '0', 'case listings wait for their scroll section');
+  observer().callback([{ target: document.querySelector('.case-sale-grid'), isIntersecting: true }]);
+  assert.ok(document.querySelector('[data-build-stage="case-sale-cards"]'), 'case listings construct when they enter view');
   assert.equal(document.querySelector('.cases-future').getAttribute('aria-hidden'), 'true', 'library artwork is decorative');
   assert.equal(document.querySelector('.cases-future').style.opacity, '0', 'library artwork waits for its scroll section');
   observer().callback([{ target: document.querySelector('.cases-hero'), isIntersecting: true }]);

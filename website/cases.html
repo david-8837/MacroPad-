@@ -83,6 +83,8 @@
           if (done) return;
           done = true;
           root.classList.remove('zero-loading');
+          // Retain the decision if the deferred intro script is still loading.
+          window.__zeroLoaderOutcome = { skipped };
           window.removeEventListener('keydown', onKey, true);
           window.dispatchEvent(new CustomEvent('zero-loader-done', { detail: { skipped } }));
         };
@@ -98,7 +100,9 @@
         };
         const onKey = event => { if (event.key === 'Tab' || event.key === 'Escape') leave(true); };
         window.addEventListener('keydown', onKey, true);
-        document.addEventListener('click', event => { if (event.target.closest?.('.zero-loader')) leave(true); });
+        // A tap dismisses the loading screen only; the construction still plays.
+        // Escape and Tab remain explicit ways to skip all effects.
+        document.addEventListener('click', event => { if (event.target.closest?.('.zero-loader')) finish(false); });
         document.addEventListener('DOMContentLoaded', () => {
           setTimeout(() => { if (!done) document.querySelector('.zero-loader')?.classList.add('is-gathering'); }, Math.max(0, 2050 - (Date.now() - started)));
           setTimeout(() => leave(false), Math.max(0, 2680 - (Date.now() - started)));
@@ -134,12 +138,12 @@
   <link rel="prefetch" href="./home/" as="document">
   <link rel="prefetch" href="./assets/specular-button.css?v=1" as="style">
   <link rel="prefetch" href="./assets/specular-button.js?v=2" as="script">
-  <link rel="stylesheet" href="./styles.css?v=scroll-build-29">
-  <link rel="stylesheet" href="./intro.css?v=scroll-build-29">
-  <script src="./script.js?v=scroll-build-29" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=scroll-build-33">
+  <link rel="stylesheet" href="./intro.css?v=scroll-build-33">
+  <script src="./script.js?v=scroll-build-33" defer></script>
   <script src="./cases-data.js?v=1" defer></script>
   <script src="./cases.js?v=2" defer></script>
-  <script src="./intro.js?v=scroll-build-29" defer></script>
+  <script src="./intro.js?v=scroll-build-33" defer></script>
 </head>
 <body>
   <div class="zero-loader">
@@ -160,17 +164,27 @@
     </header>
     <main id="main">
       <section class="cases-hero section-wrap" id="top">
-        <div><div class="eyebrow"><span class="orange-square"></span> MADE FOR YOUR DECK <span class="eyebrow-line"></span> THE CASE LIBRARY</div><h1>Make it feel<br>like <em>yours.</em></h1><p>Case models for the little deck. Pick a design and download the files when they’re available.</p><a class="case-guide-jump" href="#build-guide">SEE THE BUILD GUIDE <span>↘</span></a></div>
+        <div><div class="eyebrow"><span class="orange-square"></span> MADE FOR YOUR DECK <span class="eyebrow-line"></span> THE CASE LIBRARY</div><h1>Make it feel<br>like <em>yours.</em></h1><p>Explore V1 and V2 case model downloads for the little deck, plus build guidance for your project.</p><a class="case-guide-jump" href="#case-options">SEE THE CASES <span>↘</span></a><a class="case-guide-jump case-guide-secondary" href="#build-guide">SEE THE BUILD GUIDE <span>↘</span></a></div>
         <div class="cases-hero-index" aria-hidden="true"><span>ZERO / CASES</span><span><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></span></div>
       </section>
+      <section class="case-sale section-wrap" id="case-options" aria-labelledby="case-sale-title">
+        <div class="case-sale-heading"><div><div class="eyebrow"><span class="orange-square"></span> 3D MODEL DOWNLOADS <span class="eyebrow-line"></span> V1 / V2</div><h2 id="case-sale-title">A case for<br><em>your build.</em></h2></div><p>₹100 PER MODEL / PURCHASE REQUIRED</p></div>
+        <div class="case-sale-grid">
+          <article class="case-sale-card case-sale-v1" aria-labelledby="sale-v1-title">
+            <div class="case-sale-visual"><span>01 / V1</span><svg viewBox="0 0 340 280" aria-hidden="true"><rect class="sale-deck-shadow" x="43" y="53" width="255" height="213" rx="27"/><rect class="sale-deck-body" x="43" y="41" width="255" height="213" rx="27"/><path class="sale-accent-line" d="M88 88h102"/><circle class="sale-knob-outer" cx="252" cy="86" r="24"/><circle class="sale-knob-inner" cx="252" cy="86" r="13"/><g class="sale-keys"><rect x="88" y="132" width="46" height="31" rx="5"/><rect x="141" y="132" width="46" height="31" rx="5"/><rect x="194" y="132" width="46" height="31" rx="5"/><rect x="88" y="169" width="46" height="31" rx="5"/><rect x="141" y="169" width="46" height="31" rx="5"/><rect x="194" y="169" width="46" height="31" rx="5"/><rect x="88" y="206" width="46" height="31" rx="5"/><rect x="141" y="206" width="46" height="31" rx="5"/><rect x="194" y="206" width="46" height="31" rx="5"/></g></svg><small>ILLUSTRATION / NOT FINAL</small></div>
+            <div class="case-sale-info"><div class="case-sale-card-top"><div><span class="case-sale-label">KEYS + KNOB</span><h3 id="sale-v1-title">V1 case model</h3></div><p class="case-sale-price">₹100 <small>/ model</small></p></div><p class="case-sale-description">A 3D model for the keys-and-knob build, without a screen or external LEDs. Case design and fit are not yet verified.</p><button type="button" disabled aria-describedby="case-order-note">Buy &amp; download — coming soon <span aria-hidden="true">↗</span></button></div>
+          </article>
+          <article class="case-sale-card case-sale-v2" aria-labelledby="sale-v2-title">
+            <div class="case-sale-visual"><span>02 / V2</span><svg viewBox="0 0 340 280" aria-hidden="true"><rect class="sale-deck-shadow" x="43" y="53" width="255" height="213" rx="27"/><rect class="sale-deck-body" x="43" y="41" width="255" height="213" rx="27"/><rect class="sale-display" x="87" y="66" width="122" height="35" rx="5"/><path class="sale-display-line" d="M98 78h54M98 86h76"/><circle class="sale-knob-outer" cx="252" cy="86" r="24"/><circle class="sale-knob-inner" cx="252" cy="86" r="13"/><g class="sale-keys"><rect x="88" y="132" width="46" height="31" rx="5"/><rect x="141" y="132" width="46" height="31" rx="5"/><rect x="194" y="132" width="46" height="31" rx="5"/><rect x="88" y="169" width="46" height="31" rx="5"/><rect x="141" y="169" width="46" height="31" rx="5"/><rect x="194" y="169" width="46" height="31" rx="5"/><rect x="88" y="206" width="46" height="31" rx="5"/><rect x="141" y="206" width="46" height="31" rx="5"/><rect x="194" y="206" width="46" height="31" rx="5"/></g><g class="sale-rgb-indicators"><circle cx="61" cy="58" r="3"/><circle cx="61" cy="71" r="3"/><circle cx="61" cy="84" r="3"/></g></svg><small>ILLUSTRATION / NOT FINAL</small></div>
+            <div class="case-sale-info"><div class="case-sale-card-top"><div><span class="case-sale-label">DISPLAY + PLANNED RGB</span><h3 id="sale-v2-title">V2 case model</h3></div><p class="case-sale-price">₹100 <small>/ model</small></p></div><p class="case-sale-description">A 3D model for the planned screen and RGB build. Case design and fit are not yet verified.</p><button type="button" disabled aria-describedby="case-order-note">Buy &amp; download — coming soon <span aria-hidden="true">↗</span></button></div>
+          </article>
+        </div>
+        <p class="case-order-note" id="case-order-note">₹100 per model. Purchase is required to download. Payment and secure file delivery aren’t connected yet; no paid files are available. Illustrations are placeholders and fit is unverified.</p>
+      </section>
       <section class="cases-gallery section-wrap" aria-labelledby="cases-gallery-title">
-        <div class="cases-gallery-heading"><h2 id="cases-gallery-title">The case library<span class="orange-text">.</span></h2><p>MODEL PICTURE / DOWNLOAD</p></div>
+        <div class="cases-gallery-heading"><h2 id="cases-gallery-title">Other case models<span class="orange-text">.</span></h2><p>SEPARATE MODEL LIBRARY</p></div>
         <div class="case-list-area">
           <div class="cases-empty" id="cases-empty">
-            <article class="case-card case-preview-card">
-              <img src="./assets/macropad-hero.webp" alt="Concept render used as an example picture, not a case model">
-              <div class="case-card-info"><span class="case-preview-label">EXAMPLE IMAGE</span><h3>Case model coming soon</h3><p>This is a placeholder picture. No model file is available yet.</p><button class="button button-dark" type="button" disabled>Download model <span aria-hidden="true">↓</span></button></div>
-            </article>
             <div class="cases-future" aria-hidden="true">
               <div class="cases-future-top"><span>ZERO / CASE LIBRARY</span><span>IN PROGRESS ↗</span></div>
               <div class="cases-future-body"><div class="cases-future-title">MADE TO<br><em>MAKE.</em></div><div class="cases-future-grid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
@@ -183,7 +197,7 @@
       <section class="case-guide section-wrap" id="build-guide" aria-labelledby="case-guide-title">
         <div class="case-guide-intro"><div class="eyebrow"><span class="orange-square"></span> FROM PARTS TO SHORTCUTS <span class="eyebrow-line"></span> THE BUILD GUIDE</div><h2 id="case-guide-title">Make it.<br><em>Set it up.</em></h2><p>A quick overview of the build, firmware, and desktop setup. Take your time and check the complete wiring guide before connecting power.</p></div>
         <div class="guide-steps">
-          <article class="guide-step"><div class="guide-step-number">01 <span>THE CASE</span></div><h3>Choose a case.</h3><p>Pick a case model from the library above when files are available. Print it and check the fit of your switches, board, and knob before final assembly.</p></article>
+          <article class="guide-step"><div class="guide-step-number">01 <span>THE CASE</span></div><h3>Choose a case.</h3><p>Choose a case model when files are available. The V1 and V2 models require purchase. Print your model and check the fit of your switches, board, and knob before final assembly.</p></article>
           <article class="guide-step"><div class="guide-step-number">02 <span>THE WIRING</span></div><h3>Wire the deck.</h3><p>With power disconnected, follow the diagram for your build. Check the board silkscreen, component terminals, and continuity before connecting USB.</p><a class="guide-link" href="#wiring">SEE THE DIAGRAMS <span>↘</span></a></article>
           <article class="guide-step"><div class="guide-step-number">03 <span>THE SOFTWARE</span></div><h3>Get Deck Studio.</h3><p>The Windows desktop app is used for setup and flashing. An installer has not been released yet; check the releases page for updates.</p><a class="guide-link" href="https://github.com/david-8837/MacroPad-/releases" target="_top" rel="noreferrer">WINDOWS RELEASES <span>↗</span></a></article>
           <article class="guide-step"><div class="guide-step-number">04 <span>THE FIRMWARE</span></div><h3>Flash the firmware.</h3><p>Unplug USB, hold the RP2040-Zero’s BOOT button while reconnecting, then release. In the desktop app, open <strong>RP2040 Firmware &amp; Bootloader</strong>, select <strong>Keys &amp; Knob</strong> for V1 or <strong>Full Deck</strong> for V2, review the warning, and flash. Afterward, verify the board reconnects.</p></article>
@@ -192,12 +206,12 @@
         <aside class="guide-safety"><strong>Before you begin.</strong> The hardware and both firmware images have not been physically tested. Verify your board and wiring before flashing. For V2, the RGB power design is not approved; leave LED power and data disconnected. The PDF also depicts an unapproved RGB circuit: low brightness does not make it safe. The website itself cannot flash the device.</aside>
       </section>
       <section class="case-wiring section-wrap" id="wiring" aria-labelledby="case-wiring-title">
-        <div class="case-wiring-intro"><div><div class="eyebrow"><span class="orange-square"></span> THE CONNECTIONS <span class="eyebrow-line"></span> WIRING</div><h2 id="case-wiring-title">A closer look<br>at the <em>connections.</em></h2></div><p>Illustrative wiring references for the Waveshare RP2040-Zero. Verify real pin labels and switch terminals with a meter.</p></div>
+        <div class="case-wiring-intro"><div><div class="eyebrow"><span class="orange-square"></span> THE CONNECTIONS <span class="eyebrow-line"></span> WIRING</div><h2 id="case-wiring-title">A closer look<br>at the <em>connections.</em></h2></div><p>Illustrative wiring references for the Waveshare RP2040-Zero. The supplied diagrams and PDF use the old version names: their V2 is now V1, and their V1 is now V2. Verify real pin labels and switch terminals with a meter.</p></div>
         <div class="guide-diagrams">
-          <figure class="guide-diagram"><img src="./assets/wiring-v2-photo.webp" alt="V1 photo-style wiring diagram from the supplied guide, showing RP2040-Zero, nine switches and a rotary encoder; no display or LEDs" loading="lazy"><figcaption><div><span class="guide-diagram-tag">V1 / KEYS + KNOB</span><h3>The simple build.</h3><p>Nine switches and a clickable rotary encoder. No display or external LEDs.</p></div><a class="guide-link" href="./assets/wiring-v2-photo.webp" target="_top">OPEN DIAGRAM <span>↗</span></a></figcaption></figure>
-          <figure class="guide-diagram"><img src="./assets/wiring-v1-photo.webp" alt="V2 photo-style wiring diagram from the supplied guide, showing RP2040-Zero, nine switches, a rotary encoder and OLED; RGB is not wired" loading="lazy"><figcaption><div><span class="guide-diagram-tag">V2 / DISPLAY + PLANNED RGB</span><h3>The display build.</h3><p>Adds a 3.3 V OLED. RGB power and data must remain disconnected until the design is approved.</p></div><a class="guide-link" href="./assets/wiring-v1-photo.webp" target="_top">OPEN DIAGRAM <span>↗</span></a></figcaption></figure>
+          <figure class="guide-diagram"><img src="./assets/wiring-v2-photo.webp" alt="Keys-and-knob wiring diagram from the supplied guide, labeled V2 in the original guide but corresponding to the current V1; no display or external LEDs" loading="lazy"><figcaption><div><span class="guide-diagram-tag">V1 / KEYS + KNOB</span><h3>The simple build.</h3><p>Nine switches and a clickable rotary encoder. No display or external LEDs.</p></div><a class="guide-link" href="./assets/wiring-v2-photo.webp" target="_top">OPEN DIAGRAM <span>↗</span></a></figcaption></figure>
+          <figure class="guide-diagram"><img src="./assets/wiring-v1-photo.webp" alt="Display wiring diagram from the supplied guide, labeled V1 in the original guide but corresponding to the current V2; RGB is not wired" loading="lazy"><figcaption><div><span class="guide-diagram-tag">V2 / DISPLAY + PLANNED RGB</span><h3>The display build.</h3><p>Adds a 3.3 V OLED. RGB power and data must remain disconnected until the design is approved.</p></div><a class="guide-link" href="./assets/wiring-v1-photo.webp" target="_top">OPEN DIAGRAM <span>↗</span></a></figcaption></figure>
         </div>
-        <div class="guide-reference"><p>These pictures are illustrative, not a substitute for checking actual parts. Unplug power before soldering and confirm connections before powering the board. The PDF’s V2 + RGB page is unapproved: do not connect LED power or data, even at low brightness.</p><a class="button button-dark" href="./assets/Macropad_Complete_Wiring_Guide.pdf" target="_top" rel="noreferrer">Read the complete wiring guide <span>↗</span></a></div>
+        <div class="guide-reference"><p>These pictures are illustrative, not a substitute for checking actual parts. Unplug power before soldering and confirm connections before powering the board. The PDF’s old “V1 + RGB” page describes the current V2 and is unapproved: do not connect LED power or data, even at low brightness.</p><a class="button button-dark" href="./assets/Macropad_Complete_Wiring_Guide.pdf" target="_top" rel="noreferrer">Read the complete wiring guide <span>↗</span></a></div>
       </section>
     </main>
     <footer><a class="brand footer-brand" href="./home/"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a><p>A LITTLE DECK FOR THE SHORTCUTS YOU USE A LOT.</p><div><a href="./home/">HOME</a><a href="./home/#hardware">HARDWARE</a><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">GITHUB ↗</a></div></footer>

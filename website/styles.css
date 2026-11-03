@@ -84,7 +84,7 @@
 .hardware-image{overflow:hidden;box-shadow:0 18px 45px #5647351a}.hardware-tag{z-index:1;background:#f5f2e9e8;padding:10px 12px;border-left:3px solid #e97548}
 .faq-item summary{transition:background .2s ease,color .2s ease}.faq-item[open]{background:#e9e4d8}
 .cases-hero-index{min-width:180px;align-items:center;gap:15px}.cases-hero-index span:last-child{width:125px;height:125px;display:grid;place-items:center;border:1px solid #d76a3c;border-radius:50%;font-size:57px;position:relative}.cases-hero-index span:last-child::after{content:'';position:absolute;inset:8px;border:1px dashed #d08c70;border-radius:50%}
-.cases-empty{align-items:stretch}.cases-future{grid-column:span 2;min-height:320px;padding:25px 28px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;background:#e8dfcf;color:#2a2925;border:1px solid #d4cab9;position:relative}
+.cases-empty{align-items:stretch}.cases-future{grid-column:1/-1;min-height:320px;padding:25px 28px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;background:#e8dfcf;color:#2a2925;border:1px solid #d4cab9;position:relative}
 .cases-future::before{content:'';position:absolute;width:330px;height:330px;border:1px solid #beafa0;border-radius:50%;right:-100px;top:-150px;box-shadow:0 0 0 45px #e8dfcf,0 0 0 46px #cfc0ae;pointer-events:none}
 .cases-future-top,.cases-future-bottom{position:relative;display:flex;align-items:center;justify-content:space-between;gap:15px;font:9px JB,monospace;letter-spacing:.08em}.cases-future-top span:last-child{color:#8e4328}.cases-future-bottom{border-top:1px solid #c7bbaa;padding-top:17px}.cases-future-bottom span:last-child{font-size:25px;color:#d86a3e}
 .cases-future-body{position:relative;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:28px 0}.cases-future-title{font-size:clamp(42px,5vw,72px);font-weight:600;line-height:.88;letter-spacing:-.065em}.cases-future-title em{color:#aa4d2c;font-family:Georgia,serif;font-weight:400}
@@ -133,3 +133,31 @@
 @media(max-width:680px){.support-section{padding:65px 20px}.support-card{padding:22px 20px;border-radius:3px}.support-topline,.support-bottomline{font-size:8px}.support-topline>span:last-child{display:none}.support-layout{display:flex;flex-direction:column;align-items:stretch;gap:32px;min-height:0;padding:38px 0}.support-card h2{font-size:clamp(49px,13vw,68px)}.support-copy{font-size:14px}.support-actions{margin-top:24px}.support-actions button{width:100%;min-height:65px}.support-art{min-height:220px}.support-art-orbit{width:165px;height:165px;box-shadow:0 0 0 25px #d8663f,0 0 0 26px #e99675}.support-mark{width:84px;height:84px;border-radius:16px;box-shadow:0 8px 0 #a64f32,0 15px 26px #8d3c2855}.support-mark .brand-mark{width:50px;height:50px;font-size:32px}.support-bottomline{gap:12px}}
 
 .support-art-caption .zero-spark{width:24px;height:24px}
+
+/* V1 and V2 case listings; ordering is intentionally not connected yet. */
+.case-guide-secondary{margin-left:32px}
+.case-sale{padding:10px 0 100px}
+.case-sale-heading{display:flex;align-items:end;justify-content:space-between;gap:30px;margin-bottom:34px}
+.case-sale-heading h2{font-size:clamp(45px,5.1vw,72px);line-height:1.02;margin-top:24px}
+.case-sale-heading>p{font:9px JB,monospace;letter-spacing:.08em;color:#59574f}
+.case-sale-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.case-sale-card{min-width:0;border:1px solid #d0c6b7;background:#f0ebe0}
+.case-sale-visual{height:260px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#e9ddcb;color:#49372b}
+.case-sale-v2 .case-sale-visual{background:#e3dfd4;color:#353630}
+.case-sale-visual>span,.case-sale-visual>small{position:absolute;z-index:1;font:9px JB,monospace;letter-spacing:.07em}
+.case-sale-visual>span{top:19px;left:20px}.case-sale-visual>small{bottom:17px;right:20px}
+.case-sale-visual svg{height:100%;width:auto;max-width:85%;display:block;filter:drop-shadow(0 12px 12px #3e271925)}
+.sale-deck-shadow{fill:#9d4c31}.sale-deck-body{fill:#e57949;stroke:#bd5b37;stroke-width:2}.case-sale-v2 .sale-deck-shadow{fill:#171817}.case-sale-v2 .sale-deck-body{fill:#393a36;stroke:#22231f}
+.sale-display{fill:#292b27}.sale-display-line{fill:none;stroke:#9ca59a;stroke-width:3;stroke-linecap:round}.sale-accent-line{fill:none;stroke:#7d8077;stroke-width:3;stroke-linecap:round}
+.sale-knob-outer{fill:#c9c9be;stroke:#77786f;stroke-width:3}.sale-knob-inner{fill:#777a71}.sale-keys{fill:#31322f;stroke:#181916;stroke-width:1.5}.case-sale-v2 .sale-keys{fill:#e9e6dd;stroke:#b5b3aa}.sale-dot{fill:#f3d6b8}
+.case-sale-info{padding:25px;display:flex;flex-direction:column;align-items:stretch}
+.case-sale-card-top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}.case-sale-label{font:9px JB,monospace;letter-spacing:.08em;color:#914123}
+.case-sale-card h3{font-size:27px;line-height:1;letter-spacing:-.045em;font-weight:500;margin-top:10px}
+.case-sale-price{white-space:nowrap;font-size:26px;line-height:1;font-weight:600;letter-spacing:-.04em}.case-sale-price small{font:10px JB,monospace;letter-spacing:0;color:#59574f}
+.case-sale-description{font-size:13px;line-height:1.65;color:#59574f;margin:17px 0 22px;min-height:43px}
+.case-sale-info button{border:0;background:#77746c;color:#fff;min-height:50px;padding:0 17px;display:flex;align-items:center;justify-content:space-between;gap:15px;font-size:12px;font-weight:700;text-align:left;cursor:not-allowed}
+.case-order-note{font-size:12px;line-height:1.65;color:#59574f;max-width:650px;margin-top:20px}
+@media(max-width:680px){.case-guide-secondary{margin-left:22px}.case-sale{padding:5px 0 75px}.case-sale-heading{align-items:start;flex-direction:column;gap:16px;margin-bottom:28px}.case-sale-heading h2{font-size:clamp(43px,10vw,57px)}.case-sale-grid{grid-template-columns:1fr;gap:16px}.case-sale-visual{height:220px}.case-sale-info{padding:21px}.case-sale-description{min-height:0}}
+
+/* Conceptual RGB markers for the planned V2 display build. */
+.sale-rgb-indicators circle:nth-child(1){fill:#e87549}.sale-rgb-indicators circle:nth-child(2){fill:#e5bd68}.sale-rgb-indicators circle:nth-child(3){fill:#79a59a}

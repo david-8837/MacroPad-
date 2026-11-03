@@ -44,7 +44,8 @@ for (const page of ['home', 'cases']) {
     const t = setup(page);
     t.window.document.querySelector('.zero-loader').click();
     assert.equal(t.active(), false);
-    assert.deepEqual(t.completed, [true], 'skip releases the screen and cursor animation');
+    assert.deepEqual(t.completed, [false], 'click dismisses only the loader and keeps the opening animation');
+    assert.equal(t.window.__zeroLoaderOutcome.skipped, false, 'the decision survives a delayed intro script');
     t.dom.window.close();
   }
   {
@@ -65,6 +66,7 @@ for (const page of ['home', 'cases']) {
     t.window.dispatchEvent(new t.window.KeyboardEvent('keydown', { key: 'Tab' }));
     assert.equal(t.active(), false, 'keyboard navigation immediately dismisses loader');
     assert.deepEqual(t.completed, [true]);
+    assert.equal(t.window.__zeroLoaderOutcome.skipped, true, 'keyboard skip survives a delayed intro script');
     t.dom.window.close();
   }
 }

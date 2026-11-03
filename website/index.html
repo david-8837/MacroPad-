@@ -101,6 +101,8 @@
           if (done) return;
           done = true;
           root.classList.remove('zero-loading');
+          // Retain the decision if the deferred intro script is still loading.
+          window.__zeroLoaderOutcome = { skipped };
           window.removeEventListener('keydown', onKey, true);
           window.dispatchEvent(new CustomEvent('zero-loader-done', { detail: { skipped } }));
         };
@@ -116,7 +118,9 @@
         };
         const onKey = event => { if (event.key === 'Tab' || event.key === 'Escape') leave(true); };
         window.addEventListener('keydown', onKey, true);
-        document.addEventListener('click', event => { if (event.target.closest?.('.zero-loader')) leave(true); });
+        // A tap dismisses the loading screen only; the construction still plays.
+        // Escape and Tab remain explicit ways to skip all effects.
+        document.addEventListener('click', event => { if (event.target.closest?.('.zero-loader')) finish(false); });
         document.addEventListener('DOMContentLoaded', () => {
           setTimeout(() => { if (!done) document.querySelector('.zero-loader')?.classList.add('is-gathering'); }, Math.max(0, 2050 - (Date.now() - started)));
           setTimeout(() => leave(false), Math.max(0, 2680 - (Date.now() - started)));
@@ -152,12 +156,12 @@
   <link rel="prefetch" href="./cases/" as="document">
   <link rel="prefetch" href="./cases-data.js?v=1" as="script">
   <link rel="prefetch" href="./cases.js?v=2" as="script">
-  <link rel="stylesheet" href="./styles.css?v=scroll-build-29">
-  <link rel="stylesheet" href="./intro.css?v=scroll-build-29">
+  <link rel="stylesheet" href="./styles.css?v=scroll-build-33">
+  <link rel="stylesheet" href="./intro.css?v=scroll-build-33">
   <link rel="stylesheet" href="./assets/specular-button.css?v=1">
-  <script src="./script.js?v=scroll-build-29" defer></script>
+  <script src="./script.js?v=scroll-build-33" defer></script>
   <script src="./assets/specular-button.js?v=2" defer></script>
-  <script src="./intro.js?v=scroll-build-29" defer></script>
+  <script src="./intro.js?v=scroll-build-33" defer></script>
 </head>
 <body>
   <div class="zero-loader">
@@ -205,7 +209,7 @@
 
     <section class="how-section" id="how-it-works"><div class="section-backdrop how-backdrop" aria-hidden="true"></div><div class="section-wrap"><div class="how-heading"><div><div class="eyebrow"><span class="black-square"></span> A SIMPLER WAY TO GET THERE <span class="eyebrow-line"></span> 03 / 04</div><h2>Good things<br>come in <em>threes.</em></h2></div><p>From first idea to your fingertips.<br>Here's the short version.</p></div><div class="steps"><article><div class="step-number">01 <span>↗</span></div><h3>Make it yours.</h3><p>Start fresh or choose a preset. Assign the keys and knob to the things you reach for most.</p></article><article><div class="step-number">02 <span>↗</span></div><h3>Send it over.</h3><p>Connect a compatible pad, review your setup, and upload your layers when you're ready.</p></article><article><div class="step-number">03 <span>↗</span></div><h3>Get in the flow.</h3><p>Put the little deck to work. Change things up and upload again whenever you like.</p></article></div><div class="how-bottom"><span>YOUR WORKFLOW IS A WORK IN PROGRESS. THAT'S THE FUN PART.</span><span aria-hidden="true"><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></span></div></div></section>
 
-    <section class="hardware-section section-wrap" id="hardware"><div class="hardware-image"><img src="./assets/macropad-hero.webp" alt="Concept render of a small orange macropad"><div class="hardware-tag">A LITTLE OBJECT<br><strong>WITH BIG PLANS.</strong></div></div><div class="hardware-copy"><div class="eyebrow"><span class="orange-square"></span> THE HARDWARE <span class="eyebrow-line"></span> 04 / 04</div><h2>Small deck.<br><em>Big potential.</em></h2><p>Built around a Waveshare RP2040-Zero, nine switches and a clickable rotary encoder. Choose a keys-and-knob build or explore the planned display version.</p><div class="hardware-facts"><div><b>V1</b><span>KEYS + KNOB</span></div><div><b>V2</b><span>DISPLAY + PLANNED RGB</span></div></div><div class="safety-note"><strong>Heads up: work in progress.</strong> Physical hardware and bundled firmware are awaiting real-device testing. The V2 RGB power design is not approved; leave LED power and data disconnected, even at low brightness. The guide includes an unapproved RGB illustration.</div><a class="button button-dark" href="./assets/Macropad_Complete_Wiring_Guide.pdf" target="_top" rel="noreferrer">Explore the wiring guide <span>↗</span></a></div></section>
+    <section class="hardware-section section-wrap" id="hardware"><div class="hardware-image"><img src="./assets/macropad-hero.webp" alt="Concept render of a small orange macropad"><div class="hardware-tag">A LITTLE OBJECT<br><strong>WITH BIG PLANS.</strong></div></div><div class="hardware-copy"><div class="eyebrow"><span class="orange-square"></span> THE HARDWARE <span class="eyebrow-line"></span> 04 / 04</div><h2>Small deck.<br><em>Big potential.</em></h2><p>Built around a Waveshare RP2040-Zero, nine switches and a clickable rotary encoder. Choose a keys-and-knob build or explore the planned display version.</p><div class="hardware-facts"><div><b>V1</b><span>KEYS + KNOB</span></div><div><b>V2</b><span>DISPLAY + PLANNED RGB</span></div></div><div class="safety-note"><strong>Heads up: work in progress.</strong> Physical hardware and bundled firmware are awaiting real-device testing. The V2 RGB power design is not approved; leave LED power and data disconnected, even at low brightness. The supplied guide uses the old version names (its V2 is now V1, and its V1 is now V2) and includes an unapproved RGB illustration.</div><a class="button button-dark" href="./assets/Macropad_Complete_Wiring_Guide.pdf" target="_top" rel="noreferrer">Explore the wiring guide <span>↗</span></a></div></section>
 
     <section class="faq-section section-wrap" id="faq" aria-labelledby="faq-heading">
       <div class="faq-border" aria-hidden="true"></div>
@@ -216,7 +220,7 @@
         <details class="faq-item"><summary><span class="faq-number">03</span><span class="faq-question">Which operating system is supported?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>Windows is the primary desktop target. Some actions rely on the desktop app and Windows integrations; those integrations are still awaiting real-world testing.</p></div></details>
         <details class="faq-item"><summary><span class="faq-number">04</span><span class="faq-question">Can I change my shortcuts later?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>Yes. You can edit your layers and assignments in the app, review your changes, and upload your setup again. Presets can also give you a starting point.</p></div></details>
         <details class="faq-item"><summary><span class="faq-number">05</span><span class="faq-question">Is the hardware ready to use?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>The hardware and bundled firmware are still awaiting physical testing. The V2 RGB power design is not approved; leave LED power and data disconnected until it is.</p></div></details>
-        <details class="faq-item"><summary><span class="faq-number">06</span><span class="faq-question">What’s the difference between V1 and V2?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>V1 is the keys-and-knob build (no display or LED). V2 adds a display and planned RGB lighting. Both use a Waveshare RP2040-Zero, nine switches, and a clickable rotary encoder.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">06</span><span class="faq-question">What’s the difference between V1 and V2?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>V1 is the keys-and-knob build without a screen or external LEDs. V2 adds a screen and planned RGB lighting. Both use a Waveshare RP2040-Zero, nine switches, and a clickable rotary encoder.</p></div></details>
       </div>
     </section>
 

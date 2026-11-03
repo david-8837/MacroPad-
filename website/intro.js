@@ -130,6 +130,15 @@
       content:[{s:'.announcement',t:0,d:350,frame:true,label:'Top bar'}, {s:'.site-header .brand',t:1200,label:'Brand'}, {s:'.cases-hero .eyebrow',t:1550,label:'Introduction'}, {s:'.cases-hero h1',t:2150,d:1700,type:true,label:'Typing'}, {s:'.cases-hero p',t:4000,d:1150,type:true,label:'Typing'}],
       details:[{s:'.desktop-nav',t:350,d:180,label:'Navigation'}, {s:'.cases-hero-index',t:1800,label:'Index'}]
     }},
+    {id:'case-sale-heading',trigger:'.case-sale-heading',tracks:{
+      interface:[{s:'.case-sale-heading .eyebrow',t:0,label:'Introduction'}],
+      content:[{s:'.case-sale-heading h2',t:500,d:1450,type:true,label:'Typing'}, {s:'.case-sale-heading > p',t:1800,label:'Details'}]
+    }},
+    {id:'case-sale-cards',trigger:'.case-sale-grid',tracks:{
+      interface:[{s:'.case-sale-card',t:0,stagger:550,d:600,frame:true,label:'Case frame'}, {s:'.case-sale-card button',t:3500,stagger:500,label:'Order status'}],
+      visual:[{s:'.case-sale-visual',t:750,stagger:550,d:700,frame:true,label:'Case illustration'}],
+      content:[{s:'.case-sale-label, .case-sale-card h3',t:1150,stagger:400,label:'Case'}, {s:'.case-sale-price',t:2400,stagger:500,label:'Price'}, {s:'.case-sale-description',t:3200,stagger:700,d:900,type:true,label:'Typing'}, {s:'.case-order-note',t:5000,d:1200,type:true,label:'Details'}]
+    }},
     {id:'cases-gallery',trigger:'.cases-gallery',tracks:{
       interface:[{s:'.cases-gallery-heading',t:0,d:550,frame:true,label:'Gallery frame'}, {s:'.case-card, .cases-empty',t:650,stagger:550,d:600,frame:true,label:'Case frame'}, {s:'.cases-future',t:1500,d:600,frame:true,label:'Library frame'}],
       visual:[{s:'.case-card img',t:1350,stagger:700,d:800,frame:true,label:'Model picture'}, {s:'.case-preview-label',t:1400,label:'Label'}],
@@ -517,5 +526,5 @@
       if(!opened)begin(!!event.detail?.skipped);
       else if(event.detail?.skipped)finishAll();
     }, {once:true});
-  }else begin(false);
+  }else begin(!!window.__zeroLoaderOutcome?.skipped);
 })();

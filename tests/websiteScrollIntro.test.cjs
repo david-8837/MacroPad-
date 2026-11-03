@@ -8,7 +8,7 @@ const html = readFileSync(join(root, 'website/index.html'), 'utf8');
 const script = readFileSync(join(root, 'website/intro.js'), 'utf8');
 const siteScript = readFileSync(join(root, 'website/script.js'), 'utf8');
 
-function setup({ reduced = false, failAfter = Infinity, visited = false, storageBlocked = false, reload = false, loaderActive = false } = {}) {
+function setup({ reduced = false, failAfter = Infinity, visited = false, storageBlocked = false, reload = false, loaderActive = false, loaderSkipped = false } = {}) {
   const dom = new JSDOM(html, { url: 'https://example.test/', runScripts: 'outside-only', pretendToBeVisual: true });
   const { window } = dom;
   if (visited) window.sessionStorage.setItem('zero-scroll-intro-v1:home', 'played');
@@ -36,6 +36,7 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
     window.document.documentElement.classList.add('zero-loading');
     window.document.querySelector('.zero-loader').classList.add('is-leaving');
   }
+  if (loaderSkipped) window.__zeroLoaderOutcome = { skipped: true };
   const originalText = window.document.getElementById('site-content').textContent;
   window.eval(siteScript);
   window.eval(script);
@@ -268,6 +269,21 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
   window.dispatchEvent(new window.CustomEvent('zero-loader-done', { detail: { skipped: true } }));
   assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'skipping mid-reveal releases every control');
   assert.equal(document.querySelectorAll('.site-build-overlay').length, 0);
+  dom.window.close();
+}
+{
+  const { dom, window, document, observer } = setup({ loaderActive: true });
+  window.dispatchEvent(new window.CustomEvent('zero-loader-done', { detail: { skipped: false } }));
+  assert.ok(document.querySelectorAll('[data-build-text]').length > 0, 'dismissing the loader without skipping effects starts construction');
+  observer().callback([{ target: document.querySelector('.hero'), isIntersecting: true }]);
+  assert.ok(document.querySelector('[data-build-stage="hero"]'), 'hero starts after a loader tap');
+  window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  dom.window.close();
+}
+{
+  const { dom, document } = setup({ loaderSkipped: true });
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'a keyboard skip before intro.js loads still skips effects');
+  assert.equal(document.querySelector('.mock-keys button').inert, false, 'delayed skip leaves controls usable');
   dom.window.close();
 }
 console.log('website scroll intro: all text, scroll safety, replay, reduced motion and fail-open passed');
