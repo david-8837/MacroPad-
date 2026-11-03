@@ -69,7 +69,7 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
   const { dom, window, document, observer, advance } = setup();
   observer().callback([{ target: document.querySelector('.hero'), isIntersecting: true }]);
   advance(800);
-  const navLink = document.querySelector('.desktop-nav a[href="./cases.html"]');
+  const navLink = document.querySelector('.desktop-nav a[href="./cases/"]');
   const menuButton = document.querySelector('.menu-toggle');
   assert.equal(navLink.inert, false, 'navigation is usable soon after its frame settles, without waiting for all labels');
   assert.equal(menuButton.inert, false, 'mobile navigation becomes usable early as well');

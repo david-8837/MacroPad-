@@ -8,6 +8,9 @@ const html = readFileSync(join(root, 'website/cases.html'), 'utf8');
 const dataScript = readFileSync(join(root, 'website/cases-data.js'), 'utf8');
 const renderScript = readFileSync(join(root, 'website/cases.js'), 'utf8');
 const home = readFileSync(join(root, 'website/index.html'), 'utf8');
+const { renderPage } = require('../scripts/build-website-routes.cjs');
+assert.equal(readFileSync(join(root, 'website/home/index.html'), 'utf8'), renderPage(home), 'clean Home route matches the canonical site');
+assert.equal(readFileSync(join(root, 'website/cases/index.html'), 'utf8'), renderPage(html), 'clean Cases route matches the canonical site');
 function create(models) {
   const dom = new JSDOM(html, { url: 'https://example.test/cases.html', runScripts: 'outside-only' });
   if (models === undefined) dom.window.eval(dataScript);
@@ -21,13 +24,15 @@ function create(models) {
   assert.ok(dom.window.document.querySelector('.case-preview-card img'), 'an example image is displayed');
   assert.equal(dom.window.document.querySelector('.case-preview-card button').disabled, true, 'the placeholder cannot imply a download exists');
   assert.equal(dom.window.document.querySelector('#cases-empty').hidden, false, 'an empty library never invents a download');
-  assert.match(home, /href="\.\/cases\.html"/, 'home links to the separate library page');
+  assert.match(home, /href="\.\/cases\/"/, 'home links to the separate library page');
   const homeDoc = new JSDOM(home).window.document;
   const homePrefetches = [...homeDoc.querySelectorAll('link[rel="prefetch"]')].map(link => link.getAttribute('href'));
-  assert.ok(homePrefetches.includes('./cases.html'), 'Home can warm the Cases document without changing navigation');
-  for (const name of ['./cases-data.js?v=1', './cases.js?v=1']) assert.ok(homePrefetches.includes(name), `Home can warm ${name}`);
+  assert.ok(homePrefetches.includes('./cases/'), 'Home can warm the Cases document without changing navigation');
+  for (const name of ['./cases-data.js?v=1', './cases.js?v=2']) assert.ok(homePrefetches.includes(name), `Home can warm ${name}`);
   const casePrefetches = [...dom.window.document.querySelectorAll('link[rel="prefetch"]')].map(link => link.getAttribute('href'));
-  assert.ok(casePrefetches.includes('./index.html'), 'Cases can warm the Home document');
+  assert.ok(casePrefetches.includes('./home/'), 'Cases can warm the Home document');
+  assert.equal(dom.window.document.querySelector('.desktop-nav a[href="./home/"]').href, 'https://example.test/home/', 'Cases navigates to the clean Home URL');
+  assert.equal(dom.window.document.querySelector('.desktop-nav a[href="./home/#hardware"]').href, 'https://example.test/home/#hardware', 'deep links keep their anchor on the clean Home URL');
   for (const el of homeDoc.querySelectorAll('link[href*="specular-button.css"], script[src*="specular-button.js"]')) {
     const url = el.getAttribute('href') || el.getAttribute('src');
     assert.ok(casePrefetches.includes(url), `Cases prefetch matches the active Home asset version: ${url}`);
@@ -74,6 +79,16 @@ function create(models) {
   assert.equal(link.href, 'https://example.test/assets/cases/case.stl');
   assert.equal(link.hasAttribute('download'), true);
   assert.equal(document.querySelectorAll('.case-card h3 img').length, 0, 'titles render as text');
+  dom.window.close();
+}
+{
+  // Model URLs remain rooted at the project, not the /cases/ route.
+  const cleanHtml = readFileSync(join(root, 'website/cases/index.html'), 'utf8');
+  const dom = new JSDOM(cleanHtml, { url: 'https://example.test/MacroPad-/cases/', runScripts: 'outside-only' });
+  dom.window.ZERO_CASE_MODELS = [{ title: 'Demo', image: './assets/cases/demo.webp', file: './assets/cases/demo.stl' }];
+  dom.window.eval(renderScript);
+  assert.equal(dom.window.document.querySelector('#case-grid img').src, 'https://example.test/MacroPad-/assets/cases/demo.webp');
+  assert.equal(dom.window.document.querySelector('#case-grid a').href, 'https://example.test/MacroPad-/assets/cases/demo.stl');
   dom.window.close();
 }
 // Cases uses the shared construction engine with independent per-page state.

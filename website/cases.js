@@ -4,12 +4,16 @@
   const empty = document.getElementById('cases-empty');
   if (!grid || !empty) return;
   const models = Array.isArray(window.ZERO_CASE_MODELS) ? window.ZERO_CASE_MODELS : [];
+  // Resolve model files from the site root, not the clean /cases/ directory.
+  // The script URL is stable on both the legacy and clean pages (also under
+  // a GitHub Pages project subpath).
+  const script = document.currentScript || document.querySelector('script[src*="cases.js"]');
+  const base = new URL('.', script?.src || document.baseURI);
   // Use same-site files so the download attribute works and no untrusted HTML is rendered.
   const localUrl = value => {
     if (typeof value !== 'string' || !value.trim()) return null;
     try {
-      const url = new URL(value, document.baseURI);
-      const base = new URL(document.baseURI);
+      const url = new URL(value, base);
       if (!['http:', 'https:', 'file:'].includes(url.protocol) || url.protocol !== base.protocol || url.origin !== base.origin) return null;
       return url.href;
     } catch (_) { return null; }

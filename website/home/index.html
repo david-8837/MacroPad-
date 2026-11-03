@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en" data-intro-page="home">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Meet ZERO Deck Studio: a little deck for the shortcuts you use a lot. Design four layers for a nine-key RP2040 macropad.">
+  <meta name="theme-color" content="#f5f2e9">
+  <title>ZERO — Make room for the good work.</title>
+  <script>
+    // Old /index.html links go to the clean Home URL; keep query and anchor.
+    // The root URL remains a usable static fallback without JavaScript.
+    if (location.pathname.endsWith('/home/index.html')) {
+      try { history.replaceState(history.state, '', './' + location.search + location.hash); } catch (_) {}
+    } else if (location.pathname.endsWith('/index.html')) {
+      const home = new URL('./home/', location.href);
+      home.search = location.search; home.hash = location.hash;
+      location.replace(home.href);
+    }
+  </script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%231b1b19'/%3E%3Ctext x='11' y='29' font-family='Arial' font-size='25' font-weight='700' fill='white'%3EZ%3C/text%3E%3Ccircle cx='30' cy='28' r='2.5' fill='%23f57646'/%3E%3C/svg%3E">
+  <script>
+    // Hide the first frame only until the real elements have been measured.
+    // If setup fails, the watchdog always reveals the site again.
+    try {
+      let alreadyPlayed = false, lastPage = '';
+      try {
+        alreadyPlayed = sessionStorage.getItem('zero-scroll-intro-v1:' + document.documentElement.dataset.introPage) === 'played';
+        lastPage = sessionStorage.getItem('zero-scroll-last-page-v1') || '';
+      } catch (_) { /* Storage can be unavailable. */ }
+      const navType = performance.getEntriesByType?.('navigation')?.[0]?.type;
+      // Refreshing an embedded preview recreates its iframe as a navigation.
+      const refreshed = navType === 'reload' || (!navType && performance.navigation?.type === 1) ||
+        (window.parent !== window && navType !== 'back_forward' && lastPage === document.documentElement.dataset.introPage);
+      if ((!alreadyPlayed || refreshed) && !matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+        document.documentElement.classList.add('site-intro-preparing');
+        setTimeout(() => document.documentElement.classList.remove('site-intro-preparing'), 1800);
+      }
+    } catch (_) { /* The ordinary site remains visible. */ }
+  </script>
+  <!-- Warm the next page while this one is being read; links still navigate normally. -->
+  <link rel="prefetch" href="../cases/" as="document">
+  <link rel="prefetch" href="../cases-data.js?v=1" as="script">
+  <link rel="prefetch" href="../cases.js?v=2" as="script">
+  <link rel="stylesheet" href="../styles.css?v=scroll-build-23">
+  <link rel="stylesheet" href="../intro.css?v=scroll-build-23">
+  <link rel="stylesheet" href="../assets/specular-button.css?v=1">
+  <script src="../script.js?v=scroll-build-23" defer></script>
+  <script src="../assets/specular-button.js?v=2" defer></script>
+  <script src="../intro.js?v=scroll-build-23" defer></script>
+</head>
+<body>
+  <div id="site-content">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="announcement" role="region" aria-label="Project announcement"><span class="status-dot"></span> A LITTLE DECK FOR BIG IDEAS <span class="announcement-right">DESIGNED FOR YOUR WORKFLOW <span>↗</span></span></div>
+  <header class="site-header">
+    <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a>
+    <nav class="desktop-nav" aria-label="Main navigation"><a href="#studio">The studio</a><a href="#how-it-works">How it works</a><a href="#hardware">The hardware</a><a href="../cases/">Cases</a><a href="#faq">FAQ</a></nav>
+    <a class="nav-cta" href="#download">Get the app <span>↓</span></a>
+    <button class="intro-replay" type="button" aria-label="Replay scroll animations">↻ <span>REPLAY</span></button>
+    <details class="mobile-menu"><summary class="menu-toggle" aria-label="Navigation"><span></span><span></span></summary>
+    <nav id="mobile-menu" class="mobile-nav" aria-label="Mobile navigation"><a href="#studio">The studio</a><a href="#how-it-works">How it works</a><a href="#hardware">The hardware</a><a href="../cases/">Cases</a><a href="#faq">FAQ</a><a href="#feedback">Feedback</a><a href="#download">Get the app ↓</a><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">Explore on GitHub ↗</a></nav></details>
+  </header>
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="orange-square"></span> YOUR WORKFLOW, ON DECK <span class="eyebrow-line"></span> 01 / 04</div>
+        <h1 aria-label="Make room for the good work."><span class="intro-heading-line">Make room</span><span class="intro-heading-line">for the <em>good</em></span><span class="intro-heading-line">work<span class="orange-text">.</span></span></h1>
+        <p>A little deck for the shortcuts you use a lot. Make your everyday tools feel a little more like yours.</p>
+        <div class="hero-actions"><span class="hero-download-mount"><a class="button button-dark" href="https://github.com/david-8837/MacroPad-/releases" target="_top" rel="noreferrer" aria-describedby="hero-download-status">Download for Windows <span>↓</span></a></span><a class="text-link" href="#studio">Meet the studio <span>↘</span></a></div><div class="hero-download-note" id="hero-download-status">Windows installer not released yet.</div>
+        <div class="hero-note"><span class="asterisk">✳</span><span>LESS REACHING. MORE MAKING.<br><strong>MADE FOR YOUR EVERYDAY.</strong></span></div>
+      </div>
+      <div class="hero-visual"><div class="hero-art"><img src="../assets/macropad-hero.webp" alt="Concept render of an orange nine-key macropad with a rotary knob"><div class="art-corner art-corner-tl"></div><div class="art-corner art-corner-br"></div><span class="art-label">FIG. 01 — THE LITTLE DECK</span><span class="art-caption">CONCEPT RENDER / HARDWARE IN DEVELOPMENT</span></div><div class="visual-footer"><span>SMALL FOOTPRINT. BIG ENERGY.</span><span>SCROLL TO EXPLORE <span class="orange-text">↓</span></span></div></div>
+    </section>
+    <div class="spec-strip" aria-label="Macropad specifications"><div><strong>09</strong><span>KEYS<br>YOUR WAY</span></div><div><strong>01</strong><span>CLICKABLE<br>ROTARY KNOB</span></div><div><strong>04</strong><span>LAYERS<br>TO MAKE YOURS</span></div><div class="strip-signature"><span>THE LITTLE DECK<br>WITH A LOT TO DO.</span><b>✳</b></div></div>
+
+    <section class="studio-section section-wrap" id="studio">
+      <div class="section-heading"><div><div class="eyebrow"><span class="orange-square"></span> MEET DECK STUDIO <span class="eyebrow-line"></span> 02 / 04</div><h2>Make your tools<br>work <em>your way.</em></h2></div><p>One thoughtful place to make the little things you do every day feel a whole lot easier.</p></div>
+      <div class="studio-showcase">
+        <div class="studio-copy"><div class="small-label"><span class="orange-square"></span> THE EDITOR</div><h3>Your shortcuts.<br>Your rules.</h3><p>Bring your favorite actions together, arrange them across four layers, and give your setup a little personality.</p><a class="inline-arrow" href="#how-it-works">SEE HOW IT WORKS <span>↗</span></a><div class="studio-index"><span>01 — 04</span><span>DECK STUDIO / EDITOR</span></div></div>
+        <div class="mock-window" aria-label="Interactive illustration of the deck editor">
+          <div class="mock-top"><div class="mock-brand"><span>Z</span> ZERO <i>/</i> <b>DECK STUDIO</b></div><div class="mock-dots"><i></i><i></i><i></i></div></div>
+          <div class="mock-body"><div class="mock-sidebar"><div class="mock-label">YOUR MACROPAD</div><div class="mock-rail-line"></div><div class="mock-label">EDIT LAYERS</div><div class="layer-buttons" aria-label="Preview layers"><button class="active" data-layer="0" aria-pressed="true"><span>00</span> Layer 0</button><button data-layer="1" aria-pressed="false"><span>01</span> Layer 1</button><button data-layer="2" aria-pressed="false"><span>02</span> Layer 2</button><button data-layer="3" aria-pressed="false"><span>03</span> Layer 3</button></div><div class="mock-side-bottom">A LITTLE DECK<br>FOR THE GOOD WORK.</div></div>
+            <div class="mock-content"><div class="mock-deck-title"><span>DECK · 09</span><span>9 KEYS / 1 ENCODER</span></div><div class="mock-board"><div class="mock-board-top"><div class="mock-display"><span>ZERO IND. <b>ONLINE</b></span><strong id="display-layer">LAYER 0</strong></div><button class="mock-knob" type="button" aria-label="Cycle preview layer" title="Cycle preview layer"><span></span></button></div><div class="mock-keys" aria-label="Preview keys"><button class="selected" aria-pressed="true"><small>01</small><span>✳</span><b>Switch #1</b></button><button aria-pressed="false"><small>02</small><span>↗</span><b>Switch #2</b></button><button aria-pressed="false"><small>03</small><span>⌘</span><b>Switch #3</b></button><button aria-pressed="false"><small>04</small><span>✦</span><b>Switch #4</b></button><button aria-pressed="false"><small>05</small><span>◫</span><b>Switch #5</b></button><button aria-pressed="false"><small>06</small><span>↺</span><b>Switch #6</b></button><button aria-pressed="false"><small>07</small><span>⌁</span><b>Switch #7</b></button><button aria-pressed="false"><small>08</small><span>◉</span><b>Switch #8</b></button><button aria-pressed="false"><small>09</small><span>✂</span><b>Switch #9</b></button></div></div><div class="mock-caption"><span id="preview-status" aria-live="polite">LAYER 0 · SWITCH 1 SELECTED</span><span>INTERACTIVE ILLUSTRATION</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="features"><article><div class="feature-top"><span>01 / LAYERS</span><span>↗</span></div><h3>More room<br>to do your thing.</h3><p>Four layers give your shortcuts space to breathe, from everyday essentials to your favorite creative tools.</p></article><article><div class="feature-top"><span>02 / PRESETS</span><span>↗</span></div><h3>A head start,<br>if you want one.</h3><p>Explore app-focused presets, make them your own, and apply them to the layer that makes sense for you.</p></article><article><div class="feature-top"><span>03 / YOUR SETUP</span><span>↗</span></div><h3>Made to change<br>with you.</h3><p>Rearrange your keys, tweak your knob, and upload again whenever your workflow takes a new shape.</p></article></div>
+    </section>
+
+    <section class="how-section" id="how-it-works"><div class="section-backdrop how-backdrop" aria-hidden="true"></div><div class="section-wrap"><div class="how-heading"><div><div class="eyebrow"><span class="black-square"></span> A SIMPLER WAY TO GET THERE <span class="eyebrow-line"></span> 03 / 04</div><h2>Good things<br>come in <em>threes.</em></h2></div><p>From first idea to your fingertips.<br>Here's the short version.</p></div><div class="steps"><article><div class="step-number">01 <span>↗</span></div><h3>Make it yours.</h3><p>Start fresh or choose a preset. Assign the keys and knob to the things you reach for most.</p></article><article><div class="step-number">02 <span>↗</span></div><h3>Send it over.</h3><p>Connect a compatible pad, review your setup, and upload your layers when you're ready.</p></article><article><div class="step-number">03 <span>↗</span></div><h3>Get in the flow.</h3><p>Put the little deck to work. Change things up and upload again whenever you like.</p></article></div><div class="how-bottom"><span>YOUR WORKFLOW IS A WORK IN PROGRESS. THAT'S THE FUN PART.</span><span>✳</span></div></div></section>
+
+    <section class="hardware-section section-wrap" id="hardware"><div class="hardware-image"><img src="../assets/macropad-hero.webp" alt="Concept render of a small orange macropad"><div class="hardware-tag">A LITTLE OBJECT<br><strong>WITH BIG PLANS.</strong></div></div><div class="hardware-copy"><div class="eyebrow"><span class="orange-square"></span> THE HARDWARE <span class="eyebrow-line"></span> 04 / 04</div><h2>Small deck.<br><em>Big potential.</em></h2><p>Built around a Waveshare RP2040-Zero, nine switches and a clickable rotary encoder. Choose a keys-and-knob build or explore the planned display version.</p><div class="hardware-facts"><div><b>V2</b><span>KEYS + KNOB</span></div><div><b>V1</b><span>DISPLAY + PLANNED RGB</span></div></div><div class="safety-note"><strong>Heads up: work in progress.</strong> Physical hardware and bundled firmware are awaiting real-device testing. The V1 RGB power design is not approved; leave LED power and data disconnected, even at low brightness. The guide includes an unapproved RGB illustration.</div><a class="button button-dark" href="../assets/Macropad_Complete_Wiring_Guide.pdf" target="_top" rel="noreferrer">Explore the wiring guide <span>↗</span></a></div></section>
+
+    <section class="faq-section section-wrap" id="faq" aria-labelledby="faq-heading">
+      <div class="faq-border" aria-hidden="true"></div>
+      <div class="faq-heading"><div class="eyebrow"><span class="orange-square"></span> THE LITTLE DETAILS <span class="eyebrow-line"></span> FAQ</div><h2 id="faq-heading">A few things<br>worth <em>knowing.</em></h2><p>Good questions deserve simple answers.</p><span class="faq-aside" aria-hidden="true">✳</span></div>
+      <div class="faq-list">
+        <details class="faq-item"><summary><span class="faq-number">01</span><span class="faq-question">What is ZERO Deck Studio?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>It’s a desktop app for assigning actions to a nine-key macropad and clickable rotary knob. You can organize your setup across four layers and upload it to a compatible device.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">02</span><span class="faq-question">Where can I download the app?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>A Windows installer has not been released yet. The download section links to the project’s releases page, where it can be made available when ready.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">03</span><span class="faq-question">Which operating system is supported?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>Windows is the primary desktop target. Some actions rely on the desktop app and Windows integrations; those integrations are still awaiting real-world testing.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">04</span><span class="faq-question">Can I change my shortcuts later?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>Yes. You can edit your layers and assignments in the app, review your changes, and upload your setup again. Presets can also give you a starting point.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">05</span><span class="faq-question">Is the hardware ready to use?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>The hardware and bundled firmware are still awaiting physical testing. The V1 RGB power design is not approved; leave LED power and data disconnected until it is.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">06</span><span class="faq-question">What’s the difference between V1 and V2?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>V2 is the keys-and-knob build. V1 adds a display and planned RGB lighting. Both use a Waveshare RP2040-Zero, nine switches, and a clickable rotary encoder.</p></div></details>
+      </div>
+    </section>
+
+    <section class="feedback-section" id="feedback" aria-labelledby="feedback-heading">
+      <div class="section-backdrop feedback-backdrop" aria-hidden="true"></div>
+      <div class="feedback-inner">
+        <div class="feedback-header">
+          <div class="eyebrow"><span class="orange-square"></span> MADE BETTER TOGETHER <span class="eyebrow-line"></span> FEEDBACK</div>
+          <h2 id="feedback-heading">Tell us what<br>you <em>think.</em></h2>
+          <p>Found a bug or have an idea? We’d love to hear what you think.</p>
+        </div>
+        <form class="feedback-form" action="#feedback" method="get" aria-describedby="feedback-note">
+          <div class="feedback-field"><label for="feedback-message">Your feedback or idea <span>REQUIRED</span></label><textarea id="feedback-message" placeholder="Tell us what’s on your mind..." rows="5" maxlength="4000" required></textarea></div>
+          <div class="feedback-field"><label for="feedback-contact">Email or social handle <span>OPTIONAL</span></label><input id="feedback-contact" type="text" placeholder="If you’d like a reply" maxlength="254" autocomplete="email"></div>
+          <div class="feedback-bottom"><p id="feedback-note">Feedback sending isn’t connected yet. Nothing will be sent or saved.</p><button class="feedback-submit" type="submit">Send feedback <span aria-hidden="true">↗</span></button></div>
+          <p class="feedback-status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="support-section" id="support" aria-labelledby="support-heading">
+      <div class="support-card">
+        <div class="support-mark" aria-hidden="true"><span class="brand-mark">Z</span></div>
+        <div class="eyebrow support-eyebrow"><span class="orange-square"></span> A LITTLE SUPPORT GOES A LONG WAY</div>
+        <h2 id="support-heading">Keep ZERO <em>going.</em></h2>
+        <p class="support-copy">If ZERO makes your day a little better, you’ll be able to support the project and help it grow.</p>
+        <div class="support-actions" aria-describedby="support-availability">
+          <button type="button" disabled><span class="support-action-icon" aria-hidden="true">☕</span><span class="support-action-name">Buy me a coffee</span><small>COMING SOON</small></button>
+          <button type="button" disabled><span class="support-paypal-icon" aria-hidden="true">P</span><span class="support-action-name">PayPal</span><small>COMING SOON</small></button>
+        </div>
+        <p class="support-availability" id="support-availability">Support links aren’t connected yet. Thanks for being here.</p>
+      </div>
+    </section>
+
+    <section class="closing" id="download"><div class="closing-inner"><div class="closing-top"><span><span class="orange-square"></span> YOUR NEXT LITTLE PROJECT</span><span>MAKE SOMETHING GOOD / 001</span></div><div class="closing-main"><div><h2>Ready to make<br>it <em>yours?</em></h2><p>Get to know the project, explore the documentation, and follow along as the little deck comes to life.</p><div class="closing-actions"><a class="button button-orange" href="https://github.com/david-8837/MacroPad-/releases" target="_top" rel="noreferrer" aria-describedby="download-status">Download for Windows <span>↗</span></a><a class="text-link light-link" href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">Explore on GitHub <span>↗</span></a><a class="text-link light-link" href="https://github.com/david-8837/MacroPad-/blob/arena/d088a202-macropad/README.md" target="_top" rel="noreferrer">Documentation <span>↗</span></a></div><p class="download-note" id="download-status">No Windows installer has been released yet. The button opens the releases page for updates.</p></div><div class="closing-symbol" aria-hidden="true">✳</div></div><div class="closing-bottom"><span>CONCEIVED FOR THE THINGS YOU MAKE.</span><a href="#top">BACK TO TOP ↑</a></div></div></section>
+  </main>
+  <footer><a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a><p>A LITTLE DECK FOR THE SHORTCUTS YOU USE A LOT.</p><div><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">GITHUB ↗</a><a href="#hardware">HARDWARE</a><a href="../cases/">CASES</a><a href="#faq">FAQ</a><a href="#feedback">FEEDBACK</a><span>MADE FOR MAKING.</span></div></footer>
+  </div>
+</body>
+</html>

@@ -6,6 +6,17 @@
   <meta name="description" content="Meet ZERO Deck Studio: a little deck for the shortcuts you use a lot. Design four layers for a nine-key RP2040 macropad.">
   <meta name="theme-color" content="#f5f2e9">
   <title>ZERO — Make room for the good work.</title>
+  <script>
+    // Old /index.html links go to the clean Home URL; keep query and anchor.
+    // The root URL remains a usable static fallback without JavaScript.
+    if (location.pathname.endsWith('/home/index.html')) {
+      try { history.replaceState(history.state, '', './' + location.search + location.hash); } catch (_) {}
+    } else if (location.pathname.endsWith('/index.html')) {
+      const home = new URL('./home/', location.href);
+      home.search = location.search; home.hash = location.hash;
+      location.replace(home.href);
+    }
+  </script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%231b1b19'/%3E%3Ctext x='11' y='29' font-family='Arial' font-size='25' font-weight='700' fill='white'%3EZ%3C/text%3E%3Ccircle cx='30' cy='28' r='2.5' fill='%23f57646'/%3E%3C/svg%3E">
   <script>
     // Hide the first frame only until the real elements have been measured.
@@ -27,15 +38,15 @@
     } catch (_) { /* The ordinary site remains visible. */ }
   </script>
   <!-- Warm the next page while this one is being read; links still navigate normally. -->
-  <link rel="prefetch" href="./cases.html" as="document">
+  <link rel="prefetch" href="./cases/" as="document">
   <link rel="prefetch" href="./cases-data.js?v=1" as="script">
-  <link rel="prefetch" href="./cases.js?v=1" as="script">
-  <link rel="stylesheet" href="./styles.css?v=scroll-build-22">
-  <link rel="stylesheet" href="./intro.css?v=scroll-build-22">
+  <link rel="prefetch" href="./cases.js?v=2" as="script">
+  <link rel="stylesheet" href="./styles.css?v=scroll-build-23">
+  <link rel="stylesheet" href="./intro.css?v=scroll-build-23">
   <link rel="stylesheet" href="./assets/specular-button.css?v=1">
-  <script src="./script.js?v=scroll-build-22" defer></script>
+  <script src="./script.js?v=scroll-build-23" defer></script>
   <script src="./assets/specular-button.js?v=2" defer></script>
-  <script src="./intro.js?v=scroll-build-22" defer></script>
+  <script src="./intro.js?v=scroll-build-23" defer></script>
 </head>
 <body>
   <div id="site-content">
@@ -43,11 +54,11 @@
   <div class="announcement" role="region" aria-label="Project announcement"><span class="status-dot"></span> A LITTLE DECK FOR BIG IDEAS <span class="announcement-right">DESIGNED FOR YOUR WORKFLOW <span>↗</span></span></div>
   <header class="site-header">
     <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a>
-    <nav class="desktop-nav" aria-label="Main navigation"><a href="#studio">The studio</a><a href="#how-it-works">How it works</a><a href="#hardware">The hardware</a><a href="./cases.html">Cases</a><a href="#faq">FAQ</a></nav>
+    <nav class="desktop-nav" aria-label="Main navigation"><a href="#studio">The studio</a><a href="#how-it-works">How it works</a><a href="#hardware">The hardware</a><a href="./cases/">Cases</a><a href="#faq">FAQ</a></nav>
     <a class="nav-cta" href="#download">Get the app <span>↓</span></a>
     <button class="intro-replay" type="button" aria-label="Replay scroll animations">↻ <span>REPLAY</span></button>
     <details class="mobile-menu"><summary class="menu-toggle" aria-label="Navigation"><span></span><span></span></summary>
-    <nav id="mobile-menu" class="mobile-nav" aria-label="Mobile navigation"><a href="#studio">The studio</a><a href="#how-it-works">How it works</a><a href="#hardware">The hardware</a><a href="./cases.html">Cases</a><a href="#faq">FAQ</a><a href="#feedback">Feedback</a><a href="#download">Get the app ↓</a><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">Explore on GitHub ↗</a></nav></details>
+    <nav id="mobile-menu" class="mobile-nav" aria-label="Mobile navigation"><a href="#studio">The studio</a><a href="#how-it-works">How it works</a><a href="#hardware">The hardware</a><a href="./cases/">Cases</a><a href="#faq">FAQ</a><a href="#feedback">Feedback</a><a href="#download">Get the app ↓</a><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">Explore on GitHub ↗</a></nav></details>
   </header>
   <main id="main">
     <section class="hero" id="top">
@@ -126,7 +137,7 @@
 
     <section class="closing" id="download"><div class="closing-inner"><div class="closing-top"><span><span class="orange-square"></span> YOUR NEXT LITTLE PROJECT</span><span>MAKE SOMETHING GOOD / 001</span></div><div class="closing-main"><div><h2>Ready to make<br>it <em>yours?</em></h2><p>Get to know the project, explore the documentation, and follow along as the little deck comes to life.</p><div class="closing-actions"><a class="button button-orange" href="https://github.com/david-8837/MacroPad-/releases" target="_top" rel="noreferrer" aria-describedby="download-status">Download for Windows <span>↗</span></a><a class="text-link light-link" href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">Explore on GitHub <span>↗</span></a><a class="text-link light-link" href="https://github.com/david-8837/MacroPad-/blob/arena/d088a202-macropad/README.md" target="_top" rel="noreferrer">Documentation <span>↗</span></a></div><p class="download-note" id="download-status">No Windows installer has been released yet. The button opens the releases page for updates.</p></div><div class="closing-symbol" aria-hidden="true">✳</div></div><div class="closing-bottom"><span>CONCEIVED FOR THE THINGS YOU MAKE.</span><a href="#top">BACK TO TOP ↑</a></div></div></section>
   </main>
-  <footer><a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a><p>A LITTLE DECK FOR THE SHORTCUTS YOU USE A LOT.</p><div><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">GITHUB ↗</a><a href="#hardware">HARDWARE</a><a href="./cases.html">CASES</a><a href="#faq">FAQ</a><a href="#feedback">FEEDBACK</a><span>MADE FOR MAKING.</span></div></footer>
+  <footer><a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a><p>A LITTLE DECK FOR THE SHORTCUTS YOU USE A LOT.</p><div><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">GITHUB ↗</a><a href="#hardware">HARDWARE</a><a href="./cases/">CASES</a><a href="#faq">FAQ</a><a href="#feedback">FEEDBACK</a><span>MADE FOR MAKING.</span></div></footer>
   </div>
 </body>
 </html>
