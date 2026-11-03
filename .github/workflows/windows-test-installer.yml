@@ -6,6 +6,7 @@ on:
       - arena/d088a202-macropad
     paths:
       - '.github/workflows/windows-test-installer.yml'
+      - 'scripts/export-oled-font.mjs'
   workflow_dispatch:
 
 permissions:
