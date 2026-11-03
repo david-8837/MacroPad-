@@ -19,7 +19,7 @@ Design four layers of keys and a rotary knob, then upload them to an RP2040 macr
 ZERO Deck Studio brings a desktop editor and RP2040 firmware together for a compact, customizable macropad: **nine keys, one clickable rotary encoder, and four layers**. Use it to organize shortcuts for creative apps, games, and everyday workflows, or start with a preset and make it your own.
 
 > [!IMPORTANT]
-> This is a work in progress. The physical hardware and both bundled firmware images have **not yet been tested on a real device**. The V1 RGB power design is not approved: leave the LED power and data disconnected. See the [hardware notes](#hardware--wiring) before building or powering anything.
+> This is a work in progress. The physical hardware and both bundled firmware images have **not yet been tested on a real device**. The V2 RGB power design is not approved: leave the LED power and data disconnected. See the [hardware notes](#hardware--wiring) before building or powering anything.
 
 ## At a glance
 
@@ -40,7 +40,7 @@ The editor, the configuration stored on the pad, and actions executed by the PC 
 
 - **Windows** for the primary desktop experience and Windows-specific integrations. The web editor and portions of the project can also be developed on macOS and Linux; native features vary by platform.
 - **Node.js 20 and npm** for development (matching the CI configuration). A C compiler and `make` are also needed to generate host test artifacts.
-- A **Waveshare RP2040-Zero**, nine normally-open switches, a rotary encoder with push switch, and a USB data cable for the proposed physical build. The V1 design additionally includes an optional SSD1306 display and a planned, currently unsafe-to-power RGB circuit.
+- A **Waveshare RP2040-Zero**, nine normally-open switches, a rotary encoder with push switch, and a USB data cable for the proposed physical build. The V2 design additionally includes an optional SSD1306 display and a planned, currently unsafe-to-power RGB circuit.
 
 ### Run from source
 
@@ -75,8 +75,8 @@ Two proposed builds use the same directly wired keys and knob:
 
 | Build | Components | Status |
 | :--- | :--- | :--- |
-| **V2 — keys & knob** | RP2040-Zero, 9 switches, clickable rotary encoder | Wiring and firmware are prepared; physical testing is pending. |
-| **V1 — full deck** | V2 controls plus a 128×32 I²C SSD1306 OLED and planned RGB | Display and firmware are untested; **do not connect or power the RGB circuit** until its power, isolation and signal design are approved. |
+| **V1 — keys & knob** | RP2040-Zero, 9 switches, clickable rotary encoder | Wiring and firmware are prepared; physical testing is pending. |
+| **V2 — full deck** | V1 controls plus a 128×32 I²C SSD1306 OLED and planned RGB | Display and firmware are untested; **do not connect or power the RGB circuit** until its power, isolation and signal design are approved. |
 
 ### Start with the complete guide
 
@@ -87,9 +87,9 @@ Picture-style diagrams, soldering notes and reference schematics for both versio
 <details>
 <summary>Preview the picture-style wiring sheets</summary>
 
-| V1 · Display + planned RGB | V2 · Keys + knob |
+| V1 · Keys + knob | V2 · Display + planned RGB |
 | :---: | :---: |
-| [<img src="docs/Macropad_V1_Picture_Wiring.png" alt="V1 picture-style wiring diagram" width="500">](docs/Macropad_V1_Picture_Wiring.png) | [<img src="docs/Macropad_V2_Picture_Wiring.png" alt="V2 picture-style wiring diagram" width="500">](docs/Macropad_V2_Picture_Wiring.png) |
+| [<img src="docs/Macropad_V2_Picture_Wiring.png" alt="V1 picture-style wiring diagram" width="500">](docs/Macropad_V2_Picture_Wiring.png) | [<img src="docs/Macropad_V1_Picture_Wiring.png" alt="V2 picture-style wiring diagram" width="500">](docs/Macropad_V1_Picture_Wiring.png) |
 
 [Picture diagrams PDF](docs/Macropad_Picture_Wiring_V1_V2.pdf) · [Soldering and schematic guide PDF](docs/Macropad_V1_V2_Wiring_Guide.pdf)
 
