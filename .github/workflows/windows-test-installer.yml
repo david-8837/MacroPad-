@@ -1,0 +1,53 @@
+name: Build Windows test installer
+
+on:
+  push:
+    branches:
+      - arena/d088a202-macropad
+    paths:
+      - '.github/workflows/windows-test-installer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build unsigned test installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify packaging configuration
+        run: node tests/packagingConfig.test.cjs
+      - name: Build the app and verify Electron assets
+        run: |
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build:electron
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package Windows installer
+        run: npx electron-builder --win nsis --x64 --publish never
+      - name: Verify packaged files
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path release -Filter 'ZERO-Deck-Studio-*-x64.exe' -File
+          if (@($installer).Count -ne 1 -or $installer.Length -lt 1MB) {
+            throw 'Expected one non-empty Windows installer.'
+          }
+          $app = 'release/win-unpacked/ZERO Deck Studio.exe'
+          if (-not (Test-Path $app)) { throw 'Packaged app executable is missing.' }
+          Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
+      - name: Upload test installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZERO-Windows-test-installer
+          path: release/ZERO-Deck-Studio-*-x64.exe
+          if-no-files-found: error
+          retention-days: 14
