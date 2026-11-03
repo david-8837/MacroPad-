@@ -8,7 +8,7 @@ const html = readFileSync(join(root, 'website/index.html'), 'utf8');
 const script = readFileSync(join(root, 'website/intro.js'), 'utf8');
 const siteScript = readFileSync(join(root, 'website/script.js'), 'utf8');
 
-function setup({ reduced = false, failAfter = Infinity, visited = false, storageBlocked = false, reload = false } = {}) {
+function setup({ reduced = false, failAfter = Infinity, visited = false, storageBlocked = false, reload = false, loaderActive = false } = {}) {
   const dom = new JSDOM(html, { url: 'https://example.test/', runScripts: 'outside-only', pretendToBeVisual: true });
   const { window } = dom;
   if (visited) window.sessionStorage.setItem('zero-scroll-intro-v1:home', 'played');
@@ -32,6 +32,10 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
     disconnect() {}
   };
   window.console.warn = () => {};
+  if (loaderActive) {
+    window.document.documentElement.classList.add('zero-loading');
+    window.document.querySelector('.zero-loader').classList.add('is-leaving');
+  }
   const originalText = window.document.getElementById('site-content').textContent;
   window.eval(siteScript);
   window.eval(script);
@@ -227,6 +231,8 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
   assert.match(heroDownload.textContent, /download for windows/i);
   assert.match(document.getElementById('hero-download-status').textContent, /not released yet/i);
   assert.ok(document.querySelector('.mobile-nav a[href="#download"]'), 'download is accessible from mobile navigation');
+  assert.equal(document.querySelector('.nav-cta').getAttribute('href'), '#support', 'header coffee link leads to the support section');
+  assert.ok(document.querySelector('.mobile-nav a[href="#support"]'), 'support is accessible from mobile navigation');
   for (const link of externalLinks) {
     assert.equal(link.target, '_top', 'external links navigate the top-level page without a popup');
     assert.ok(link.rel.split(/\s+/).includes('noreferrer'));
@@ -249,6 +255,22 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
   assert.equal(dom.window.sessionStorage.getItem('zero-scroll-intro-v1:home'), null, 'failed setup is not marked as played');
   dom.window.close();
 }
+{
+  const { dom, window, document, observer, advance } = setup({ loaderActive: true });
+  const icon = document.querySelector('.zero-loader-cursor svg');
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'construction waits for the loader to open');
+  window.dispatchEvent(new window.CustomEvent('zero-loader-opening'));
+  assert.ok(document.querySelectorAll('[data-build-text]').length > 0, 'opening starts construction');
+  observer().callback([{ target: document.querySelector('.hero'), isIntersecting: true }]);
+  assert.equal(document.querySelector('[data-build-stage="hero"] [data-cursor="interface"] svg'), icon, 'the same loader cursor is handed to the hero');
+  advance(200);
+  assert.ok(document.querySelector('[data-loader-handoff]'), 'the handoff stays above the opening loader');
+  window.dispatchEvent(new window.CustomEvent('zero-loader-done', { detail: { skipped: true } }));
+  assert.equal(document.querySelectorAll('[data-build-text]').length, 0, 'skipping mid-reveal releases every control');
+  assert.equal(document.querySelectorAll('.site-build-overlay').length, 0);
+  dom.window.close();
+}
 console.log('website scroll intro: all text, scroll safety, replay, reduced motion and fail-open passed');
 
 require('./websiteLoader.test.cjs');
+require('./websiteRefresh.test.cjs');

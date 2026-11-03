@@ -28,7 +28,12 @@ for (const page of ['home', 'cases']) {
     assert.match(t.window.document.querySelector('style').textContent, /@keyframes zero-symbol/, 'symbols change and move over time');
     assert.equal(t.window.sessionStorage.getItem('zero-loader-seen-v1'), '1');
     t.window.document.dispatchEvent(new t.window.Event('DOMContentLoaded'));
-    t.timers.find(timer => timer.ms <= 2680).fn();
+    assert.ok(t.window.document.querySelector('.zero-loader-cursor svg'), 'loader has the opening cursor');
+    t.timers.find(timer => timer.ms <= 2050).fn();
+    assert.ok(t.window.document.querySelector('.zero-loader').classList.contains('is-gathering'));
+    let opening = 0; t.window.addEventListener('zero-loader-opening', () => opening++);
+    t.timers.find(timer => timer.ms > 2050 && timer.ms <= 2680).fn();
+    assert.equal(opening, 1, 'opening starts construction during the reveal');
     assert.ok(t.window.document.querySelector('.zero-loader').classList.contains('is-leaving'));
     t.timers.find(timer => timer.ms === 320).fn();
     assert.equal(t.active(), false);

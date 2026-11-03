@@ -116,8 +116,8 @@
       content:[{s:'.feedback-field label',t:1200,stagger:700,label:'Label'}, {s:'.feedback-bottom > p',t:2650,d:1150,type:true,label:'Typing'}]
     }},
     {id:'support',trigger:'.support-card',tracks:{
-      interface:[{s:'.support-card',t:0,d:700,frame:true,label:'Support frame'}, {s:'.support-actions button',t:4250,stagger:500,label:'Support option'}],
-      visual:[{s:'.support-mark',t:850,label:'Mark'}],
+      interface:[{s:'.support-card',t:0,d:700,frame:true,label:'Support frame'}, {s:'.support-topline',t:800,label:'Details'}, {s:'.support-actions button',t:4250,stagger:500,label:'Support option'}, {s:'.support-bottomline',t:6000,label:'Details'}],
+      visual:[{s:'.support-art',t:700,d:600,frame:true,label:'Artwork frame'}, {s:'.support-mark',t:1450,label:'Mark'}],
       content:[{s:'.support-eyebrow',t:900,label:'Introduction'}, {s:'.support-card h2',t:1450,d:1200,type:true,label:'Typing'}, {s:'.support-copy',t:2800,d:1100,type:true,label:'Typing'}, {s:'.support-availability',t:5000,d:900,type:true,label:'Typing'}]
     }},
     {id:'closing',trigger:'.closing',tracks:{
@@ -131,7 +131,7 @@
       details:[{s:'.desktop-nav',t:350,d:180,label:'Navigation'}, {s:'.cases-hero-index',t:1800,label:'Index'}]
     }},
     {id:'cases-gallery',trigger:'.cases-gallery',tracks:{
-      interface:[{s:'.cases-gallery-heading',t:0,d:550,frame:true,label:'Gallery frame'}, {s:'.case-card, .cases-empty',t:650,stagger:550,d:600,frame:true,label:'Case frame'}],
+      interface:[{s:'.cases-gallery-heading',t:0,d:550,frame:true,label:'Gallery frame'}, {s:'.case-card, .cases-empty',t:650,stagger:550,d:600,frame:true,label:'Case frame'}, {s:'.cases-future',t:1500,d:600,frame:true,label:'Library frame'}],
       visual:[{s:'.case-card img',t:1350,stagger:700,d:800,frame:true,label:'Model picture'}, {s:'.case-preview-label',t:1400,label:'Label'}],
       content:[{s:'.cases-gallery-heading h2, .cases-gallery-heading p',t:800,stagger:600,label:'Label'}, {s:'.case-card h3, .cases-empty h3',t:2200,stagger:600,label:'Model name'}, {s:'.cases-empty p',t:2900,d:900,type:true,label:'Typing'}, {s:'.case-card a, .case-card button',t:3500,stagger:500,label:'Download'}]
     }},
@@ -181,7 +181,7 @@
   try{lastPage=sessionStorage.getItem(lastPageKey)||'';}catch(_){/* Storage can be unavailable. */}
   let navType;
   try{navType=performance.getEntriesByType?.('navigation')?.[0]?.type;}catch(_){/* No navigation timing. */}
-  const refreshed=navType==='reload'||(!navType&&performance.navigation?.type===1)||
+  const refreshed=window.__zeroRefreshHome||navType==='reload'||(!navType&&performance.navigation?.type===1)||
     (window.parent!==window&&navType!=='back_forward'&&lastPage===pageId);
   try{sessionStorage.setItem(lastPageKey,pageId);}catch(_){/* Site stays usable without storage. */}
   let playedHere=false;
@@ -264,6 +264,17 @@
     document.body.appendChild(overlay);stage.overlay=overlay;
     for(const track of stage.tracks){
       track.cursor=overlay.querySelector(`[data-cursor="${track.id}"]`);
+      // Carry the very same cursor from the loader into the opening stage.
+      // It starts at its on-screen position and joins the normal trajectory.
+      if(track.id==='interface' && (stage.id==='hero'||stage.id==='cases-hero')){
+        const icon=document.querySelector('.zero-loader.is-leaving .zero-loader-cursor svg');
+        if(icon){
+          const rect=icon.getBoundingClientRect();
+          track.handoff={x:rect.left+scrollX,y:rect.top+scrollY};
+          track.cursor.querySelector('svg').replaceWith(icon);
+          overlay.dataset.loaderHandoff='';
+        }
+      }
       track.guide=overlay.querySelector(`[data-guide="${track.id}"]`);
       track.guideLabel=track.guide.querySelector('span');
       track.finishedAt=track.targets[track.targets.length-1].start+track.targets[track.targets.length-1].duration;
@@ -315,7 +326,13 @@
           }
           const finished=track.finishedAt,exit=smooth((elapsed-finished-140)/650);
           x=lerp(x,center.x,exit);y=lerp(y,center.y,exit);
-          const opacity=smooth((elapsed-Math.max(100,targets[0].start-500))/350)*(1-smooth((elapsed-finished-200)/450));
+          let opacity=smooth((elapsed-Math.max(100,targets[0].start-500))/350)*(1-smooth((elapsed-finished-200)/450));
+          if(track.handoff){
+            const arrival=smooth(elapsed/500);
+            x=lerp(track.handoff.x,x,arrival);y=lerp(track.handoff.y,y,arrival);
+            opacity=Math.max(opacity,1-arrival);
+            if(elapsed>=500){track.handoff=null;delete stage.overlay.dataset.loaderHandoff;}
+          }
           cursor.style.transform=`translate3d(${x}px,${y}px,0)`;cursor.style.opacity=String(opacity);
           if(track.lastGuideTarget!==t){
             guide.style.transform=`translate3d(${t.rect.left}px,${t.rect.top}px,0)`;guide.style.width=`${t.rect.width}px`;guide.style.height=`${t.rect.height}px`;track.guideLabel.textContent=t.label;track.lastGuideTarget=t;
@@ -491,8 +508,14 @@
     else if(skipped){play();finishAll();}
     else play();
   };
-  // Wait until the entry screen leaves so the first cursor work is visible.
-  if(document.documentElement.classList.contains('zero-loading'))
-    window.addEventListener('zero-loader-done', event => begin(!!event.detail?.skipped), {once:true});
-  else begin(false);
+  // Prepare while the loader opens, so its cursor can join the first stage.
+  // Skipping either before or during the reveal still releases everything.
+  if(document.documentElement.classList.contains('zero-loading')){
+    let opened=false;
+    window.addEventListener('zero-loader-opening', () => {opened=true;begin(false);}, {once:true});
+    window.addEventListener('zero-loader-done', event => {
+      if(!opened)begin(!!event.detail?.skipped);
+      else if(event.detail?.skipped)finishAll();
+    }, {once:true});
+  }else begin(false);
 })();

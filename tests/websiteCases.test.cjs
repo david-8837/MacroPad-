@@ -33,6 +33,8 @@ function create(models) {
   assert.ok(casePrefetches.includes('./home/'), 'Cases can warm the Home document');
   assert.equal(dom.window.document.querySelector('.desktop-nav a[href="./home/"]').href, 'https://example.test/home/', 'Cases navigates to the clean Home URL');
   assert.equal(dom.window.document.querySelector('.desktop-nav a[href="./home/#hardware"]').href, 'https://example.test/home/#hardware', 'deep links keep their anchor on the clean Home URL');
+  assert.equal(dom.window.document.querySelector('.nav-cta').href, 'https://example.test/home/#support', 'Cases header coffee link leads to Home support');
+  assert.ok(dom.window.document.querySelector('.mobile-nav a[href="./home/#support"]'), 'support is accessible from the Cases mobile menu');
   for (const el of homeDoc.querySelectorAll('link[href*="specular-button.css"], script[src*="specular-button.js"]')) {
     const url = el.getAttribute('href') || el.getAttribute('src');
     assert.ok(casePrefetches.includes(url), `Cases prefetch matches the active Home asset version: ${url}`);
@@ -124,6 +126,8 @@ function createAnimatedCases({ visited = false, reload = false, reduced = false 
   assert.equal(window.sessionStorage.getItem('zero-scroll-last-page-v1'), 'cases');
   assert.ok(document.querySelectorAll('[data-build-text]').length > 50, 'Cases text is scheduled for typing');
   assert.equal(document.querySelector('.guide-safety').style.opacity, '0', 'unvisited wiring warnings wait for their section');
+  assert.equal(document.querySelector('.cases-future').getAttribute('aria-hidden'), 'true', 'library artwork is decorative');
+  assert.equal(document.querySelector('.cases-future').style.opacity, '0', 'library artwork waits for its scroll section');
   observer().callback([{ target: document.querySelector('.cases-hero'), isIntersecting: true }]);
   assert.ok(document.querySelector('[data-build-stage="cases-hero"]'), 'Cases hero builds on entering the viewport');
   observer().callback([{ target: document.querySelector('.cases-hero'), isIntersecting: false }]);
