@@ -8,7 +8,7 @@ const bundle = readFileSync(join(root, 'website/assets/specular-button.js'), 'ut
 const dom = new JSDOM(html, { url: 'https://example.test/', runScripts: 'outside-only', pretendToBeVisual: true });
 const { window } = dom;
 const fallback = window.document.querySelector('.hero-download-mount a');
-assert.equal(fallback.href, 'https://github.com/david-8837/MacroPad-/releases', 'the static fallback is a real link');
+assert.equal(fallback.href, 'https://github.com/david-8837/MacroPad-/releases/download/v1.0.0-test.1/ZERO-Deck-Studio-1.0.0-x64.exe', 'the static fallback is a real link');
 let webglAttempts = 0;
 window.HTMLCanvasElement.prototype.getContext = type => { if (type === 'webgl2') webglAttempts++; return null; }; // WebGL is optional.
 window.matchMedia = () => ({ matches: true, addEventListener() {} });
@@ -20,7 +20,7 @@ assert.equal(link.target, '_top');
 assert.equal(link.getAttribute('aria-describedby'), 'hero-download-status');
 assert.match(link.textContent, /download for windows/i);
 assert.equal(link.querySelector('canvas').getAttribute('aria-hidden'), 'true');
-assert.match(window.document.querySelector('#hero-download-status').textContent, /not released yet/i);
+assert.match(window.document.querySelector('#hero-download-status').textContent, /unsigned Windows test build/i);
 assert.equal(link.getAttribute('role'), null, 'the download remains a native link');
 assert.equal(webglAttempts, 0, 'shader setup does not block the initial page load');
 link.getBoundingClientRect = () => ({ left: 400, right: 600, top: 400, bottom: 450 });

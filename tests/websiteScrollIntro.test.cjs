@@ -225,12 +225,12 @@ function setup({ reduced = false, failAfter = Infinity, visited = false, storage
   const externalLinks = [...document.querySelectorAll('a[href^="https://github.com/"]')];
   assert.ok(externalLinks.length >= 6, 'desktop, mobile and section GitHub links exist');
   const download = document.querySelector('#download a.button-orange');
-  assert.equal(download.href, 'https://github.com/david-8837/MacroPad-/releases', 'Windows download opens the real releases page');
-  assert.match(document.getElementById('download-status').textContent, /no Windows installer has been released yet/i, 'availability is not overstated');
+  assert.equal(download.href, 'https://github.com/david-8837/MacroPad-/releases/download/v1.0.0-test.1/ZERO-Deck-Studio-1.0.0-x64.exe', 'Windows download points to the published test installer');
+  assert.match(document.getElementById('download-status').textContent, /unsigned test build/i, 'availability is not overstated');
   const heroDownload = document.querySelector('.hero-actions a.button');
-  assert.equal(heroDownload.href, download.href, 'hero and download section link to the same Windows releases page');
+  assert.equal(heroDownload.href, download.href, 'hero and download section link to the same Windows test installer');
   assert.match(heroDownload.textContent, /download for windows/i);
-  assert.match(document.getElementById('hero-download-status').textContent, /not released yet/i);
+  assert.match(document.getElementById('hero-download-status').textContent, /unsigned Windows test build/i);
   assert.ok(document.querySelector('.mobile-nav a[href="#download"]'), 'download is accessible from mobile navigation');
   assert.equal(document.querySelector('.nav-cta').getAttribute('href'), '#support', 'header coffee link leads to the support section');
   assert.ok(document.querySelector('.mobile-nav a[href="#support"]'), 'support is accessible from mobile navigation');

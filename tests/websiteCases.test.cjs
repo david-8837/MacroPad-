@@ -43,7 +43,7 @@ function create(models) {
   assert.equal(saleCards.length, 2, 'V1 and V2 each have their own case listing');
   for (const [index, card] of saleCards.entries()) {
     assert.match(card.querySelector('h3').textContent, new RegExp(`V${index + 1} case model`));
-    assert.match(card.querySelector('.case-sale-price').textContent, /₹100/);
+    assert.match(card.querySelector('.case-sale-price').textContent, /₹150/);
     assert.match(card.querySelector('.case-sale-visual small').textContent, /illustration \/ not final/i);
     assert.match(card.querySelector('.case-sale-description').textContent, /not yet verified/i);
     assert.equal(card.querySelector('button').disabled, true, 'purchase stays disabled without a checkout');
@@ -59,6 +59,8 @@ function create(models) {
   assert.match(document.querySelector('.case-wiring-intro p').textContent, /their V2 is now V1, and their V1 is now V2/i, 'old diagram labels are explained');
   assert.match(document.querySelector('.guide-steps').textContent, /Keys & Knob for V1 or Full Deck for V2/);
   assert.match(document.querySelector('.guide-safety').textContent, /For V2, the RGB power design is not approved/i);
+  assert.match(document.querySelector('.case-sale-heading').textContent, /₹150 PER MODEL/i);
+  assert.match(document.querySelector('#case-order-note').textContent, /₹150 per model/i);
   assert.match(document.querySelector('#case-order-note').textContent, /purchase is required to download/i);
   assert.match(document.querySelector('#case-order-note').textContent, /payment and secure file delivery aren’t connected/i);
   assert.ok(document.querySelector('script[src*="intro.js"]'), 'Cases loads the construction animation');

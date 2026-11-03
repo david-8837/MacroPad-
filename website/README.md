@@ -18,7 +18,7 @@ The completed pages use a subtle grid, editorial artwork and hover feedback on i
 
 In the interactive illustration, select a key or layer, or click the knob to cycle layers. Selections are held in memory per layer for that page visit only; the illustration does not change the actual app or a physical device.
 
-The **Download for Windows** button opens the project’s GitHub Releases page. No installer has been published yet; update the availability note when a tested installer is released. The website does not host an installer itself.
+The **Download for Windows** button downloads the unsigned Windows test installer from the GitHub pre-release `v1.0.0-test.1`. The app was built and smoke-tested on a hosted Windows runner; physical Windows devices, audio hardware, macropad hardware and firmware remain untested. Windows may show a warning because the installer is unsigned. The website does not host the installer itself.
 
 The feedback form is a frontend preview only. It validates the message and explains that sending is not connected; it does not transmit, save, or clear the visitor’s input. Connect a real submission service and update the on-page copy when backend work begins.
 
@@ -33,7 +33,7 @@ The `Deploy ZERO website` workflow publishes the contents of `website/` with Git
 
 ## Case model library
 
-`/cases/` shows paid V1 (keys and knob, no screen or external LEDs) and V2 (screen and planned RGB) case model downloads priced at ₹100 each. Purchase is required before downloading. The illustrations are placeholders, the case designs and fit are unverified, and the purchase buttons are disabled until payment verification and protected file delivery are implemented. A static site cannot enforce purchases: do not put paid files in `website/`, Git, public storage, or `cases-data.js`. A backend or secure commerce service must verify payment and authorize access to privately stored files before delivery. The page also has a separate library for case pictures and downloadable files. Until additional models are added, the library shows decorative artwork and no download cards. This is a static frontend, not an upload service: adding files through a browser and storing them online will require backend work later.
+`/cases/` shows paid V1 (keys and knob, no screen or external LEDs) and V2 (screen and planned RGB) case model downloads priced at ₹150 each. Purchase is required before downloading. The illustrations are placeholders, the case designs and fit are unverified, and the purchase buttons are disabled until payment verification and protected file delivery are implemented. A static site cannot enforce purchases: do not put paid files in `website/`, Git, public storage, or `cases-data.js`. A backend or secure commerce service must verify payment and authorize access to privately stored files before delivery. The page also has a separate library for case pictures and downloadable files. Until additional models are added, the library shows decorative artwork and no download cards. This is a static frontend, not an upload service: adding files through a browser and storing them online will require backend work later.
 
 To add a model now:
 
