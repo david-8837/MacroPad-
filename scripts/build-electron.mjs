@@ -47,10 +47,10 @@ const main = await readFile(join(to, 'main.cjs'), 'utf8');
 const preload = await readFile(join(to, 'preload.cjs'), 'utf8');
 
 const invoked = new Set(
-  [...preload.matchAll(/ipcRenderer\.invoke\(\s*'([a-z]+:[a-zA-Z0-9:_-]+)'/g)].map((m) => m[1])
+  [...preload.matchAll(/ipcRenderer\.invoke\(\s*'([a-zA-Z0-9:_-]+)'/g)].map((m) => m[1])
 );
 const handled = new Set(
-  [...main.matchAll(/handle\(\s*'([a-z]+:[a-zA-Z0-9:_-]+)'/g)].map((m) => m[1])
+  [...main.matchAll(/(?:ipcMain\.handle|handleEditor)\(\s*'([a-zA-Z0-9:_-]+)'/g)].map((m) => m[1])
 );
 
 const missing = [...invoked].filter((c) => !handled.has(c) && !c.startsWith('kadowaz:'));
@@ -59,7 +59,7 @@ if (missing.length) {
 }
 
 // 5. Verify startup and branding assets needed by the packaged app.
-for (const asset of ['splash.html', 'splash.js', 'splash-preload.cjs', 'assets/kadowaz.png', 'assets/kadowaz.ico']) {
+for (const asset of ['splash.html', 'splash.js', 'splash-preload.cjs', 'assets/zero.png', 'assets/zero.ico']) {
   try { await stat(join(to, asset)); }
   catch { fail(`${asset} is missing from dist-electron.`); }
 }

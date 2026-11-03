@@ -31,16 +31,21 @@ export function newPresetId(): string {
   return `custom-${random}`;
 }
 
-// Drop 'script' and 'macro' at the import boundary to prevent backup files from
-// injecting arbitrary executable actions or unauthorized capabilities.
+// Preset and v1 backup imports reject script/macro actions. A v2 deck backup
+// can opt in to validated M0–M15 references, but never arbitrary legacy scripts.
 const categories = new Set(['hotkey', 'media', 'audio_session', 'midi', 'text', 'navigation', 'oled', 'app_launch']);
-export function validAction(value: unknown): value is ActionDefinition | null {
+export function validAction(value: unknown, allowLocalActions = false, allowMacroReferences = false): value is ActionDefinition | null {
   if (value === null) return true;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const a = value as Record<string, unknown>;
-  if (typeof a.id !== 'string' || typeof a.name !== 'string' || typeof a.category !== 'string' || !categories.has(a.category) || !a.payload || typeof a.payload !== 'object' || Array.isArray(a.payload)) return false;
-  if ((a.description !== undefined && typeof a.description !== 'string') || (a.icon !== undefined && typeof a.icon !== 'string')) return false;
+  if (typeof a.id !== 'string' || typeof a.name !== 'string' || typeof a.category !== 'string' || !a.payload || typeof a.payload !== 'object' || Array.isArray(a.payload)) return false;
   const payload = a.payload as Record<string, unknown>;
+  const macroReference = allowMacroReferences && (
+    (a.category === 'macro' && Number.isInteger(payload.macroId) && (payload.macroId as number) >= 0 && (payload.macroId as number) <= 15) ||
+    (a.category === 'script' && typeof payload.command === 'string' && /^macro:(?:M)?(0|[1-9]|1[0-5])$/i.test(payload.command))
+  );
+  if (!(categories.has(a.category) || (allowLocalActions && (a.category === 'macro' || a.category === 'script')) || macroReference)) return false;
+  if ((a.description !== undefined && typeof a.description !== 'string') || (a.icon !== undefined && typeof a.icon !== 'string')) return false;
   const keys = payload.keys;
   if (keys !== undefined && (!Array.isArray(keys) || !keys.every(k => typeof k === 'string'))) return false;
   for (const field of ['keycode', 'oledStep', 'mediaAction', 'processName', 'midiType', 'shellType', 'command', 'text', 'targetLayerId', 'appId', 'appName', 'exePath', 'launchArgs', 'iconDataUrl', 'targetType', 'source']) {
@@ -54,14 +59,14 @@ export function validAction(value: unknown): value is ActionDefinition | null {
   }
   return true;
 }
-export function validBinding(value: unknown, index: number): value is KeyBinding {
+export function validBinding(value: unknown, index: number, allowLocalActions = false, allowMacroReferences = false): value is KeyBinding {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const b = value as Record<string, unknown>;
   return b.keyIndex === index && typeof b.label === 'string' && typeof b.iconName === 'string' &&
     (b.sublabel === undefined || typeof b.sublabel === 'string') && (b.accentColor === undefined || typeof b.accentColor === 'string') &&
     (b.isDestructiveSafety === undefined || typeof b.isDestructiveSafety === 'boolean') &&
-    (b.longPressThresholdMs === undefined || (typeof b.longPressThresholdMs === 'number' && Number.isFinite(b.longPressThresholdMs))) && validAction(b.tapAction) && validAction(b.holdAction) && validAction(b.doubleTapAction) &&
-    (b.safetyConfirmAction === undefined || validAction(b.safetyConfirmAction));
+    (b.longPressThresholdMs === undefined || (typeof b.longPressThresholdMs === 'number' && Number.isFinite(b.longPressThresholdMs))) && validAction(b.tapAction, allowLocalActions, allowMacroReferences) && validAction(b.holdAction, allowLocalActions, allowMacroReferences) && validAction(b.doubleTapAction, allowLocalActions, allowMacroReferences) &&
+    (b.safetyConfirmAction === undefined || validAction(b.safetyConfirmAction, allowLocalActions, allowMacroReferences));
 }
 function validPreset(value: unknown): value is LayerPreset {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;

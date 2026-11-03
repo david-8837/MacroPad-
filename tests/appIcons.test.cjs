@@ -3,6 +3,7 @@ const Module = require('node:module');
 const { mkdtempSync, writeFileSync, rmSync, readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { tmpdir } = require('node:os');
+require('node:child_process').execFileSync(process.execPath, [join(__dirname, 'appLaunchSafety.test.cjs')], { stdio: 'inherit' });
 
 // These tests run without Electron or Windows; substitute native icon APIs.
 const calls = [];

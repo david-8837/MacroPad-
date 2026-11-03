@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
+const { psQuote } = require('./native/util.cjs');
 const electronModule = require('electron');
 const app = typeof electronModule === 'object' && electronModule ? electronModule.app : null;
 const shell = typeof electronModule === 'object' && electronModule ? electronModule.shell : null;
@@ -730,7 +731,7 @@ async function launchApplication(appInfo) {
       const baseName = path.basename(exePath, path.extname(exePath));
       try {
         const psScript = `
-          $proc = Get-Process -Name "${baseName}" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $proc = Get-Process -Name ${psQuote(baseName)} -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($proc -and $proc.MainWindowHandle -ne 0) {
             $wshell = New-Object -ComObject WScript.Shell
             $wshell.AppActivate($proc.Id)
@@ -762,9 +763,16 @@ async function launchApplication(appInfo) {
       windowsHide: launchMinimized === true,
       cwd: path.dirname(exePath),
     });
-    child.unref();
-
-    return { success: true, pid: child.pid, method: 'spawn' };
+    // spawn() can fail asynchronously (e.g. permission denied or an invalid
+    // executable). Wait for confirmation and handle the error event instead of
+    // reporting success immediately or crashing the Electron main process.
+    return await new Promise((resolve) => {
+      child.once('error', (err) => resolve({ success: false, error: err.message || String(err) }));
+      child.once('spawn', () => {
+        child.unref();
+        resolve({ success: true, pid: child.pid, method: 'spawn' });
+      });
+    });
   } catch (err) {
     return { success: false, error: err.message || String(err) };
   }

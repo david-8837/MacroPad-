@@ -28,6 +28,10 @@ async function main() {
   const script = await executeAction({ category: 'script', payload: { command: 'calc.exe' } });
   assert.equal(script.success, true);
   assert.equal(spawned[1].file, 'calc.exe', 'explicit script launches remain explicit');
+  const quoted = await executeAction({ category: 'script', payload: { command: '"C:\\Program Files\\Editor\\editor.exe" --new-window' } });
+  assert.equal(quoted.success, true);
+  assert.equal(spawned[2].file, 'C:\\Program Files\\Editor\\editor.exe', 'quoted paths with spaces are launched, not typed');
+  assert.deepEqual(spawned[2].args, ['--new-window']);
   console.log('textAction: literal typing is separate from program launch');
 }
 

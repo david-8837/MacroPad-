@@ -79,6 +79,7 @@ try { $global:LASTRESULT = [KadowazAudio]::${method}(${args}) } catch { $global:
   const out = (r.stdout || '').trim();
   if (out.startsWith('ERR:')) return { error: out.slice(4) };
   if (r.timedOut) return { error: 'Windows took too long to answer the audio request. This usually settles on its own; if it keeps happening, restart the app.' };
+  if (r.code !== 0) return { error: (r.stderr || out || `PowerShell exited ${r.code}`).split('\n')[0] };
   if (!out && r.stderr) return { error: r.stderr.split('\n')[0] };
   return { value: out };
 }
@@ -246,8 +247,10 @@ async function setProcessVolume(target, percent) {
 async function adjustProcessVolume(target, delta) {
   const cur = await getProcessVolume(target);
   if (!cur.ok) return cur;
-  await setProcessVolume(target, cur.value + clamp(delta, -100, 100));
-  return ok(clamp(cur.value + delta, 0, 100));
+  const next = clamp(cur.value + clamp(delta, -100, 100), 0, 100);
+  const result = await setProcessVolume(target, next);
+  if (!result.ok) return result;
+  return ok(next);
 }
 
 async function setProcessMute(target, muted) {

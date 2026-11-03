@@ -8,6 +8,10 @@ This is a checklist, not a claim that a release has been validated. Record the a
 - Build the Windows NSIS and portable artifacts with `npm run dist:win` in a suitable Windows build environment. Check installer, executable, tray and shortcut icons and included firmware/native assets. Do not assume staging on Linux verifies a Windows installer.
 - Review third-party asset notices (`src/assets/preset-icons/README.md` and its license files) and release notes. No project license has been selected here.
 
+## Laptop and desktop compatibility (pending)
+
+Follow the real-machine matrix in [COMPATIBILITY.md](COMPATIBILITY.md), including scaling, external-monitor DDC/CI, laptop brightness, keyboard layouts and real pad behavior. Browser and mocked-API tests do not replace these checks.
+
 ## Clean Windows install (pending)
 
 - On a clean, supported Windows machine, install NSIS, launch from the Start menu and desktop shortcut, check the taskbar/tray icon, startup, Help & About, close-to-tray, reopen, quit, uninstall and reinstall. Test the portable build separately. Note any unsigned-app warnings; do not represent an unsigned release as signed.

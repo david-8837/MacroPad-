@@ -1,7 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { KeyBinding } from '../types';
 import { playKeyClick } from '../utils/soundEffects';
-import * as LucideIcons from 'lucide-react';
+import { keyDisplayText } from '../utils/shortcutBindings';
+import { watchPointerGesture } from '../utils/watchPointerGesture';
+import { Copy, Clipboard, Scissors, RotateCcw, RotateCw, Save, Search, Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Globe, Home, ArrowLeft, ArrowRight, Keyboard, Star, Heart, Film, Code, Music, Sparkles, Square, Rocket } from 'lucide-react';
+
+const commonIcons: Record<string, React.ElementType> = { Copy, Clipboard, Scissors, RotateCcw, RotateCw, Save, Search, Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Globe, Home, ArrowLeft, ArrowRight, Keyboard, Star, Heart, Film, Code, Music, Sparkles, Square, Rocket };
+// Rare legacy icon names remain supported, but their full catalogue is lazy.
+const LegacyKeyIcon = React.lazy(() => import('./LegacyKeyIcon'));
 
 interface KeyMatrixProps {
   keys: KeyBinding[];
@@ -26,131 +32,103 @@ export const KeyMatrix: React.FC<KeyMatrixProps> = ({
   const [activeDownKey, setActiveDownKey] = useState<number | null>(null);
   const [holdingKeyIndex, setHoldingKeyIndex] = useState<number | null>(null);
   const [holdProgress, setHoldProgress] = useState<number>(0);
-  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const holdIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const clickCountRef = useRef<{ [keyIndex: number]: number }>({});
-  const clickTimerRef = useRef<{ [keyIndex: number]: NodeJS.Timeout }>({});
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const clickCountRef = useRef<Record<number, number>>({});
+  const clickTimerRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const cleanupPointerRef = useRef<(() => void) | null>(null);
+  const pressed = useRef<{ index: number; source: string; held: boolean; safety: boolean } | null>(null);
 
-  // Dynamic Lucide icon renderer
-  const renderIcon = (iconName: string, className="w-5 h-5") => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const IconComponent = (LucideIcons as any)[iconName] || LucideIcons.Square;
-    return <IconComponent className={className} />;
+  // Do not let delayed gestures from a previous layer execute after a switch
+  // or an unmount. The bindings in these callbacks belong to that old layer.
+  useEffect(() => {
+    setActiveDownKey(null); setHoldingKeyIndex(null); setHoldProgress(0);
+    return () => {
+      cleanupPointerRef.current?.(); cleanupPointerRef.current = null;
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+      if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
+      Object.values(clickTimerRef.current).forEach(clearTimeout);
+      clickTimerRef.current = {};
+      clickCountRef.current = {};
+      pressed.current = null;
+    };
+  }, [keys]);
+
+  const renderIcon = (iconName: string, className = 'w-5 h-5') => {
+    const Icon = Object.prototype.hasOwnProperty.call(commonIcons, iconName) ? commonIcons[iconName] : null;
+    if (Icon) return <Icon className={className} />;
+    return <React.Suspense fallback={<Square className={className} />}><LegacyKeyIcon name={iconName} className={className} /></React.Suspense>;
   };
 
-  const handlePointerDown = (keyBinding: KeyBinding, e: React.PointerEvent) => {
-    e.preventDefault();
-    const idx = keyBinding.keyIndex;
-    onSelectKey(idx);
-    setActiveDownKey(idx);
+  const startPress = (binding: KeyBinding, source: string) => {
+    if (pressed.current) return;
+    const safety = Boolean(binding.isDestructiveSafety && binding.safetyConfirmAction);
+    const current = { index: binding.keyIndex, source, held: false, safety };
+    pressed.current = current;
+    onSelectKey(binding.keyIndex);
+    setActiveDownKey(binding.keyIndex);
     playKeyClick('down');
-
-    // Long-Press Safety Isolation
-    if (keyBinding.isDestructiveSafety && keyBinding.safetyConfirmAction) {
-      setHoldingKeyIndex(idx);
+    if (safety) {
+      setHoldingKeyIndex(binding.keyIndex);
       setHoldProgress(0);
-      const threshold = keyBinding.longPressThresholdMs || 1500;
-      const startTime = Date.now();
-
-      holdIntervalRef.current = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(100, (elapsed / threshold) * 100);
-        setHoldProgress(progress);
-      }, 25);
-
+      const threshold = binding.longPressThresholdMs || 1500;
+      const started = Date.now();
+      holdIntervalRef.current = setInterval(() => setHoldProgress(Math.min(100, (Date.now() - started) / threshold * 100)), 25);
       holdTimerRef.current = setTimeout(() => {
-        // Sustained hold completed!
-        playKeyClick('heavy');
-        setHoldProgress(100);
-        if (keyBinding.safetyConfirmAction) {
-          onTriggerAction(
-            keyBinding.safetyConfirmAction.id,
-            `[SAFETY UNLOCKED] ${keyBinding.safetyConfirmAction.name}`,
-            keyBinding.safetyConfirmAction.category,
-            keyBinding.safetyConfirmAction.payload
-          );
-        }
-        clearInterval(holdIntervalRef.current!);
+        if (pressed.current !== current || !binding.safetyConfirmAction) return;
+        current.held = true;
+        playKeyClick('heavy'); setHoldProgress(100);
+        onTriggerAction(binding.safetyConfirmAction.id, `[SAFETY UNLOCKED] ${binding.safetyConfirmAction.name}`,
+          binding.safetyConfirmAction.category, binding.safetyConfirmAction.payload);
+        if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
       }, threshold);
-      return;
-    }
-
-    // Mod-Tap check (hold for alternate action)
-    if (keyBinding.holdAction) {
+    } else if (binding.holdAction) {
       holdTimerRef.current = setTimeout(() => {
+        if (pressed.current !== current || !binding.holdAction) return;
+        current.held = true;
         playKeyClick('heavy');
-        if (keyBinding.holdAction) {
-          onTriggerAction(
-            keyBinding.holdAction.id,
-            `[HOLD] ${keyBinding.holdAction.name}`,
-            keyBinding.holdAction.category,
-            keyBinding.holdAction.payload
-          );
-        }
+        onTriggerAction(binding.holdAction.id, `[HOLD] ${binding.holdAction.name}`, binding.holdAction.category, binding.holdAction.payload);
       }, 250);
     }
   };
 
-  const handlePointerUp = (keyBinding: KeyBinding) => {
-    const idx = keyBinding.keyIndex;
-    setActiveDownKey(null);
+  const finishPress = (binding: KeyBinding, source: string, cancelled = false) => {
+    const current = pressed.current;
+    if (!current || current.index !== binding.keyIndex || current.source !== source) return;
+    pressed.current = null;
+    cleanupPointerRef.current?.(); cleanupPointerRef.current = null;
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
+    holdTimerRef.current = null; holdIntervalRef.current = null;
+    setActiveDownKey(null); setHoldingKeyIndex(null); setHoldProgress(0);
     playKeyClick('up');
-
-    // Clear hold timers
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    if (holdIntervalRef.current) {
-      clearInterval(holdIntervalRef.current);
-      holdIntervalRef.current = null;
-    }
-
-    // If it was a safety hold that was released prematurely
-    if (holdingKeyIndex === idx) {
-      if (holdProgress < 100) {
-        onTriggerAction('safety-aborted', 'Hold cancelled (Threshold not met)', 'info');
-      }
-      setHoldingKeyIndex(null);
-      setHoldProgress(0);
+    if (cancelled) return;
+    if (current.safety) {
+      if (!current.held) onTriggerAction('safety-aborted', 'Hold cancelled (Threshold not met)', 'info');
       return;
     }
-
-    // Tap Dance logic (single vs double tap)
+    // A hold is an alternative to a tap, never both.
+    if (current.held) return;
+    // Without a double-tap binding there is no ambiguity to resolve: every
+    // tap must fire, even when the user presses the same key rapidly.
+    if (!binding.doubleTapAction) {
+      if (binding.tapAction) onTriggerAction(binding.tapAction.id, binding.tapAction.name, binding.tapAction.category, binding.tapAction.payload);
+      return;
+    }
+    const idx = binding.keyIndex;
     clickCountRef.current[idx] = (clickCountRef.current[idx] || 0) + 1;
     if (clickCountRef.current[idx] === 1) {
       clickTimerRef.current[idx] = setTimeout(() => {
-        // Single tap resolved
-        if (keyBinding.tapAction) {
-          onTriggerAction(
-            keyBinding.tapAction.id,
-            keyBinding.tapAction.name,
-            keyBinding.tapAction.category,
-            keyBinding.tapAction.payload
-          );
-        }
+        if (binding.tapAction) onTriggerAction(binding.tapAction.id, binding.tapAction.name, binding.tapAction.category, binding.tapAction.payload);
         clickCountRef.current[idx] = 0;
+        delete clickTimerRef.current[idx];
       }, 220);
-    } else if (clickCountRef.current[idx] === 2) {
-      // Double tap resolved!
+    } else {
       clearTimeout(clickTimerRef.current[idx]);
+      delete clickTimerRef.current[idx];
       clickCountRef.current[idx] = 0;
-      if (keyBinding.doubleTapAction) {
-        onTriggerAction(
-          keyBinding.doubleTapAction.id,
-          `[DOUBLE TAP] ${keyBinding.doubleTapAction.name}`,
-          keyBinding.doubleTapAction.category,
-          keyBinding.doubleTapAction.payload
-        );
-      } else if (keyBinding.tapAction) {
-        // Fallback to tap action if no double-tap assigned
-        onTriggerAction(
-          keyBinding.tapAction.id,
-          keyBinding.tapAction.name,
-          keyBinding.tapAction.category,
-          keyBinding.tapAction.payload
-        );
-      }
+      const action = binding.doubleTapAction || binding.tapAction;
+      if (action) onTriggerAction(action.id, binding.doubleTapAction ? `[DOUBLE TAP] ${action.name}` : action.name, action.category, action.payload);
     }
   };
 
@@ -163,6 +141,7 @@ export const KeyMatrix: React.FC<KeyMatrixProps> = ({
           const isDown = activeDownKey === k.keyIndex;
           const isSafety = k.isDestructiveSafety;
           const isHoldingThis = holdingKeyIndex === k.keyIndex;
+          const display = keyDisplayText(k);
 
           return (
             <div
@@ -172,10 +151,48 @@ export const KeyMatrix: React.FC<KeyMatrixProps> = ({
             >
               <button
                 type="button"
-                onPointerDown={(e) => handlePointerDown(k, e)}
-                onPointerUp={() => handlePointerUp(k)}
-                onPointerLeave={() => {
-                  if (activeDownKey === k.keyIndex) handlePointerUp(k);
+                title={[display.label, display.sublabel].filter(Boolean).join(' — ')}
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return;
+                  e.preventDefault();
+                  const source = `pointer:${e.pointerId}`;
+                  startPress(k, source);
+                  if (pressed.current?.source === source) {
+                    cleanupPointerRef.current?.();
+                    cleanupPointerRef.current = watchPointerGesture(e.currentTarget, e.pointerId, cancelled => finishPress(k, source, cancelled));
+                  }
+                  try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* browser may not support capture */ }
+                }}
+                onPointerUp={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const outside = e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom;
+                  finishPress(k, `pointer:${e.pointerId}`, outside);
+                }}
+                onPointerMove={(e) => {
+                  if (pressed.current?.source !== `pointer:${e.pointerId}`) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) finishPress(k, `pointer:${e.pointerId}`, true);
+                }}
+                onPointerCancel={(e) => finishPress(k, `pointer:${e.pointerId}`, true)}
+                onLostPointerCapture={(e) => finishPress(k, `pointer:${e.pointerId}`, true)}
+                onPointerLeave={(e) => finishPress(k, `pointer:${e.pointerId}`, true)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  if (!e.repeat) startPress(k, `key:${e.key}`);
+                }}
+                onKeyUp={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  finishPress(k, `key:${e.key}`);
+                }}
+                onBlur={() => {
+                  const current = pressed.current;
+                  if (current?.source.startsWith('key:')) finishPress(k, current.source, true);
+                }}
+                onClick={(e) => {
+                  // Screen readers can activate buttons without key or pointer events.
+                  if (e.detail === 0) { startPress(k, 'assistive'); finishPress(k, 'assistive'); }
                 }}
                 aria-pressed={isSelected}
                 className={`macropad-key w-full h-[76px] flex flex-col items-center justify-between p-1.5 select-none relative cursor-pointer overflow-hidden ${
@@ -235,15 +252,15 @@ export const KeyMatrix: React.FC<KeyMatrixProps> = ({
                       isDown ? 'text-[#E3E2DE]' : isSelected ? 'text-[#1351AA]' : 'text-[#141414]'
                     }`}
                   >
-                    {k.label}
+                    {display.label}
                   </span>
-                  {k.sublabel && (
+                  {display.sublabel && (
                     <span
                       className={`block font-mono text-[7.5px] truncate mt-[2px] ${
                         isDown ? 'text-[#C7C7C7]' : 'text-[#646464]'
                       }`}
                     >
-                      {k.sublabel}
+                      {display.sublabel}
                     </span>
                   )}
                 </span>

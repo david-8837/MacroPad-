@@ -93,7 +93,9 @@ function createDefaultDial(index: number): Layer['dial'] {
 }
 
 export function normalizeDeckLayers(deck: Deck): Deck {
-  const existingLayers = [...deck.layers];
+  // Normalization updates names, badges and dial modes. Clone those objects so
+  // loading a deck cannot mutate the caller's saved/default configuration.
+  const existingLayers = deck.layers.map(layer => layer ? { ...layer, dial: layer.dial ? { ...layer.dial } : layer.dial } : layer);
 
   // Layer 1: Primary
   if (!existingLayers[0]) {

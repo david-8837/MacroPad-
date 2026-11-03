@@ -93,6 +93,8 @@ export const VIA_MEDIA_KEYS: ViaKeycodeItem[] = [
   { code: 'KC_VOLU', label: 'Vol +', tooltip: 'On-pad consumer HID: volume up', category: 'media' },
   { code: 'KC_VOLD', label: 'Vol -', tooltip: 'On-pad consumer HID: volume down', category: 'media' },
   { code: 'KC_MUTE', label: 'Mute', tooltip: 'On-pad consumer HID: mute', category: 'media' },
+  { code: 'KC_BRIU', label: 'Brightness +', tooltip: 'Brightness up; supported displays only. Windows preview tries the built-in display, then the first DDC/CI-capable monitor.', category: 'media' },
+  { code: 'KC_BRID', label: 'Brightness -', tooltip: 'Brightness down; supported displays only. Windows preview tries the built-in display, then the first DDC/CI-capable monitor.', category: 'media' },
 ];
 
 export const VIA_MACRO_KEYS: ViaKeycodeItem[] = Array.from({ length: 16 }, (_, i) => ({

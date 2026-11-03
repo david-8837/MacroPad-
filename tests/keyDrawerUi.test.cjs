@@ -32,12 +32,14 @@ const { JSDOM } = require('jsdom');
 import { renderToStaticMarkup } from ${JSON.stringify(resolve('node_modules/react-dom/server.node.js'))};
 import { createRoot } from ${JSON.stringify(resolve('node_modules/react-dom/client.js'))};
 import { KeyConfigDrawer } from ${JSON.stringify(resolve('src/components/KeyConfigDrawer.tsx'))};
+import { KnobConfigDrawer } from ${JSON.stringify(resolve('src/components/KnobConfigDrawer.tsx'))};
+export function createKnob(container, dial, save) { const root = createRoot(container); return { render: () => root.render(<KnobConfigDrawer dial={dial} onSave={save} onClose={() => {}} onTriggerAction={() => {}} />), unmount: () => root.unmount() }; }
 export function render(binding, preset) { return renderToStaticMarkup(<KeyConfigDrawer keyBinding={binding} onSave={() => {}} onClose={() => {}} onTestAction={() => {}} captureOnlyWhenFocused={preset} hideCloseButton={preset} />); }
 export { act };
 export function create(container) { const root = createRoot(container); return { render: (binding, callbacks, preset = false) => root.render(<KeyConfigDrawer key={binding.keyIndex} keyBinding={binding} totalKeys={9} onSelectKeyIndex={callbacks.select} onSave={callbacks.save} onClose={callbacks.close} onTestAction={callbacks.test} captureOnlyWhenFocused={preset} hideCloseButton={preset} />), unmount: () => root.unmount() }; }`);
     const out = join(dir, 'bundle.cjs');
     buildSync({ entryPoints: [entry], outfile: out, bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent', nodePaths: [resolve('node_modules')] });
-    const { render, create, act } = require(out);
+    const { render, create, createKnob, act } = require(out);
     const key = { keyIndex: 0, label: 'Empty', sublabel: 'Unassigned', iconName: '', tapAction: null, holdAction: null, doubleTapAction: null };
     const assertDrawer = html => {
       for (const text of ['Keyboard &amp; Combos', 'Text Macro', 'Open App', 'Assign', 'Virtual Keyboard']) assert(html.includes(text), `missing ${text}`);
@@ -113,8 +115,17 @@ export function create(container) { const root = createRoot(container); return {
     assert(button('Assign').disabled);
     await setValue(container.querySelector('textarea'), 'hello');
     assert(!button('Assign').disabled);
+    await click(button('Test Switch Action'));
+    assert.equal(testedActions.at(-1).category, 'text');
+    assert.equal(testedActions.at(-1).payload.text, 'hello');
     await click(button('Assign'));
-    assert.equal(savedBindings.at(-1).tapAction.payload.command, 'hello');
+    assert.equal(savedBindings.at(-1).tapAction.category, 'text');
+    assert.equal(savedBindings.at(-1).tapAction.payload.text, 'hello');
+    const savedText = savedBindings.at(-1);
+    await act(async () => ui.render(savedText, callbacks));
+    assert.equal(container.querySelector('textarea').value, 'hello', 'saved text opens in the text editor');
+    await act(async () => ui.render({ ...key, keyIndex: 12, tapAction: { id: 'legacy-text', category: 'script', name: 'Type: "calc.exe..."', payload: { command: 'calc.exe' } } }, callbacks));
+    assert.equal(container.querySelector('textarea').value, 'calc.exe', 'legacy text opens as literal text');
 
     await act(async () => ui.render({ ...key, keyIndex: 3 }, callbacks, true));
     assert(button('Assign').disabled);
@@ -123,6 +134,34 @@ export function create(container) { const root = createRoot(container); return {
     assert(!button('Assign').disabled);
     await click(button('Assign'));
     assert.deepEqual(savedBindings.at(-1).tapAction.payload.keys, ['Ctrl', 'C']);
+
+    // Both physical capture and the virtual arrow save executable names, while
+    // previously saved glyphs remain visible without rewriting the binding.
+    await act(async () => ui.render({ ...key, keyIndex: 6 }, callbacks));
+    await act(async () => window.dispatchEvent(new window.KeyboardEvent('keydown', {
+      key: 'ArrowRight', code: 'ArrowRight', metaKey: true, bubbles: true,
+    })));
+    assert.deepEqual(savedBindings.at(-1).tapAction.payload.keys, ['Win', 'ArrowRight']);
+    await act(async () => ui.render({ ...key, keyIndex: 7 }, callbacks));
+    await click(button('+ Win'));
+    await click(button('▶'));
+    assert.deepEqual(savedBindings.at(-1).tapAction.payload.keys, ['Win', 'ArrowRight']);
+    const glyphSaved = { ...key, keyIndex: 8, tapAction: { id: 'legacy-arrow', category: 'hotkey',
+      name: 'Win Right', payload: { keys: ['Win', '▶'] } } };
+    await act(async () => ui.render(glyphSaved, callbacks));
+    assert(container.querySelector('button[title="Remove ▶"]'), 'legacy arrow is shown intact');
+
+    await act(async () => ui.render({ ...key, keyIndex: 9 }, callbacks));
+    assert(button('Calc').disabled, 'unsupported calculator key is not offered as a working hotkey');
+    await click(button('Vol+'));
+    assert.deepEqual(savedBindings.at(-1).tapAction.payload.keys, ['AudioVolumeUp']);
+    await act(async () => ui.render({ ...key, keyIndex: 10 }, callbacks));
+    const numpadOne = [...container.querySelectorAll('button')].find(b => b.textContent.trim() === '1' && b.style.gridArea === '4 / 1 / 5 / 2');
+    await click(numpadOne);
+    assert.deepEqual(savedBindings.at(-1).tapAction.payload.keys, ['Numpad1']);
+    await act(async () => ui.render({ ...key, keyIndex: 11 }, callbacks));
+    await click(button('Menu'));
+    assert.deepEqual(savedBindings.at(-1).tapAction.payload.keys, ['ContextMenu']);
 
     // Older saved lists are shown immediately, then refreshed once with icons.
     const custom = { id: 'manual', name: 'Manual App', category: 'utility', source: 'custom', exePath: 'C:\\Manual.exe', iconDataUrl: '', isValid: true, launchArgs: '' };
@@ -156,7 +195,19 @@ export function create(container) { const root = createRoot(container); return {
     assert.equal(localStorage.getItem('kadowaz_app_library_icon_version'), null, 'failed migration remains retryable');
     delete window.electronAPI;
     await act(async () => ui.unmount());
-    console.log('keyDrawerUi: app, text and keyboard assignments, selection gating and key resets passed');
+    const knobSaved = [];
+    const knob = createKnob(container, { label: 'Knob', activeModeName: 'Layer 0', availableModes: ['Layer 0'],
+      cwAction: { id: 'old', category: 'hotkey', name: 'old', payload: { keycode: 'MO(1)' } },
+      ccwAction: null, pressAction: null, holdAction: null }, value => knobSaved.push(value));
+    await act(async () => knob.render());
+    await act(async () => window.dispatchEvent(new window.KeyboardEvent('keydown', {
+      key: 'ArrowRight', code: 'ArrowRight', metaKey: true, bubbles: true,
+    })));
+    await click(button('Save Knob Bindings'));
+    assert.deepEqual(knobSaved.at(-1).cwAction.payload.keys, ['Win', 'ArrowRight']);
+    assert.equal(knobSaved.at(-1).cwAction.payload.keycode, undefined, 'editing a legacy knob clears its stale raw code');
+    await act(async () => knob.unmount());
+    console.log('keyDrawerUi: app, text, key and knob assignments, selection gating and key resets passed');
   } finally {
     global.MessageChannel = originalMessageChannel;
     dom.window.close();

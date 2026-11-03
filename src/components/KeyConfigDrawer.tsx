@@ -3,6 +3,7 @@ import { KeyBinding, ActionDefinition, DiscoveredApp } from '../types';
 import { playKeyClick } from '../utils/soundEffects';
 import { appLibraryNeedsIconRefresh, loadAppLibrary, mergeAppLibrary, saveAppLibrary } from '../utils/appLibrary';
 import { DiscoveredAppIcon } from './DiscoveredAppIcon';
+import { chordToAction } from '../utils/deviceKeymap';
 import { 
   X, 
   Play, 
@@ -34,6 +35,7 @@ interface KeyConfigDrawerProps {
 
 import {
   KeyboardKeyDef as DrawerKeyDef,
+  drawerKeyName,
   DRAWER_MAIN_ROW_0,
   DRAWER_MAIN_ROW_1,
   DRAWER_MAIN_ROW_2,
@@ -107,7 +109,8 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 }) => {
   const [editedKey, setEditedKey] = useState<KeyBinding>({ ...keyBinding });
   const [activeTab, setActiveTab] = useState<'keyboard' | 'text' | 'app'>(
-    keyBinding.tapAction?.category === 'app_launch' ? 'app' : 'keyboard'
+    keyBinding.tapAction?.category === 'app_launch' ? 'app'
+      : (keyBinding.tapAction?.category === 'text' || (keyBinding.tapAction?.category === 'script' && keyBinding.tapAction.name.startsWith('Type: '))) ? 'text' : 'keyboard'
   );
   const [keyboardLayout, setKeyboardLayout] = useState<'full' | 'tkl' | '60'>('full');
   
@@ -119,10 +122,11 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   const [recordedKeys, setRecordedKeys] = useState<string[]>(
     editedKey.tapAction?.payload?.keys || []
   );
+  const padMapping = chordToAction(recordedKeys);
   const recordedKeysRef = useRef(recordedKeys);
   const updateRecordedKeys = (keys: string[]) => { recordedKeysRef.current = keys; setRecordedKeys(keys); };
   const [textSnippet, setTextSnippet] = useState(
-    editedKey.tapAction?.payload?.command || ''
+    editedKey.tapAction?.payload?.text ?? editedKey.tapAction?.payload?.command ?? ''
   );
 
   // App Launcher Drawer State
@@ -151,13 +155,16 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
   useEffect(() => {
     setEditedKey({ ...keyBinding });
     updateRecordedKeys(keyBinding.tapAction?.payload?.keys || []);
-    setTextSnippet(keyBinding.tapAction?.payload?.command || '');
+    setTextSnippet(keyBinding.tapAction?.payload?.text ?? keyBinding.tapAction?.payload?.command ?? '');
     if (keyBinding.tapAction?.category === 'app_launch') {
       setActiveTab('app');
       setAppCustomLabel(keyBinding.label || keyBinding.tapAction.payload?.appName || '');
       setAppCustomArgs(keyBinding.tapAction.payload?.launchArgs || '');
       setAppFocusExisting(Boolean(keyBinding.tapAction.payload?.focusExisting));
       setAppLaunchMinimized(Boolean(keyBinding.tapAction.payload?.launchMinimized));
+    } else if (keyBinding.tapAction?.category === 'text' ||
+      (keyBinding.tapAction?.category === 'script' && keyBinding.tapAction.name.startsWith('Type: '))) {
+      setActiveTab('text');
     }
   }, [keyBinding]);
 
@@ -301,13 +308,13 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         const sub = e.code.replace('Numpad', '');
         primaryKey = sub === 'Enter' ? 'Num Enter' : `Num ${sub}`;
       } else if (e.code === 'ArrowUp') {
-        primaryKey = '▲';
+        primaryKey = 'ArrowUp';
       } else if (e.code === 'ArrowDown') {
-        primaryKey = '▼';
+        primaryKey = 'ArrowDown';
       } else if (e.code === 'ArrowLeft') {
-        primaryKey = '◀';
+        primaryKey = 'ArrowLeft';
       } else if (e.code === 'ArrowRight') {
-        primaryKey = '▶';
+        primaryKey = 'ArrowRight';
       } else if (primaryKey === ' ') {
         primaryKey = 'Space';
       } else if (['Control', 'Shift', 'Alt', 'Meta'].includes(primaryKey)) {
@@ -417,6 +424,13 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     (assignedApp.exePath && item.exePath?.toLowerCase() === assignedApp.exePath.toLowerCase()));
   const assignedIcon = matchingAssignedApp?.iconDataUrl || assignedApp?.iconDataUrl;
 
+  const textAction = (): ActionDefinition => ({
+    id: `text-${Date.now()}`,
+    category: 'text',
+    name: `Type: "${textSnippet.slice(0, 15)}..."`,
+    payload: { text: textSnippet },
+  });
+
   const canAssign = activeTab === 'app' ? selectedDrawerApp !== null
     : activeTab === 'text' ? textSnippet.trim().length > 0
     : recordedKeys.length > 0;
@@ -437,12 +451,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     } else if (activeTab === 'text') {
       onSave({
         ...editedKey,
-        tapAction: {
-          id: `text-${Date.now()}`,
-          category: 'script',
-          name: `Type: "${textSnippet.slice(0, 15)}..."`,
-          payload: { command: textSnippet },
-        },
+        tapAction: textAction(),
         label: textSnippet.slice(0, 8),
         sublabel: 'Text Macro',
       });
@@ -465,7 +474,9 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
       <button
         key={k.code}
         type="button"
-        onClick={() => handleVirtualKeyClick(k.label || k.code)}
+        disabled={k.code === 'Calc'}
+        title={k.code === 'Calc' ? 'Calculator key is not supported; use Open App instead' : undefined}
+        onClick={() => handleVirtualKeyClick(drawerKeyName(k))}
         style={{
           width: `${uWidth}px`,
           height: customHeight
@@ -638,6 +649,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
           <div className="space-y-3">
             
             {captureOnlyWhenFocused && <div ref={shortcutCaptureRef} role="textbox" aria-label="Type shortcut" aria-readonly="true" tabIndex={0} className="border border-[#C7C7C7] p-2 text-xs text-[#444343] focus:border-[#1351AA] focus:outline-none">Click here and type a shortcut, or use the virtual keyboard below.</div>}
+            <p className="text-[10px] text-[#646464]">Keys use US-layout positions. Symbols may differ with another Windows keyboard layout.</p>
             {/* MULTI-KEY COMBO PILL BAR (Interactive Chips) */}
             <div className="p-3  border border-[#E3E2DE] space-y-2.5">
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -719,6 +731,10 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                   </button>
                 )}
               </div>
+
+              {recordedKeys.length > 0 && padMapping.kind === 'unsupported' && (
+                <p role="status" className="text-xs text-[#8A4B00]">Cannot upload this combination to the pad: {padMapping.reason}. The desktop test may behave differently.</p>
+              )}
 
               {/* Quick Modifier Toggle Badges */}
               <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#E3E2DE] text-[10px] font-mono">
@@ -882,7 +898,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                           <button
                             key={k.code}
                             type="button"
-                            onClick={() => handleVirtualKeyClick(k.label || k.code)}
+                            onClick={() => handleVirtualKeyClick(drawerKeyName(k))}
                             style={{ gridArea: k.gridArea }}
                             className={` flex flex-col items-center justify-between p-0.5 font-mono text-[8.5px] font-bold border transition-all select-none cursor-pointer ${
  isSelected
@@ -908,7 +924,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         {activeTab === 'text' && (
           <div className="space-y-3">
             <div className="text-xs text-[#444343]">
-              Enter any text string or script command to be automatically typed out when pressing this switch:
+              Enter text to type into the focused application. It will not run as a program:
             </div>
 
             <textarea
@@ -1295,11 +1311,10 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
         <button
           type="button"
           onClick={() => {
-            if (editedKey.tapAction) {
-              onTestAction(editedKey.tapAction);
-            }
+            if (activeTab === 'text' && textSnippet.trim()) onTestAction(textAction());
+            else if (editedKey.tapAction) onTestAction(editedKey.tapAction);
           }}
-          disabled={!editedKey.tapAction}
+          disabled={activeTab === 'text' ? !textSnippet.trim() : !editedKey.tapAction}
           className="flex items-center gap-1.5 text-xs text-[#1351AA] hover:underline font-mono cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Play className="w-3.5 h-3.5" /> Test Switch Action

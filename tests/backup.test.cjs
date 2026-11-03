@@ -31,11 +31,43 @@ const { pathToFileURL } = require('node:url');
       x => x.deck.layers[0].keys[0].keyIndex = 9,
       x => x.deck.layers[0].keys[0].tapAction = {id:2},
       x => x.deck.layers[0].keys[0].tapAction = {id:'e', name:'calc', category:'script', payload:{command:'calc.exe'}},
-      x => x.deck.layers[0].keys[0].tapAction = {id:'m', name:'macro', category:'macro', payload:{macroId:0}},
+      x => x.deck.layers[0].keys[0].tapAction = {id:'m', name:'macro', category:'macro', payload:{macroId:16}},
+      x => x.extras.macros = [{id:0,name:'bad',actions:[{id:'x',type:'exec',value:'calc'}]}],
+      x => x.extras.oled = {mode:'bad'},
+      x => x.extras.lighting = {version:1, channels:[]},
       x => x.deck.layers[0].dial.sensitivity = 'bad',
       x => x.presetLibrary.custom[0].keys.pop(),
       x => x.deck.activeLayerId = 'missing',
     ]) { const broken = structuredClone(exported); mutate(broken); assert.throws(() => m.parseBackup(JSON.stringify(broken))); }
+    const macros = [{ id: 0, name: 'Example', actions: [{id:'one',type:'text',value:'hello'}, {id:'two',type:'combo',value:'Enter',keys:['Enter']}] }];
+    const oled = {mode:'kadowaz',customTitle:'Hello',customSubtitle:'World',brightness:42,inverted:true,autoCycleS:30,playlist:['kadowaz']};
+    const lightChannel = {mode:1,brightness:100,speed:80,r:1,g:2,b:3,perKey:Array.from({length:9}, () => [0,0,0]),perKeyMask:0};
+    const lighting = {version:1,channels:Array.from({length:4}, () => structuredClone(lightChannel))};
+    storage.setItem('kadowaz_macros_v2', JSON.stringify(macros)); storage.setItem('kadowaz_oled', JSON.stringify(oled)); storage.setItem('kadowaz_lighting', JSON.stringify(lighting));
+    const macroDeck = structuredClone(deck); macroDeck.layers[0].keys[0].tapAction = {id:'m',name:'macro',category:'macro',payload:{macroId:0}};
+    macroDeck.layers[0].keys[1].tapAction = {id:'old',name:'legacy macro',category:'script',payload:{command:'macro:M0'}};
+    const extended = m.makeBackup(macroDeck, storage); const extendedParsed = m.parseBackup(JSON.stringify(extended));
+    assert.deepEqual(extendedParsed.extras, {macros,oled,lighting}); assert.deepEqual(extendedParsed.deck, macroDeck);
+    const legacyV1 = {format: m.BACKUP_FORMAT, version:1, deck, presetLibrary:exported.presetLibrary};
+    assert.deepEqual(m.parseBackup(JSON.stringify(legacyV1)), {deck,presetLibrary:exported.presetLibrary});
+    m.restoreBackup(storage, m.parseBackup(JSON.stringify(legacyV1)));
+    assert.deepEqual(JSON.parse(storage.getItem('kadowaz_macros_v2')), macros);
+    assert.deepEqual(JSON.parse(storage.getItem('kadowaz_oled')), oled);
+    assert.deepEqual(JSON.parse(storage.getItem('kadowaz_lighting')), lighting);
+    const unsafeV1 = {...legacyV1, deck:macroDeck}; assert.throws(() => m.parseBackup(JSON.stringify(unsafeV1)));
+    const unsafe = structuredClone(macroDeck); unsafe.layers[0].keys[0].tapAction = {id:'x',name:'bad',category:'script',payload:{command:'calc.exe'}};
+    assert.throws(() => m.makeBackup(unsafe, storage), /script/);
+    storage.setItem('kadowaz_macros_v2', '{broken'); assert.throws(() => m.makeBackup(deck, storage), /macros/i); assert.equal(storage.getItem('kadowaz_macros_v2'), '{broken');
+    storage.setItem('kadowaz_macros_v2', 'null'); assert.throws(() => m.makeBackup(deck, storage), /macros/i); assert.equal(storage.getItem('kadowaz_macros_v2'), 'null');
+    storage.setItem('kadowaz_macros_v2', JSON.stringify(macros));
+    // Fail each write in turn and ensure all earlier writes are rolled back.
+    for (let failAt = 0; failAt < 5; failAt++) {
+      const old = new Map([['kadowaz_deck','old'], [m.PRESET_LIBRARY_KEY,'old-preset'], ['kadowaz_macros_v2','old-macro'], ['kadowaz_oled','old-oled'], ['kadowaz_lighting','old-light']]);
+      let count = 0; const brokenStore = { getItem: k => old.get(k) ?? null, setItem(k,v) { if (count++ === failAt) throw Error('quota'); old.set(k,v); }, removeItem(k) { if (count++ === failAt) throw Error('quota'); old.delete(k); } };
+      assert.throws(() => m.restoreBackup(brokenStore, extendedParsed), /previous saved data was restored/);
+      assert.deepEqual([...old.entries()], [['kadowaz_deck','old'], [m.PRESET_LIBRARY_KEY,'old-preset'], ['kadowaz_macros_v2','old-macro'], ['kadowaz_oled','old-oled'], ['kadowaz_lighting','old-light']]);
+    }
+    m.restoreBackup(storage, extendedParsed); assert.deepEqual(JSON.parse(storage.getItem('kadowaz_macros_v2')),macros); assert.deepEqual(JSON.parse(storage.getItem('kadowaz_oled')),oled); assert.deepEqual(JSON.parse(storage.getItem('kadowaz_lighting')),lighting);
     assert.throws(() => m.parseBackup(' '.repeat(m.BACKUP_MAX_BYTES + 1)), /large/);
     storage.setItem(m.PRESET_LIBRARY_KEY, 'not-json');
     assert.throws(() => m.makeBackup(deck, storage), /presets/i); assert.equal(storage.getItem(m.PRESET_LIBRARY_KEY), 'not-json');

@@ -26,6 +26,7 @@ const BASIC_NAMES: Record<string, string> = {
 const MEDIA: Record<string, NonNullable<ActionDefinition['payload']['mediaAction']>> = {
   KC_MPLY: 'play_pause', KC_MNXT: 'next', KC_MPRV: 'prev', KC_MSTP: 'stop',
   KC_VOLU: 'volume_up', KC_VOLD: 'volume_down', KC_MUTE: 'mute',
+  KC_BRIU: 'brightness_up', KC_BRID: 'brightness_down',
 };
 
 function binding(index: number, label: string, sublabel: string, action: ActionDefinition | null): KeyBinding {

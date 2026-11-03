@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Code, 
   Play, 
@@ -13,7 +13,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { executeMacroSlot } from '../../utils/executeDeckAction';
-import { isMacroReady, MACRO_STORAGE_KEY } from '../../utils/macroStorage';
+import { isMacroReady, MACRO_STORAGE_KEY, validMacroLibrary } from '../../utils/macroStorage';
 import { playKeyClick } from '../../utils/soundEffects';
 
 export interface MacroAction {
@@ -147,29 +147,29 @@ const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta']);
 
 interface ViaMacroEditorProps {
   onTriggerAction?: (actionId: string, actionName: string, category: string) => void;
+  onStorageError?: (message: string) => void;
 }
 
 export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   onTriggerAction,
+  onStorageError,
 }) => {
-  const [macros, setMacros] = useState<MacroSlot[]>(() => {
-    const saved = localStorage.getItem(MACRO_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Keep each valid ID once and fill absent slots from the empty
-          // defaults. An old/partial/corrupt local store must not crash the
-          // editor or make a forged M-slot look ready for physical playback.
-          return INITIAL_MACROS.map(fallback => {
-            const found = parsed.find(m => m && m.id === fallback.id && Array.isArray(m.actions));
-            return found ? { ...fallback, ...found } : fallback;
-          });
-        }
-      } catch { /* ignore */ }
-    }
-    return INITIAL_MACROS;
+  const [initialMacros] = useState(() => {
+    try {
+      const saved = localStorage.getItem(MACRO_STORAGE_KEY);
+      if (saved === null) return { slots: INITIAL_MACROS, blocked: false };
+      const parsed: unknown = JSON.parse(saved);
+      if (!validMacroLibrary(parsed)) throw new Error('Invalid macro library');
+      return { slots: INITIAL_MACROS.map(fallback => {
+        const found = parsed.find(m => m.id === fallback.id);
+        return found ? { ...fallback, ...found } as MacroSlot : fallback;
+      }), blocked: false };
+    } catch { return { slots: INITIAL_MACROS, blocked: true }; }
   });
+  const [macros, setMacros] = useState<MacroSlot[]>(initialMacros.slots);
+  const [storageError, setStorageError] = useState(initialMacros.blocked
+    ? 'Saved macros could not be read. The original data has not been overwritten; this temporary library cannot be saved or run.' : '');
+  useEffect(() => { onStorageError?.(storageError); }, [onStorageError, storageError]);
 
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
   const [activeBuilderTab, setActiveBuilderTab] = useState<'combo' | 'text' | 'delay' | 'templates'>('combo');
@@ -181,6 +181,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   
   // What the last press looked like, echoed back to the user
   const [lastCaptured, setLastCaptured] = useState<string | null>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
   const [presetQuery, setPresetQuery] = useState('');
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'all'>('all');
   const [testNotice, setTestNotice] = useState<string | null>(null);
@@ -196,9 +197,18 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     setMacros(edit);
   };
 
-  useEffect(() => {
-    localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
-  }, [macros]);
+  const persistMacros = () => {
+    if (initialMacros.blocked) return false;
+    try {
+      localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
+      setStorageError('');
+      return true;
+    } catch {
+      setStorageError('Macros could not be saved on this computer. Check storage permissions or free space.');
+      return false;
+    }
+  };
+  useEffect(() => { persistMacros(); }, [macros]);
 
   const currentMacro = macros.find(m => m.id === selectedSlot) || macros[0];
 
@@ -225,18 +235,16 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     return key;
   };
 
-  /* Type the keys you want. The page listens while the Key Combo tab is open,
-   * turns what you press into a step, and shows it back to you. Text fields keep
-   * their own keystrokes so renaming a slot still word-processes normally. */
+  /* Capture only while the dedicated box has focus. Window-wide capture steals
+   * Enter/Space from buttons and records shortcuts typed elsewhere in the app. */
   useEffect(() => {
     if (activeBuilderTab !== 'combo') return;
 
     const handleCaptureKeyDown = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
-      const tag = el?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      if (!el || !captureRef.current?.contains(el)) return;
       if (e.key === 'Tab') return;            // keep keyboard navigation
-      if (e.ctrlKey && e.key.toLowerCase() === 'r') return; // keep browser refresh
+      if ((e.ctrlKey || e.metaKey) && ['r', 'k'].includes(e.key.toLowerCase())) return; // browser refresh / command palette
       e.preventDefault();
       if (e.repeat) return;
 
@@ -374,7 +382,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const handleSave = () => {
-    localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
+    if (!persistMacros()) { setSavedSuccess(false); return; }
     setSavedSuccess(true);
     playKeyClick('heavy');
     onTriggerAction?.(`macro-save-${selectedSlot}`, `Saved Macro M${selectedSlot} on this PC`, 'info');
@@ -388,12 +396,12 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     if (isPlayingTest || !isMacroReady(currentMacro)) return;
     playKeyClick('down');
     if (!window.electronAPI?.execAction) {
-      setTestNotice('Test Run needs the Kadowaz desktop app. Browser preview cannot send keystrokes, so nothing was sent.');
+      setTestNotice('Test Run needs the ZERO desktop app. Browser preview cannot send keystrokes, so nothing was sent.');
       onTriggerAction?.(`test-macro-blocked-${currentMacro.id}`, 'Test Run blocked: no desktop shell, nothing was sent.', 'info');
       return;
     }
-    // Use the editor's latest values even before its save effect has flushed.
-    localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
+    // Playback reads the stored slot; never run a stale slot when saving fails.
+    if (!persistMacros()) { setTestNotice('Test Run stopped: the macro library could not be saved.'); return; }
     setTestNotice(null);
     setIsPlayingTest(true);
     onTriggerAction?.(`test-macro-start-${currentMacro.id}`,
@@ -465,6 +473,8 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
           </button>
         </div>
       </div>
+
+      {storageError && <p role="alert" className="border border-[#aa6200] bg-[#fff2db] p-3 text-xs text-[#663900]">{storageError}</p>}
 
       {/* Main Studio Grid: Left Slots List + Right Sequence Editor */}
       <div className="grid grid-cols-12 gap-5">
@@ -722,13 +732,15 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
             {activeBuilderTab === 'combo' && (
               <div className="space-y-2">
                 <div
+                  ref={captureRef}
+                  role="region"
                   tabIndex={0}
                   aria-label="Type the keys you want to log"
                   className="w-full px-4 py-7 bg-[#FFFFFF] border border-[#C7C7C7] flex flex-col items-center justify-center gap-2 focus:outline-hidden focus:border-[#1351AA]"
                 >
                   <KeyboardIcon className="w-5 h-5 text-[#646464]" />
                   <span className="text-xs font-mono text-[#444343] text-center">
-                    Press the keys you want on your keyboard — each press is logged as a step.
+                    Click or focus this box, then press the keys you want — each press is logged as a step.
                   </span>
                   <span className="text-[10px] font-mono text-[#646464] text-center">
                     Modifiers count · held with a key it logs as one step · Escape clears the readout

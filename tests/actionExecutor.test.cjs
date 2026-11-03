@@ -13,6 +13,12 @@ assert.strictEqual(resolveVk('MediaTrackNext'), 0xb0);
 assert.strictEqual(resolveVk('MediaTrackPrevious'), 0xb1);
 assert.strictEqual(resolveVk('MediaStop'), 0xb2);
 assert.strictEqual(resolveVk('RightArrow'), 0x27);
+for (const [name, vk] of Object.entries({ '▶': 0x27, '◀': 0x25, '▲': 0x26, '▼': 0x28 })) {
+  assert.strictEqual(resolveVk(name), vk, `saved arrow glyph ${name}`);
+  assert.deepStrictEqual(buildChordSequence(['Win', name]).sequence, [
+    { vk: 0x5b, up: false }, { vk, up: false }, { vk, up: true }, { vk: 0x5b, up: true },
+  ]);
+}
 assert.strictEqual(resolveVk('LeftArrow'), 0x25);
 assert.strictEqual(resolveVk('Numpad .'), 0x6e);
 assert.strictEqual(resolveVk('KC_A'), 65);
@@ -20,6 +26,10 @@ assert.strictEqual(resolveVk('KC_A'), 65);
 // A chord with an unknown key must be rejected, never sent partially.
 assert.ok(buildChordSequence(['Ctrl', 'NoSuchKey']).error);
 assert.ok(buildChordSequence(['Win', '-']).sequence);
+assert.deepStrictEqual(buildChordSequence(['▶', 'Win']).sequence, [
+  { vk: 0x5b, up: false }, { vk: 0x27, up: false },
+  { vk: 0x27, up: true }, { vk: 0x5b, up: true },
+], 'a modifier selected after the arrow is pressed first');
 
 // Every key in the bundled shortcut vault must be executable.
 const src = fs.readFileSync(path.join(__dirname, '../src/data/pcShortcuts.ts'), 'utf8');
@@ -35,3 +45,7 @@ for (const m of src.matchAll(/keys:\s*\[([^\]]*)\]/g)) {
 }
 assert.deepStrictEqual(bad, [], `unmappable shortcut keys: ${JSON.stringify(bad)}`);
 console.log(`actionExecutor: all assertions passed (${total} shortcut keys resolve)`);
+// Run separately so Windows API stubs never affect other executor tests.
+for (const test of ['mediaActions.test.cjs', 'audioSafety.test.cjs']) {
+  require('node:child_process').execFileSync(process.execPath, [path.join(__dirname, test)], { stdio: 'inherit' });
+}

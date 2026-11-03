@@ -86,6 +86,17 @@ async function run() {
     assert.deepStrictEqual(deck.layers.map((l) => l.name), ['Edit', 'Tools', 'Custom', 'Macros']);
   });
 
+  await check('normalization does not mutate the input deck or its dials', () => {
+    const input = structuredClone(defaultDeck);
+    input.layers[0].name = 'Edit & Cut Page';
+    input.layers[0].dial.availableModes = ['Layer 1: Master Volume'];
+    const original = structuredClone(input);
+    const normalized = normalizeDeckLayers(input);
+    assert.deepStrictEqual(input, original);
+    assert.notStrictEqual(normalized.layers[0], input.layers[0]);
+    assert.notStrictEqual(normalized.layers[0].dial, input.layers[0].dial);
+  });
+
   await check('a name the user typed is left alone', () => {
     const custom = { ...defaultDeck.layers[0], name: 'Nuke Timeline' };
     const deck = normalizeDeckLayers({ ...defaultDeck, layers: [custom] });

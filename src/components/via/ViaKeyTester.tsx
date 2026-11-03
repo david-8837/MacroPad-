@@ -158,7 +158,7 @@ export const ViaKeyTester: React.FC = () => {
           <span>Scroll sideways to see the full layout</span>
         </div>
         <div className="px-4 sm:px-5 pb-5">
-          <div className="tester-keyboard-scroll overflow-x-auto" tabIndex={0} data-tester-scroll aria-label="Illustrative keyboard layout">
+          <div className="tester-keyboard-scroll overflow-x-auto" role="region" tabIndex={0} data-tester-scroll aria-label="Illustrative keyboard layout">
             <div className="tester-keyboard flex gap-4 w-max mx-auto" aria-hidden="true">
               <div className="space-y-[3px]">
                 <div className="flex gap-[3px] mb-2">{MAIN_ROW_0.map(k => renderKey(k))}</div>

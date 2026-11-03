@@ -1,3 +1,5 @@
+import { makeBackup, validDeck, validOled } from './utils/backup';
+import { getLightingStorageError, reloadLightingFromStorage, subscribe as subscribeLighting } from './lighting/store';
 import React, { useState, useEffect, useRef } from 'react';
 import { Deck, Layer, KeyBinding, DialBinding, OLEDState, ActionDefinition, DiscoveredApp } from './types';
 import { defaultDeck } from './data/defaultDeck';
@@ -6,11 +8,12 @@ import { HelpPanel } from './components/HelpPanel';
 import { INTRO_REPLAY_EVENT } from './intro/config';
 import { shouldShowWelcome } from './utils/welcome';
 import { DigitalTwin } from './components/DigitalTwin';
-import { KeyConfigDrawer } from './components/KeyConfigDrawer';
-import { KnobConfigDrawer } from './components/KnobConfigDrawer';
-import { DisplayConfigDrawer } from './components/DisplayConfigDrawer';
-import { ShortcutsPanel } from './components/ShortcutsPanel';
-import { AppLauncherPanel } from './components/AppLauncherPanel';
+
+
+
+
+import { assignShortcutToBinding } from './utils/shortcutBindings';
+
 import { restoreMacropadConfig } from './utils/macropadConfig';
 import { getOLEDMode, isOLEDMode, OLED_MODE_IDS, type OLEDMode } from './oled/modes';
 import { startOledStreaming, type OledStreamSnapshot } from './oled/streamer';
@@ -22,9 +25,9 @@ import {
   normalizePlaylist,
 } from './oled/playlist';
 
-import { ViaKeyTester } from './components/via/ViaKeyTester';
-import { ViaLightingPanel } from './components/via/ViaLightingPanel';
-import { ViaMacroEditor } from './components/via/ViaMacroEditor';
+
+
+
 import { ViaKeycodePicker } from './components/via/ViaKeycodePicker';
 import type { ViaKeycodeItem } from './data/viaKeycodes';
 import { viaItemToBinding } from './utils/viaBindings';
@@ -47,7 +50,7 @@ import { BackupPanel } from './components/BackupPanel';
 import { PadInspector } from './components/PadInspector';
 import { UploadSheet } from './components/UploadSheet';
 import { CommandPalette } from './components/CommandPalette';
-import { PresetsPage } from './components/PresetsPage';
+
 import { applyLayerPreset, LayerPreset } from './data/layerPresets';
 import type { ElectronHardwareEvent, NowPlayingResult, SystemMetrics } from './types/electron';
 import {
@@ -57,6 +60,16 @@ import {
   Zap,
 } from 'lucide-react';
 
+const ShortcutsPanel = React.lazy(() => import('./components/ShortcutsPanel').then(m => ({ default: m.ShortcutsPanel })));
+const AppLauncherPanel = React.lazy(() => import('./components/AppLauncherPanel').then(m => ({ default: m.AppLauncherPanel })));
+const ViaKeyTester = React.lazy(() => import('./components/via/ViaKeyTester').then(m => ({ default: m.ViaKeyTester })));
+const ViaLightingPanel = React.lazy(() => import('./components/via/ViaLightingPanel').then(m => ({ default: m.ViaLightingPanel })));
+const ViaMacroEditor = React.lazy(() => import('./components/via/ViaMacroEditor').then(m => ({ default: m.ViaMacroEditor })));
+const PresetsPage = React.lazy(() => import('./components/PresetsPage').then(m => ({ default: m.PresetsPage })));
+
+const KeyConfigDrawer = React.lazy(() => import('./components/KeyConfigDrawer').then(m => ({ default: m.KeyConfigDrawer })));
+const KnobConfigDrawer = React.lazy(() => import('./components/KnobConfigDrawer').then(m => ({ default: m.KnobConfigDrawer })));
+const DisplayConfigDrawer = React.lazy(() => import('./components/DisplayConfigDrawer').then(m => ({ default: m.DisplayConfigDrawer })));
 const SESSION_KEY = 'kadowaz_session';
 const OLED_KEY = 'kadowaz_oled';
 const DECK_KEY = 'kadowaz_deck';
@@ -90,6 +103,7 @@ function loadOledState(fallback: OLEDState): OLEDState {
     const raw = localStorage.getItem(OLED_KEY);
     if (!raw) return fallback;
     const saved = JSON.parse(raw) as Partial<OLEDState>;
+    if (!saved || !validOled(saved)) return fallback;
     const merged: OLEDState = { ...fallback };
     for (const key of OLED_PREF_KEYS) {
       if (saved[key] !== undefined) (merged as unknown as Record<string, unknown>)[key] = saved[key];
@@ -114,22 +128,43 @@ export const App: React.FC = () => {
   // The deck's activeLayerId is the ONE selected layer for display and edits.
   // Adopt the older separate session preference once when loading a deck, then
   // keep it in sync with the deck so changing layers cannot edit another page.
-  const [deck, setDeck] = useState<Deck>(() => {
+  const [initialDeck] = useState(() => {
     let restored = restoreMacropadConfig(defaultDeck);
-    const saved = localStorage.getItem(DECK_KEY);
-    if (saved) {
-      try {
+    let blocked = false;
+    try {
+      const saved = localStorage.getItem(DECK_KEY);
+      if (saved !== null) {
         const parsed = JSON.parse(saved) as Deck;
-        if (parsed && Array.isArray(parsed.layers) && parsed.layers.length > 0) {
-          restored = restoreMacropadConfig(parsed);
+        if (!validDeck(parsed, true)) {
+          throw new Error('Invalid saved deck');
         }
-      } catch { /* ignore */ }
-    }
+        restored = restoreMacropadConfig(parsed);
+      }
+    } catch { blocked = true; }
     const selected = loadSession().activeLayerId;
-    return selected && restored.layers.some((l) => l.id === selected)
+    const value = selected && restored.layers.some((l) => l.id === selected)
       ? { ...restored, activeLayerId: selected }
       : restored;
+    return { value, blocked };
   });
+  const [deck, setDeck] = useState<Deck>(initialDeck.value);
+  const [deckSaveBlocked, setDeckSaveBlocked] = useState(initialDeck.blocked);
+  const [storageErrors, setStorageErrors] = useState<Record<string, boolean>>({});
+  const [backupNotice, setBackupNotice] = useState('');
+  const [macroStorageError, setMacroStorageError] = useState('');
+  const [lightingStorageError, setLightingStorageError] = useState(getLightingStorageError);
+  useEffect(() => subscribeLighting(() => setLightingStorageError(getLightingStorageError())), []);
+  const persist = (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+      setStorageErrors(prev => {
+        if (!prev[key]) return prev;
+        const next = { ...prev }; delete next[key]; return next;
+      });
+    } catch {
+      setStorageErrors(prev => prev[key] ? prev : { ...prev, [key]: true });
+    }
+  };
 
   const activeLayerId = deck.activeLayerId;
   const setActiveLayerId = (id: string) => setDeck(prev =>
@@ -166,7 +201,9 @@ export const App: React.FC = () => {
   };
 
   // Never show onboarding over settings from an existing installation.
-  const [showWelcome, setShowWelcome] = useState(() => shouldShowWelcome(localStorage));
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try { return shouldShowWelcome(localStorage); } catch { return false; }
+  });
   const [showHelp, setShowHelp] = useState(false);
   const dismissWelcome = () => {
     setShowWelcome(false);
@@ -221,6 +258,11 @@ export const App: React.FC = () => {
   const uploadBusyRef = useRef(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
+  // Do not replace unreadable screen settings with the fallback on startup.
+  const [oledSaveBlocked, setOledSaveBlocked] = useState(() => {
+    try { const raw = localStorage.getItem(OLED_KEY); if (raw === null) return false; const saved: unknown = JSON.parse(raw); return saved === null || !validOled(saved); }
+    catch { return true; }
+  });
   // Live OLED state
   const [oledState, setOledState] = useState<OLEDState>(() => loadOledState({
     mode: 'kadowaz',
@@ -238,7 +280,7 @@ export const App: React.FC = () => {
     // Preferences, with the same defaults the drawer's reset button restores, so
     // the saved object always carries every field instead of leaving the drawer
     // to guess with ?? at each use.
-    customTitle: 'KADOWAZ IND.',
+    customTitle: 'ZERO',
     customSubtitle: 'ONLINE',
     brightness: 56, // SSD1306 reset contrast 0x8F maps to 56% of 0..255
     inverted: false,
@@ -271,20 +313,21 @@ export const App: React.FC = () => {
 
   // Save to localStorage on change
   useEffect(() => {
-    localStorage.setItem(DECK_KEY, JSON.stringify(deck));
-  }, [deck]);
+    // Never replace an unreadable saved deck with the empty fallback.
+    if (!deckSaveBlocked) persist(DECK_KEY, JSON.stringify(deck));
+  }, [deck, deckSaveBlocked]);
 
   useEffect(() => {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ activeLayerId }));
-  }, [activeLayerId]);
+    if (!deckSaveBlocked) persist(SESSION_KEY, JSON.stringify({ activeLayerId }));
+  }, [activeLayerId, deckSaveBlocked]);
 
   // Serialised through the preference whitelist so the dependency is the
   // preference slice, not the telemetry: the panel repaints twice a second and
   // this must not write to disk twice a second.
   const oledPrefsJson = JSON.stringify(oledPreferences(oledState));
   useEffect(() => {
-    localStorage.setItem(OLED_KEY, oledPrefsJson);
-  }, [oledPrefsJson]);
+    if (!oledSaveBlocked) persist(OLED_KEY, oledPrefsJson);
+  }, [oledPrefsJson, oledSaveBlocked]);
 
   // The pad owns mode selection during automatic rotation or an OLED_NEXT
   // gesture. Do not echo its MODE_EVENT back as another selection (which would
@@ -756,16 +799,17 @@ export const App: React.FC = () => {
     pushLog(`[EDITOR PREVIEW] Layer ${idx}; pad unchanged`, 'navigation', 'info');
   };
 
-  // Export deck to JSON
+  // Palette export uses the same validated format and storage guard as the rail.
   const handleExportDeck = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(deck, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `kadowaz_deck_backup_${Date.now()}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-    handleTriggerAction('export', 'Exported deck configuration to JSON', 'info');
+    try {
+      if (deckSaveBlocked) throw new Error('Saved deck data could not be read; this temporary layout is not a backup.');
+      if (oledSaveBlocked || macroStorageError || lightingStorageError || Object.keys(storageErrors).length > 0) throw new Error('Some settings could not be saved or read; resolve the storage problem before backing up.');
+      const backup = makeBackup(deck, localStorage);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
+      const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'macropad-backup.json'; anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setBackupNotice('Backup downloaded. Store it somewhere safe.');
+    } catch (error) { setBackupNotice(error instanceof Error ? error.message : 'Could not create backup.'); }
   };
 
   // Key save handler
@@ -966,6 +1010,14 @@ export const App: React.FC = () => {
       />
 
 
+      {backupNotice && <div role="status" className="shrink-0 border-b border-[#C7C7C7] px-4 py-2 text-xs text-[#141414]">{backupNotice} <button type="button" onClick={() => setBackupNotice('')} className="underline">Dismiss</button></div>}
+      {(deckSaveBlocked || oledSaveBlocked || macroStorageError || lightingStorageError || Object.keys(storageErrors).length > 0) && <div role="alert" className="shrink-0 border-b border-[#aa6200] bg-[#fff2db] px-4 py-2 text-xs text-[#663900]">
+        {deckSaveBlocked && <p>Saved deck data could not be read. It has not been overwritten; edits to this temporary layout will not be saved. Restore a trusted backup to replace it.</p>}
+        {oledSaveBlocked && <p>Saved screen settings could not be read. They have not been overwritten; temporary screen edits will not be saved. Restore a trusted backup that includes screen settings to replace them.</p>}
+        {macroStorageError && <p>{macroStorageError}</p>}
+        {lightingStorageError && <p>{lightingStorageError}</p>}
+        {Object.keys(storageErrors).length > 0 && <p>Some changes could not be saved on this computer. Check storage permissions or free space before closing the app.</p>}
+      </div>}
       {showHelp && <HelpPanel onClose={() => setShowHelp(false)} onReplayIntro={() => {
         setShowHelp(false);
         // Let the help dialog restore focus before the intro takes it.
@@ -1062,15 +1114,24 @@ export const App: React.FC = () => {
             </div>}
           </AnimatedDetails>
 
-          <BackupPanel deck={deck} onRestored={restored => {
-            setDeck(restored); setBackupRevision(n => n + 1);
+          <BackupPanel deck={deck} exportBlocked={deckSaveBlocked || oledSaveBlocked || !!macroStorageError || !!lightingStorageError || Object.keys(storageErrors).length > 0} onRestored={restored => {
+            setDeckSaveBlocked(false); setDeck(restored.deck); setBackupRevision(n => n + 1);
+            if (restored.extras) {
+              setOledSaveBlocked(false); setMacroStorageError('');
+              reloadLightingFromStorage();
+              // Restore editor preferences without issuing an OLED mode command.
+              const fallback = { ...oledState, mode: 'kadowaz' as OLEDMode, customTitle: 'ZERO', customSubtitle: 'ONLINE', brightness: 56, inverted: false, autoCycleS: AUTO_CYCLE_DEFAULT_S, playlist: [...DEFAULT_PLAYLIST] };
+              const next = loadOledState(fallback);
+              modeFromPadRef.current = next.mode === oledState.mode ? null : next.mode;
+              setOledState(prev => ({ ...prev, ...oledPreferences(next) }));
+            }
             setEditingKeyBinding(null); setIsEditingKnob(false); setIsEditingDisplay(false);
           }} />
 
           {/* foot */}
           <div className="mt-auto px-4 py-3 border-t border-[#C7C7C7]">
             <p className="font-mono text-[8.5px] uppercase tracking-[0.14em] text-[#646464] leading-relaxed">
-              Kadowaz macropad<br />
+              ZERO macropad<br />
               12-col grid · build 2.4.1
             </p>
           </div>
@@ -1083,6 +1144,7 @@ export const App: React.FC = () => {
           </div>
           <div className="flex-1 flex min-h-0 overflow-hidden">
 
+        <React.Suspense fallback={<div role="status" className="p-6 text-sm text-[#444343]">Loading page…</div>}>
         {/* TAB 1: DECK STUDIO */}
         {activeTab === 'designer' && (
           <div className="designer-layout flex-1 flex overflow-hidden">
@@ -1153,6 +1215,7 @@ export const App: React.FC = () => {
             <div className={`designer-inspector ${editingKeyBinding || isEditingKnob || isEditingDisplay ? 'designer-inspector--editing w-[480px]' : 'w-[360px]'} shrink-0 flex flex-col bg-[#FFFFFF] border-l border-[#E3E2DE] ${
               editingKeyBinding || isEditingKnob || isEditingDisplay ? 'overflow-hidden' : 'p-4 overflow-x-hidden overflow-y-auto'
             }`}>
+              <React.Suspense fallback={<div role="status" className="p-4 text-sm text-[#444343]">Loading editor…</div>}>
               {editingKeyBinding ? (
                 <KeyConfigDrawer
                   key={`${activeLayerId}-${editingKeyBinding.keyIndex}`}
@@ -1301,9 +1364,9 @@ export const App: React.FC = () => {
                   {/* Real Windows WASAPI Audio Mixer */}
                   <AnimatedDetails className="panel mb-4 shrink-0" summaryClassName="px-3 py-2 cursor-pointer select-none flex items-center justify-between border-b border-[#E3E2DE]"
                     summary={<><span className="eyebrow eyebrow--ink">Audio mixer</span><span className="idx">WASAPI</span></>}>
-                    <div className="p-2 pt-0">
-                      <AudioMixerPanel />
-                    </div>
+                    {(renderedOpen) => <div className="p-2 pt-0">
+                      <AudioMixerPanel active={renderedOpen} />
+                    </div>}
                   </AnimatedDetails>
 
                   {/* Localhost webhook API (collapsed by default) */}
@@ -1373,6 +1436,7 @@ export const App: React.FC = () => {
                   </div>
                 </>
               )}
+              </React.Suspense>
             </div>
           </div>
         )}
@@ -1407,9 +1471,7 @@ export const App: React.FC = () => {
             <ShortcutsPanel layers={layers} activeLayerId={activeLayerId} onAssign={(shortcut, layer, keyIndex) => {
               setEditingKeyBinding(null);
               setDeck(current => ({ ...current, layers: current.layers.map((item, index) => index !== layer ? item : {
-                ...item, isExample: false, keys: item.keys.map(key => key.keyIndex !== keyIndex ? key : {
-                  ...key, tapAction: { id: `shortcut-${shortcut.id}`, name: shortcut.name, category: 'hotkey', payload: { keys: [...shortcut.keys] } },
-                }),
+                ...item, isExample: false, keys: item.keys.map(key => key.keyIndex !== keyIndex ? key : assignShortcutToBinding(key, shortcut)),
               }) }));
             }} />
           </div>
@@ -1458,9 +1520,10 @@ export const App: React.FC = () => {
         {/* TAB 5: VIA MACRO STUDIO */}
         {activeTab === 'macros' && (
           <div className="flex-1 p-6 overflow-y-auto flex justify-center">
-            <ViaMacroEditor onTriggerAction={handleTriggerAction} />
+            <ViaMacroEditor key={backupRevision} onTriggerAction={handleTriggerAction} onStorageError={setMacroStorageError} />
           </div>
         )}
+        </React.Suspense>
 
           </div>
         </div>

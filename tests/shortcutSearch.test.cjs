@@ -34,3 +34,7 @@ try {
   assert.match(page, /replaces only the tap action/);
   console.log('shortcutSearch: name, category, app, combo and plus-key search; truthful copy feedback');
 } finally { rmSync(dir, { recursive: true, force: true }); }
+
+// Cover the complete key catalogue, then ensure Home captions stay in sync.
+require('./shortcutCoverage.test.cjs');
+require('./shortcutAssignment.test.cjs');

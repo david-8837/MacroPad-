@@ -3,6 +3,7 @@ import { DialBinding, ActionDefinition } from '../types';
 import { playDetentClick, playKeyClick } from '../utils/soundEffects';
 import { RotateCw, RotateCcw } from 'lucide-react';
 import { DIAL_MODES } from '../utils/channelLayers';
+import { watchPointerGesture } from '../utils/watchPointerGesture';
 
 interface RotaryEncoderProps {
   dial: DialBinding;
@@ -20,7 +21,6 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
   const [rotationAngle, setRotationAngle] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const lastDetentAngle = useRef(0);
-  const lastTurnTime = useRef(Date.now());
   const dragStartY = useRef(0);
   const startAngle = useRef(0);
 
@@ -30,8 +30,10 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
   const [holdProgress, setHoldProgress] = useState(0);
   const [holdSuccess, setHoldSuccess] = useState(false);
   const holdStartTimeRef = useRef(0);
-  const didTriggerHoldRef = useRef(false);
+  const cleanupPointerRef = useRef<(() => void) | null>(null);
+  const heldSwitch = useRef<{ source: string; fired: boolean } | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* One dial mode per layer — four of them, numbered from zero. The list comes
    * from the deck so a renamed mode shows here too. */
@@ -46,27 +48,16 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
 
   // Trigger CW or CCW step
   const stepDetent = (direction: 'cw' | 'ccw') => {
-    const now = Date.now();
-    const dt = Math.max(16, now - lastTurnTime.current);
-    lastTurnTime.current = now;
-
-    let mult = 1;
-    if (dial.accelerationCurve === 'exponential') {
-      mult = dt < 50 ? 8 : dt < 100 ? 4 : dt < 180 ? 2 : 1;
-    } else if (dial.accelerationCurve === 'precision_nudge') {
-      mult = 1;
-    } else {
-      mult = dt < 80 ? 2 : 1;
-    }
-
+    // The simulator sends one action per detent. Do not claim an acceleration
+    // multiplier that was calculated for display but never applied to the OS.
     playDetentClick(direction);
 
     if (direction === 'cw') {
       setRotationAngle(prev => prev + 15);
-      onTriggerAction(dial.cwAction.id, `${dial.cwAction.name} [CH ${currentChannelIdx}] (${mult}x)`, dial.cwAction.category, dial.cwAction.payload);
+      onTriggerAction(dial.cwAction.id, `${dial.cwAction.name} [CH ${currentChannelIdx}]`, dial.cwAction.category, dial.cwAction.payload);
     } else {
       setRotationAngle(prev => prev - 15);
-      onTriggerAction(dial.ccwAction.id, `${dial.ccwAction.name} [CH ${currentChannelIdx}] (${mult}x)`, dial.ccwAction.category, dial.ccwAction.payload);
+      onTriggerAction(dial.ccwAction.id, `${dial.ccwAction.name} [CH ${currentChannelIdx}]`, dial.ccwAction.category, dial.ccwAction.payload);
     }
   };
 
@@ -84,6 +75,7 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
     setIsDragging(true);
     dragStartY.current = e.clientY;
     startAngle.current = rotationAngle;
+    lastDetentAngle.current = rotationAngle;
   };
 
   useEffect(() => {
@@ -112,81 +104,61 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging]);
+  }, [isDragging, dial, currentChannelIdx]);
 
-  // Clean up any running hold animation frame on unmount
+  // Cancel a pending press on layer/dial changes or unmount so an old
+  // assignment cannot fire after the editor moves to a different layer.
   useEffect(() => {
+    setIsHolding(false); setHoldProgress(0);
     return () => {
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
-      }
+      cleanupPointerRef.current?.(); cleanupPointerRef.current = null;
+      if (animFrameRef.current !== null) cancelAnimationFrame(animFrameRef.current);
+      heldSwitch.current = null;
     };
-  }, []);
+  }, [dial, channelIndex]);
+  useEffect(() => () => { if (successTimerRef.current) clearTimeout(successTimerRef.current); }, []);
 
-  // HOLD & TAP HANDLERS FOR KNOB SWITCH
-  const handleHoldStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    setIsHolding(true);
-    setHoldProgress(0);
-    setHoldSuccess(false);
-    didTriggerHoldRef.current = false;
+  const handleHoldStart = (source: string) => {
+    if (heldSwitch.current) return;
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    const current = { source, fired: false };
+    heldSwitch.current = current;
+    setIsHolding(true); setHoldProgress(0); setHoldSuccess(false);
     holdStartTimeRef.current = Date.now();
     playKeyClick('down');
-
     const checkProgress = () => {
+      if (heldSwitch.current !== current) return;
       const elapsed = Date.now() - holdStartTimeRef.current;
-      const progress = Math.min(100, (elapsed / holdThresholdMs) * 100);
-      setHoldProgress(progress);
-
+      setHoldProgress(Math.min(100, elapsed / holdThresholdMs * 100));
       if (elapsed >= holdThresholdMs) {
-        // Simulator threshold reached -> preview next layer, not a pad command.
-        didTriggerHoldRef.current = true;
-        setIsHolding(false);
-        setHoldProgress(100);
-        setHoldSuccess(true);
+        current.fired = true;
+        setIsHolding(false); setHoldProgress(100); setHoldSuccess(true);
         playDetentClick('cw');
-
-        // Simulated hold cycles the editor preview (0 → 1 → 2 → 3).
-        // On a real pad, only a physical hold switches its channel.
         const nextChannel = (currentChannelIdx + 1) % channels.length;
         setSwitchedTo(nextChannel);
         onCycleMode(nextChannel);
-
-        setTimeout(() => {
-          setHoldSuccess(false);
-        }, 350);
+        successTimerRef.current = setTimeout(() => setHoldSuccess(false), 350);
+        animFrameRef.current = null;
         return;
       }
-
       animFrameRef.current = requestAnimationFrame(checkProgress);
     };
-
     animFrameRef.current = requestAnimationFrame(checkProgress);
   };
 
-  const handleHoldEnd = (e?: React.MouseEvent | React.TouchEvent) => {
-    if (e) e.stopPropagation();
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-
-    const wasHolding = isHolding;
-    setIsHolding(false);
-    setHoldProgress(0);
-
-    if (wasHolding && !didTriggerHoldRef.current) {
-      // Released before hold duration -> Trigger TAP action!
+  const handleHoldEnd = (source: string, cancelled = false) => {
+    const current = heldSwitch.current;
+    if (!current || current.source !== source) return;
+    heldSwitch.current = null;
+    cleanupPointerRef.current?.(); cleanupPointerRef.current = null;
+    if (animFrameRef.current !== null) cancelAnimationFrame(animFrameRef.current);
+    animFrameRef.current = null;
+    setIsHolding(false); setHoldProgress(0);
+    if (!cancelled && !current.fired) {
       playKeyClick('up');
-      onTriggerAction(
-        dial.pressAction.id,
-        `${dial.pressAction.name} [CH ${currentChannelIdx}]`,
-        dial.pressAction.category,
-        dial.pressAction.payload
-      );
+      onTriggerAction(dial.pressAction.id, `${dial.pressAction.name} [CH ${currentChannelIdx}]`,
+        dial.pressAction.category, dial.pressAction.payload);
     }
-
-    didTriggerHoldRef.current = false;
   };
 
   return (
@@ -259,13 +231,50 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
 
               <button
                 type="button"
-                onMouseDown={handleHoldStart}
-                onMouseUp={handleHoldEnd}
-                onMouseLeave={handleHoldEnd}
-                onTouchStart={handleHoldStart}
-                onTouchEnd={handleHoldEnd}
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return;
+                  e.stopPropagation(); e.preventDefault();
+                  const source = `pointer:${e.pointerId}`;
+                  handleHoldStart(source);
+                  if (heldSwitch.current?.source === source) {
+                    cleanupPointerRef.current?.();
+                    cleanupPointerRef.current = watchPointerGesture(e.currentTarget, e.pointerId, cancelled => handleHoldEnd(source, cancelled));
+                  }
+                  try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* optional */ }
+                }}
+                onPointerUp={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const outside = e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom;
+                  handleHoldEnd(`pointer:${e.pointerId}`, outside);
+                }}
+                onPointerMove={(e) => {
+                  if (heldSwitch.current?.source !== `pointer:${e.pointerId}`) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) handleHoldEnd(`pointer:${e.pointerId}`, true);
+                }}
+                onPointerCancel={(e) => { e.stopPropagation(); handleHoldEnd(`pointer:${e.pointerId}`, true); }}
+                onLostPointerCapture={(e) => handleHoldEnd(`pointer:${e.pointerId}`, true)}
+                onPointerLeave={(e) => handleHoldEnd(`pointer:${e.pointerId}`, true)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault(); e.stopPropagation();
+                  if (!e.repeat) handleHoldStart(`key:${e.key}`);
+                }}
+                onKeyUp={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault(); e.stopPropagation(); handleHoldEnd(`key:${e.key}`);
+                }}
+                onBlur={() => {
+                  const current = heldSwitch.current;
+                  if (current?.source.startsWith('key:')) handleHoldEnd(current.source, true);
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (e.detail === 0) { handleHoldStart('assistive'); handleHoldEnd('assistive'); }
+                }}
                 title={`Tap: ${dial.pressAction.name} | Simulator hold ${holdThresholdMs}ms: edit/preview next layer only`}
-                className={`w-7 h-7 flex items-center justify-center font-mono text-[8px] font-bold tracking-[0.06em] transition-colors z-20 ${
+                className={`w-7 h-7 touch-none flex items-center justify-center font-mono text-[8px] font-bold tracking-[0.06em] transition-colors z-20 ${
  isHolding
  ? 'bg-[#1351AA] text-[#E3E2DE]'
  : 'bg-[#E3E2DE] text-[#141414] hover:bg-[#1351AA] hover:text-[#E3E2DE]'

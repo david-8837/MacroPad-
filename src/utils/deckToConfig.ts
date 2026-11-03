@@ -18,7 +18,7 @@
 import { ACTION_TYPE, CHANNEL_COUNT, KEY_COUNT } from '../../host/protocol/mpad3-protocol.mjs';
 import type { Cfg, CfgAction, CfgChannel } from '../../host/protocol/mpad3-protocol.mjs';
 import type { ActionDefinition, Deck, DialBinding } from '../types';
-import { MEDIA_CODE, chordToAction } from './deviceKeymap';
+import { MEDIA_CODE, chordToAction, mediaCodeForKey } from './deviceKeymap';
 import { isPcMacroBinding, pcMacroId } from './macroStorage';
 
 /** A binding that stays on the PC and cannot be pushed to the pad. */
@@ -68,6 +68,13 @@ function layerFromName(name: string): number | null {
 
 const PRINTABLE_ASCII = /^[\x20-\x7e]+$/;
 
+function mapText(text: string): Mapped {
+  if (!text) return unavailable('empty text action');
+  if (!PRINTABLE_ASCII.test(text)) return desktop('the pad types US-ASCII only, so this text stays on the PC');
+  if (text.length > 31) return desktop(`text is ${text.length} chars, the pad holds 31`);
+  return cfg(ACTION_TYPE.TEXT, 0, text);
+}
+
 /**
  * One deck action → one cfg_action_t. Everything the firmware can do itself is
  * mapped here; everything that needs the desktop app is refused with a reason.
@@ -80,6 +87,11 @@ function mapAction(action: ActionDefinition | null | undefined): Mapped {
   /* Legacy QMK codes were offered by the old quick tray, but this firmware is
    * not QMK. Refuse them rather than claiming they run on the desktop. */
   if (payload.keycode) {
+    // Some saved hotkeys use a single native media name instead of keys[].
+    // Only those names are consumer usages; raw legacy QMK codes stay refused.
+    const mediaCode = action.category === 'hotkey' && !payload.keys?.length
+      ? mediaCodeForKey(payload.keycode) : null;
+    if (mediaCode !== null) return cfg(ACTION_TYPE.MEDIA, mediaCode);
     return unavailable(`${payload.keycode} works on neither this pad nor this desktop app; reassign the switch`);
   }
 
@@ -96,11 +108,13 @@ function mapAction(action: ActionDefinition | null | undefined): Mapped {
       const chord = chordToAction(keys);
       if (chord.kind === 'keycode') return cfg(ACTION_TYPE.KEYCODE, chord.code);
       if (chord.kind === 'mods') return cfg(ACTION_TYPE.MODS, chord.mask);
+      if (chord.kind === 'media') return cfg(ACTION_TYPE.MEDIA, chord.code);
       return unavailable(chord.reason);
     }
 
     case 'media': {
-      const code = MEDIA_CODE[payload.mediaAction ?? ''];
+      const name = payload.mediaAction ?? '';
+      const code = Object.prototype.hasOwnProperty.call(MEDIA_CODE, name) ? MEDIA_CODE[name] : undefined;
       if (code === undefined) return unavailable(`unknown media action "${payload.mediaAction}"`);
       return cfg(ACTION_TYPE.MEDIA, code);
     }
@@ -128,27 +142,19 @@ function mapAction(action: ActionDefinition | null | undefined): Mapped {
     case 'script': {
       /* The reserved macro: prefix was handled before the printable-ASCII
        * branch. Literal text "macro:0" must be a text action, not a script. */
-      /*
-       * A `script` action on the PC does one of two things (see
-       * electron/actionExecutor.cjs): if the string is an executable path it runs
-       * it, otherwise it *types* it. Typing is something the pad can do on its
-       * own — the characters live in the config and the firmware sends them — so
-       * that half is uploaded and the other half is refused.
-       */
-      const command = (payload.command ?? '').trim();
+      /* Legacy script text can be typed by the pad. Program-looking legacy
+       * scripts are blocked by native IPC and must be reassigned as Open App. */
+      const command = payload.command ?? '';
       if (!command) return unavailable('empty command');
-      /* Same rule the PC uses (electron/actionExecutor.cjs, looksLikeExecutable):
-       * the first token, quote-aware, ending in an executable extension. If the
-       * PC would run it, the pad cannot; if the PC would type it, the pad can. */
+      // Older drawer text was saved as script; its label identifies it as
+      // literal text even if it happens to look like an executable path.
+      if (action.name?.startsWith('Type: ')) return mapText(command);
+      /* Same quote-aware executable check as the desktop renderer. */
       const firstToken = command.match(/"[^"]+"|\S+/)?.[0] ?? '';
       if (/\.(exe|cmd|bat|lnk)$/i.test(firstToken.replace(/^"+|"+$/g, ''))) {
-        return desktop('launching an executable happens on the PC');
+        return unavailable('legacy executable scripts are blocked; reassign it using Open App');
       }
-      if (!PRINTABLE_ASCII.test(command)) {
-        return desktop('the pad types US-ASCII only, so this text stays on the PC');
-      }
-      if (command.length > 31) return desktop(`text is ${command.length} chars, the pad holds 31`);
-      return cfg(ACTION_TYPE.TEXT, 0, command);
+      return mapText(command);
     }
 
     case 'app_launch':
@@ -156,8 +162,7 @@ function mapAction(action: ActionDefinition | null | undefined): Mapped {
     case 'audio_session':
       return desktop('per-app volume needs the Windows audio session, i.e. the PC');
     case 'text':
-      return payload.text ? desktop('this text action is handled by the desktop app')
-        : unavailable('empty text action');
+      return mapText(payload.text ?? '');
     case 'midi':
       return unavailable('MIDI output is not connected on the pad or desktop');
     default:

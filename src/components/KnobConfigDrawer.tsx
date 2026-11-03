@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DialBinding, ActionDefinition } from '../types';
 import { playDetentClick, playKeyClick } from '../utils/soundEffects';
 import { DIAL_MODES } from '../utils/channelLayers';
+import { chordToAction } from '../utils/deviceKeymap';
 import {
   X,
   Check,
@@ -123,6 +124,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
 
   const activeAction = getActiveAction();
   const recordedKeys = activeAction?.payload?.keys || [];
+  const padMapping = chordToAction(recordedKeys);
 
   // Helper to commit updated key sequence to active rotary action (Strictly 1 shortcut)
   const commitUpdatedKeys = (newKeys: string[], customName?: string) => {
@@ -140,6 +142,8 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
       ),
       payload: {
         ...(prev.payload || {}),
+        keycode: undefined,
+        mediaAction: undefined,
         keys: newKeys,
       },
     });
@@ -223,13 +227,13 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
         const sub = e.code.replace('Numpad', '');
         primaryKey = sub === 'Enter' ? 'Num Enter' : `Num ${sub}`;
       } else if (e.code === 'ArrowUp') {
-        primaryKey = '▲';
+        primaryKey = 'ArrowUp';
       } else if (e.code === 'ArrowDown') {
-        primaryKey = '▼';
+        primaryKey = 'ArrowDown';
       } else if (e.code === 'ArrowLeft') {
-        primaryKey = '◀';
+        primaryKey = 'ArrowLeft';
       } else if (e.code === 'ArrowRight') {
-        primaryKey = '▶';
+        primaryKey = 'ArrowRight';
       } else if (primaryKey === ' ') {
         primaryKey = 'Space';
       } else if (['Control', 'Shift', 'Alt', 'Meta'].includes(primaryKey)) {
@@ -674,6 +678,10 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
                   </button>
                 )}
               </div>
+
+              {recordedKeys.length > 0 && padMapping.kind === 'unsupported' && (
+                <p role="status" className="text-xs text-[#8A4B00]">Cannot upload this combination to the pad: {padMapping.reason}. The desktop test may behave differently.</p>
+              )}
 
               {/* Quick Modifier Toggle Badges */}
               <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#E3E2DE] text-[10px] font-mono">

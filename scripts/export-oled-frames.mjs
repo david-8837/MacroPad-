@@ -220,7 +220,8 @@ const headerPath = join(root, 'firmware', 'include', 'oled_frames.h');
 const sourcePath = join(root, 'firmware', 'src', 'drivers', 'oled_frames.c');
 
 if (checkOnly) {
-  const norm = (s) => (s ? s.replace(/\r\n/g, '\n') : s);
+  // Git may check generated C files out with CRLF on Windows.
+  const norm = (s) => s.replace(/\r\n/g, '\n');
   const sameHeader = existsSync(headerPath) && norm(readFileSync(headerPath, 'utf8')) === norm(header);
   const sameSource = existsSync(sourcePath) && norm(readFileSync(sourcePath, 'utf8')) === norm(source);
   if (!sameHeader || !sameSource) {

@@ -30,7 +30,7 @@ ZERO Deck Studio brings a desktop editor and RP2040 firmware together for a comp
 | **Upload** | Review what can run on the pad, what needs the desktop app, and what cannot be uploaded before writing your configuration. |
 | **Test & inspect** | Use the keyboard tester and, on compatible firmware, inspect physical events and read the pad's configuration without changing it. |
 | **Display & lighting** | Configure OLED and lighting features in the editor. Actual hardware support depends on the firmware and wiring; RGB output is not ready to power. |
-| **Backup** | Export and restore editor layers, knob settings, and saved presets on your PC. Restoring a backup does not write to the pad. |
+| **Backup** | Export and restore editor layers, knob settings, presets, macros, screen and lighting preferences on your PC. Restore does not save to the pad; a connected preview can update. |
 
 The editor, the configuration stored on the pad, and actions executed by the PC are different things. Supported **on-device** actions can run after a successful upload; **PC-owned** actions need the desktop app running and compatible device event support. The upload review identifies these cases and blocks unsupported combinations.
 
@@ -67,7 +67,7 @@ The browser version is useful for exploring the interface, but it is not a subst
 
 For **Open App** assignments, the app list refreshes older cached icons in the background. Use the rescan button to refresh it again. Manually browsed entries are kept; apps whose icons Windows cannot provide use a generic fallback.
 
-**Backups are not full device images.** They do not include macro definitions, display settings, or lighting settings. Backup validation rejects `script` and `macro` action categories; export or import can fail when those actions are present. Backup files can contain personal paths and action details, so share them carefully.
+**Backups are not full device images.** Version 2 includes local layers, knob settings, presets, macro slots, screen preferences and lighting preferences, but not telemetry, firmware, application cache or the pad's flash. Older version 1 and deck-only backups remain readable and leave data they do not contain unchanged. Standard macro references (including legacy `macro:` references) are supported; other legacy script actions are rejected rather than silently omitted. Backup files can contain personal paths, text, app launches and macro sequences that can control your computer: store them privately and restore only files you trust.
 
 ## Hardware & wiring
 
@@ -82,14 +82,14 @@ Two proposed builds use the same directly wired keys and knob:
 
 **[Open the complete wiring guide →](docs/Macropad_Complete_Wiring_Guide.pdf)**
 
-Picture-style diagrams, soldering notes and reference schematics for both versions are collected in one PDF.
+Picture-style diagrams, soldering notes and reference schematics for both versions are collected in one PDF. The supplied diagrams use the old version labels: their V2 is now V1, and their V1 is now V2. **Do not connect RGB power or data**, even where illustrated, until its design is approved.
 
 <details>
 <summary>Preview the picture-style wiring sheets</summary>
 
 | V1 · Keys + knob | V2 · Display + planned RGB |
 | :---: | :---: |
-| [<img src="docs/Macropad_V2_Picture_Wiring.png" alt="V1 picture-style wiring diagram" width="500">](docs/Macropad_V2_Picture_Wiring.png) | [<img src="docs/Macropad_V1_Picture_Wiring.png" alt="V2 picture-style wiring diagram" width="500">](docs/Macropad_V1_Picture_Wiring.png) |
+| [<img src="docs/Macropad_V2_Picture_Wiring.png" alt="Keys-and-knob diagram labeled V2 in the original guide, now V1" width="500">](docs/Macropad_V2_Picture_Wiring.png) | [<img src="docs/Macropad_V1_Picture_Wiring.png" alt="Display diagram labeled V1 in the original guide, now V2; do not connect RGB" width="500">](docs/Macropad_V1_Picture_Wiring.png) |
 
 [Picture diagrams PDF](docs/Macropad_Picture_Wiring_V1_V2.pdf) · [Soldering and schematic guide PDF](docs/Macropad_V1_V2_Wiring_Guide.pdf)
 
@@ -108,8 +108,8 @@ K6  GP6     K7  GP11    K8  GP12
 | Connection | RP2040-Zero signal |
 | :--- | :--- |
 | Encoder A / B / push | GP7 / GP8 / GP9; encoder common and the other push terminal to GND |
-| V1 OLED SDA / SCL | GP28 / GP29; a 3.3 V-compatible SSD1306 module at I²C address `0x3C` |
-| V1 OLED supply | 3V3 and GND; check whether the module already has I²C pull-ups |
+| V2 OLED SDA / SCL | GP28 / GP29; a 3.3 V-compatible SSD1306 module at I²C address `0x3C` |
+| V2 OLED supply | 3V3 and GND; check whether the module already has I²C pull-ups |
 | Planned RGB data | GP10 is reserved in the design; **leave LED data and power disconnected** |
 
 Before soldering, verify the **GPIO labels on your actual board** and the encoder contacts against its datasheet or with a multimeter. Pin-number conventions vary between footprints. Inspect for shorts and follow the power and verification steps in the complete guide; the diagrams are not a substitute for testing the actual components.
@@ -157,7 +157,7 @@ bash scripts/test-all.sh        # Host-side firmware and protocol checks
 bash scripts/test-all.sh --arm  # Also cross-compile; requires the Pico SDK and ARM toolchain
 ```
 
-`npm test` can generate host artifacts using `make` and a C compiler if they are missing. Packaging requires a suitable Electron build environment. CI is configured for Node 20 on Windows, Linux, and macOS, with a Windows packaging check. Automated checks do not replace testing the actual board, USB connection, display, or operating-system integrations.
+`npm test` can generate host artifacts using `make` and a C compiler if they are missing. Packaging requires a suitable Electron build environment. Node 22.12 or newer is required; CI uses Node 22 on Windows, Linux, and macOS, with a Windows packaging check. Automated checks do not replace testing the actual board, USB connection, display, or operating-system integrations.
 
 ### Project map
 

@@ -177,6 +177,34 @@
 ::-webkit-scrollbar-thumb { background: var(--line); }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
+/* Keep the frameless desktop window movable when restored. Controls stay clickable. */
+.navbar-brand, .navbar-actions { -webkit-app-region: drag; }
+.navbar-actions button, .navbar-actions a, .navbar-actions input, .navbar-actions select { -webkit-app-region: no-drag; }
+
+/* A visible, compact horizontal scrollbar makes extra modules discoverable on
+   scaled laptop screens instead of hiding clipped navigation buttons. */
+.module-navigation { scrollbar-width: thin; }
+.module-navigation::-webkit-scrollbar { height: 4px; }
+.module-navigation::-webkit-scrollbar-track { background: transparent; border: 0; }
+.module-navigation::-webkit-scrollbar-thumb { background: #A6A5A0; }
+
+/* Full-width audio tracks with a generous drag target in the narrow inspector. */
+.audio-volume-slider {
+  display: block; width: 100%; height: 24px; margin: 0; cursor: pointer;
+  appearance: none; -webkit-appearance: none; background: transparent;
+}
+.audio-volume-slider::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, #1351AA 0%, #1351AA var(--audio-level), #DAD9D5 var(--audio-level), #DAD9D5 100%);
+}
+.audio-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px;
+  border: 2px solid #fff; border-radius: 50%; background: #1351AA; box-shadow: 0 0 0 1px #1351AA;
+}
+.audio-volume-slider::-moz-range-track { height: 6px; border-radius: 3px; background: #DAD9D5; }
+.audio-volume-slider::-moz-range-progress { height: 6px; border-radius: 3px; background: #1351AA; }
+.audio-volume-slider::-moz-range-thumb { width: 16px; height: 16px; border: 2px solid #fff; border-radius: 50%; background: #1351AA; box-shadow: 0 0 0 1px #1351AA; }
+
 /* ============================================================
    HARDWARE SIMULATION — flat, no glow, no gradient
    ============================================================ */
@@ -262,7 +290,8 @@
   box-shadow: 0 3px 16px rgba(20, 20, 20, 0.06);
 }
 .brand-mark {
-  background: linear-gradient(145deg, #35383c, #141414 65%);
+  background-color: #141414;
+  background-image: linear-gradient(145deg, #35383c, #141414 65%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 5px rgba(20, 20, 20, 0.16);
 }
 .premium-nav-link {
@@ -429,7 +458,7 @@
 
 /* At laptop widths, overlay the editor instead of clipping its right edge when
    the pad, sidebar and full-width drawer do not fit side by side. */
-@media (min-width: 901px) and (max-width: 1399px) {
+@media (min-width: 1260px) and (max-width: 1399px) {
   .designer-layout { position: relative; }
   .designer-inspector--editing {
     position: absolute;
@@ -440,9 +469,9 @@
   }
 }
 
-/* Keep the workspace usable without sacrificing the layer/tools rail on laptops
-   and narrow windows. The editor becomes an overlay rather than a 360px column. */
-@media (max-width: 900px) {
+/* The rail (228), pad (672) and inspector (360) need at least 1260 CSS px.
+   Stack below that so high-DPI laptop screens do not clip the inspector. */
+@media (max-width: 1259px) {
   .workspace { position: relative; }
   .mobile-rail-toggle { display: block; }
   .workspace-rail { position: absolute; top: 37px; bottom: 0; left: 0; z-index: 40; box-shadow: 8px 0 20px #14141420; }
@@ -451,6 +480,12 @@
   .designer-pad { flex: none; width: 100%; min-width: 0; padding: 1rem; overflow: visible; }
   .designer-inspector { flex: none; width: 100%; min-width: 0; overflow: visible; }
   .designer-inspector--editing { position: fixed; z-index: 45; inset: 64px 0 0; width: 100%; overflow: hidden; }
+}
+/* Two 352px/248px panels plus their gap no longer fit on narrow displays. */
+@media (max-width: 680px) {
+  .digital-twin-body { width: 100%; flex-wrap: wrap; }
+  .startup-deck-chassis { max-width: 100%; }
+  .startup-deck-controls { width: min(352px, 100%); }
 }
 @media (max-width: 480px) {
   .app-header .brand-mark { display: none; }

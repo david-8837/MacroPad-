@@ -1,6 +1,6 @@
 {
   "name": "kadowaz-deck-studio",
-  "version": "1.0.0",
+  "version": "1.0.1-test.2",
   "description": "Next-Gen Macropad Desktop Studio & Hardware Engine",
   "main": "electron/main.cjs",
   "scripts": {
@@ -20,7 +20,7 @@
     "oled:font:check": "node scripts/export-oled-font.mjs --check",
     "oled:budget": "python3 tools/check_flash_budget.py",
     "host:artifacts": "node scripts/host-artifacts.mjs",
- "check:contrast": "python3 checks/contrastcheck.py"
+    "check:contrast": "python3 checks/contrastcheck.py"
   },
   "dependencies": {
     "lucide-react": "^0.453.0",
@@ -30,19 +30,19 @@
   "devDependencies": {
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.3",
+    "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.0.1",
     "cross-env": "^7.0.3",
-    "electron": "^33.0.2",
+    "electron": "^42.11.18",
     "electron-builder": "^26.18.0",
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.28.2",
     "jsdom": "^26.1.0",
     "pdf-lib": "^1.17.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
-    "vite": "^5.4.9",
+    "vite": "^7.3.7",
     "wait-on": "^8.0.1"
   },
   "build": {
@@ -65,7 +65,10 @@
       {
         "from": "src/assets/preset-icons",
         "to": "licenses/preset-icons",
-        "filter": ["README.md", "LICENSE*"]
+        "filter": [
+          "README.md",
+          "LICENSE*"
+        ]
       },
       {
         "from": "electron/native/audio.cs",
@@ -76,7 +79,7 @@
       "electron/native/audio.cs"
     ],
     "win": {
-      "icon": "electron/assets/kadowaz.ico",
+      "icon": "electron/assets/zero.ico",
       "target": [
         "nsis",
         "portable"
@@ -89,5 +92,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

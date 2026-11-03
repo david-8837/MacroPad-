@@ -12,6 +12,14 @@ export interface NumpadGridKeyDef extends KeyboardKeyDef {
   gridArea: string;
 }
 
+/** Use executable key names, not abbreviated legends or ambiguous numpad labels. */
+export function drawerKeyName(key: KeyboardKeyDef): string {
+  if (key.code.startsWith('Numpad') || key.code.startsWith('Arrow') ||
+      ['Backspace', 'CapsLock', 'ContextMenu', 'PrintScreen', 'ScrollLock', 'NumLock',
+        'AudioVolumeUp', 'AudioVolumeDown', 'AudioVolumeMute'].includes(key.code)) return key.code;
+  return key.label || key.code;
+}
+
 // 15u ALPHANUMERIC CLUSTER (Row 0: Function Keys)
 export const MAIN_ROW_0: KeyboardKeyDef[] = [
   { code: 'Escape', label: 'Esc', width: 1 },

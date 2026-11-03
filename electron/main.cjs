@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
 const { createWebhookServer, generateToken } = require('./webhookServer.cjs');
 const {
   discoverApplications,
@@ -18,6 +19,7 @@ let splashWindow = null;
 let startupTimer = null;
 let startupAttempt = 0;
 let startupFailed = false;
+let maximizeOnStartup = false;
 let tray = null;
 let isQuitting = false;
 let webhookServer = null;
@@ -28,6 +30,28 @@ let mediaTimer = null;
 let mediaPollBusy = false;
 let lastMediaJson = '';
 const WEBHOOK_PORT = 38491;
+
+// The preload grants native capabilities. Only the editor's own top-level page
+// may use them; a different file, a redirected URL, or a subframe is untrusted.
+function isTrustedEditorUrl(address) {
+  try {
+    const url = new URL(address);
+    if (url.username || url.password) return false;
+    if (!app.isPackaged && url.origin === 'http://localhost:5173' && url.pathname === '/') return true;
+    const editor = new URL(pathToFileURL(path.join(__dirname, '../dist/index.html')).href);
+    return url.protocol === 'file:' && url.host === editor.host && url.pathname === editor.pathname;
+  } catch { return false; }
+}
+function isTrustedEditorIpc(event) {
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents &&
+    event.senderFrame && event.senderFrame === mainWindow.webContents.mainFrame && isTrustedEditorUrl(event.senderFrame.url));
+}
+function handleEditor(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isTrustedEditorIpc(event)) throw new Error('Unauthorized IPC sender');
+    return handler(event, ...args);
+  });
+}
 
 // One deck per install now — the tray just reports which deck is open.
 const deckState = { id: 'deck-main', name: 'Macropad' };
@@ -55,7 +79,7 @@ function loadOrCreateWebhookToken() {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, token, { mode: 0o600 });
   } catch (err) {
-    console.error('[KADOWAZ Daemon] Could not persist webhook token (using session-only token):', err.message);
+    console.error('[ZERO Daemon] Could not persist webhook token (using session-only token):', err.message);
   }
   return token;
 }
@@ -72,12 +96,12 @@ function startLocalhostWebhookServer() {
 
   server.on('error', (err) => {
     // EADDRINUSE etc. Without this the app would run with a silently dead API.
-    console.error('[KADOWAZ Daemon] Webhook server error:', err.message);
+    console.error('[ZERO Daemon] Webhook server error:', err.message);
     if (webhookServer === server) webhookServer = null;
   });
 
   server.listen(WEBHOOK_PORT, '127.0.0.1', () => {
-    console.log(`[KADOWAZ Daemon] Local Webhook API listening at http://127.0.0.1:${WEBHOOK_PORT}`);
+    console.log(`[ZERO Daemon] Local Webhook API listening at http://127.0.0.1:${WEBHOOK_PORT}`);
   });
   webhookServer = server;
 }
@@ -114,26 +138,17 @@ function loadEditor() {
 }
 
 function createWindow() {
-  const isWindows = process.platform === 'win32';
+  maximizeOnStartup = true;
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
-    minWidth: 900,
-    minHeight: 640,
+    // Windows sizes are in device-independent pixels. High display scaling can
+    // make a laptop's work area much smaller than its native pixel resolution.
+    minWidth: 480,
+    minHeight: 320,
     show: false,
-    ...(isWindows
-      ? {
-          titleBarStyle: 'hidden',
-          titleBarOverlay: {
-            color: '#E3E2DE',
-            symbolColor: '#141414',
-            height: 38,
-          },
-        }
-      : {
-          frame: false,
-        }),
-    icon: path.join(__dirname, 'assets/kadowaz.png'),
+    frame: false,
+    icon: path.join(__dirname, 'assets/zero.png'),
     backgroundColor: '#0C0E14',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -147,7 +162,7 @@ function createWindow() {
   splashWindow = new BrowserWindow({
     width: 390, height: 245, resizable: false, frame: false,
     show: false, skipTaskbar: true, backgroundColor: '#FFFFFF',
-    icon: path.join(__dirname, 'assets/kadowaz.png'),
+    icon: path.join(__dirname, 'assets/zero.png'),
     webPreferences: { preload: path.join(__dirname, 'splash-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   const splash = splashWindow;
@@ -166,9 +181,13 @@ function createWindow() {
 
   // The UI is a closed local app: never open new windows or navigate away from it.
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowed = url.startsWith('http://localhost:5173') || url.startsWith('file://');
-    if (!allowed) event.preventDefault();
+  const guardNavigation = (event, legacyUrl) => { if (!isTrustedEditorUrl(event.url || legacyUrl)) event.preventDefault(); };
+  mainWindow.webContents.on('will-navigate', guardNavigation);
+  mainWindow.webContents.on('will-redirect', guardNavigation);
+  // The editor has no embedded frames, so no subframe may navigate or inherit
+  // the application's native permissions. This event carries details on event.
+  mainWindow.webContents.on('will-frame-navigate', (event) => {
+    if (!event.isMainFrame || !isTrustedEditorUrl(event.url)) event.preventDefault();
   });
   mainWindow.webContents.on('render-process-gone', () => {
     if (splashWindow && !splashWindow.isDestroyed()) showStartupFailure();
@@ -184,8 +203,15 @@ function createWindow() {
 }
 
 ipcMain.on('startup:ready', (event) => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) return;
+  if (!isTrustedEditorIpc(event)) return;
   clearTimeout(startupTimer);
+  // maximize() may show a hidden window, so wait until the renderer is ready.
+  // Only do this once per new window: a later reload must not override the
+  // user's choice to restore or resize it.
+  if (maximizeOnStartup) {
+    maximizeOnStartup = false;
+    mainWindow.maximize();
+  }
   mainWindow.show();
   if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
   splashWindow = null;
@@ -203,7 +229,7 @@ const HELP_LINKS = Object.freeze({
   credits: 'https://github.com/david-8837/MacroPad-/blob/main/src/assets/preset-icons/README.md',
 });
 ipcMain.handle('help:open', async (event, id) => {
-  if (!mainWindow || event.sender !== mainWindow.webContents || !Object.hasOwn(HELP_LINKS, id)) return false;
+  if (!isTrustedEditorIpc(event) || !Object.hasOwn(HELP_LINKS, id)) return false;
   await shell.openExternal(HELP_LINKS[id]);
   return true;
 });
@@ -234,7 +260,7 @@ function buildTrayMenu() {
 }
 
 function createTrayIcon() {
-  const pngPath = path.join(__dirname, 'assets/kadowaz.png');
+  const pngPath = path.join(__dirname, 'assets/zero.png');
   try {
     const img = nativeImage.createFromPath(pngPath);
     if (!img.isEmpty()) return img.resize({ width: 16, height: 16 });
@@ -267,8 +293,8 @@ function rebuildTray() {
   if (tray) tray.setContextMenu(buildTrayMenu());
 }
 
-ipcMain.on('window-control', (_event, action) => {
-  if (!mainWindow) return;
+ipcMain.on('window-control', (event, action) => {
+  if (!isTrustedEditorIpc(event)) return;
   if (action === 'minimize') mainWindow.minimize();
   if (action === 'maximize') {
     if (mainWindow.isMaximized()) mainWindow.unmaximize();
@@ -318,7 +344,7 @@ async function runIncomingAction(incoming) {
   return executeAction(action);
 }
 
-ipcMain.handle('exec-action', async (_event, incoming) => {
+handleEditor('exec-action', async (_event, incoming) => {
   try {
     return await runIncomingAction(incoming);
   } catch (err) {
@@ -326,7 +352,8 @@ ipcMain.handle('exec-action', async (_event, incoming) => {
   }
 });
 
-ipcMain.on('exec-action', async (_event, incoming) => {
+ipcMain.on('exec-action', async (event, incoming) => {
+  if (!isTrustedEditorIpc(event)) return;
   try {
     const res = await runIncomingAction(incoming);
     if (incoming?.category === 'app_launch' || incoming?.category === 'app-launch') {
@@ -342,33 +369,33 @@ ipcMain.on('exec-action', async (_event, incoming) => {
   }
 });
 
-ipcMain.handle('get-webhook-info', async () => ({
+handleEditor('get-webhook-info', async () => ({
   port: WEBHOOK_PORT,
   token: webhookToken,
   listening: Boolean(webhookServer && webhookServer.listening),
 }));
 
-ipcMain.handle('discover-apps', async () => discoverApplications());
+handleEditor('discover-apps', async () => discoverApplications());
 
 // What is actually playing right now, from Windows' own media session (SMTC).
 // Answers {ok:true, value:null} when nothing is playing — that is a state, not a
 // failure, and the panel draws NO MEDIA for it.
-ipcMain.handle('media:now-playing', async () => audio.getNowPlaying({ cacheMs: 0 }));
-ipcMain.handle('browse-for-app', async () => browseForApp());
-ipcMain.handle('launch-app', async (_event, appInfo) => launchApplication(appInfo));
+handleEditor('media:now-playing', async () => audio.getNowPlaying({ cacheMs: 0 }));
+handleEditor('browse-for-app', async () => browseForApp());
+handleEditor('launch-app', async (_event, appInfo) => launchApplication(appInfo));
 
 // Real Windows Audio & Per-App Mixer IPC handlers
-ipcMain.handle('audio:volume:get', async () => audio.getMasterVolume());
-ipcMain.handle('audio:volume:set', async (_event, percent) => audio.setMasterVolume(percent));
-ipcMain.handle('audio:volume:adjust', async (_event, delta) => audio.adjustMasterVolume(delta));
-ipcMain.handle('audio:mute:get', async () => audio.getMasterMute());
-ipcMain.handle('audio:mute:toggle', async () => audio.toggleMasterMute());
-ipcMain.handle('audio:mic:get', async () => audio.getMic());
-ipcMain.handle('audio:mic:set', async (_event, opts) => audio.setMic(opts));
+handleEditor('audio:volume:get', async () => audio.getMasterVolume());
+handleEditor('audio:volume:set', async (_event, percent) => audio.setMasterVolume(percent));
+handleEditor('audio:volume:adjust', async (_event, delta) => audio.adjustMasterVolume(delta));
+handleEditor('audio:mute:get', async () => audio.getMasterMute());
+handleEditor('audio:mute:toggle', async () => audio.toggleMasterMute());
+handleEditor('audio:mic:get', async () => audio.getMic());
+handleEditor('audio:mic:set', async (_event, opts) => audio.setMic(opts));
 
 // Diagnostics & Subsystem Health Self-Tests
-ipcMain.handle('diag:log', async () => ({ ok: true, value: util.getLog() }));
-ipcMain.handle('diag:selftest', async () => {
+handleEditor('diag:log', async () => ({ ok: true, value: util.getLog() }));
+handleEditor('diag:selftest', async () => {
   const [sys, aud] = await Promise.all([
     systemSelfTest(),
     audio.selfTest(),
@@ -388,10 +415,10 @@ ipcMain.handle('diag:selftest', async () => {
 });
 
 // In-App RP2040 UF2 Firmware Flashing Handlers
-ipcMain.handle('firmware:status', async () => firmware.status());
+handleEditor('firmware:status', async () => firmware.status());
 const bundledFirmwareDirectory = () => app.isPackaged ? path.join(process.resourcesPath, 'firmware') : undefined;
-ipcMain.handle('firmware:list', async () => firmware.listBuiltinFirmware(bundledFirmwareDirectory()));
-ipcMain.handle('firmware:flashBuiltin', async (_event, id, acknowledgedUntested) => {
+handleEditor('firmware:list', async () => firmware.listBuiltinFirmware(bundledFirmwareDirectory()));
+handleEditor('firmware:flashBuiltin', async (_event, id, acknowledgedUntested) => {
   return firmware.flashBuiltinFirmware(id, acknowledgedUntested, (progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('firmware-flash-progress', progress);
@@ -462,7 +489,8 @@ function stopMetricsBroadcasting() {
   }
 }
 
-ipcMain.on('deck-sync', (_event, payload) => {
+ipcMain.on('deck-sync', (event, payload) => {
+  if (!isTrustedEditorIpc(event)) return;
   if (payload && typeof payload.name === 'string' && payload.name) {
     deckState.id = typeof payload.id === 'string' ? payload.id : deckState.id;
     deckState.name = payload.name;
@@ -497,8 +525,11 @@ async function chooseDevice(kind, list) {
 
 function setupDeviceAccess() {
   const ses = session.defaultSession;
-  ses.setPermissionCheckHandler((_wc, permission) => permission === 'serial' || permission === 'hid');
-  ses.setDevicePermissionHandler((details) => details.deviceType === 'serial' || details.deviceType === 'hid');
+  ses.setPermissionCheckHandler((wc, permission, _origin, details) =>
+    Boolean(mainWindow && wc === mainWindow.webContents && isTrustedEditorUrl(wc.getURL()) &&
+      details?.isMainFrame !== false && (permission === 'serial' || permission === 'hid')));
+  // Keep Electron's default per-device grants from the chooser. A blanket
+  // device permission handler would silently authorize unrelated devices.
 
   ses.on('select-serial-port', (event, portList, _wc, callback) => {
     event.preventDefault();

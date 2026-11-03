@@ -7,7 +7,9 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     host: '0.0.0.0',
-    allowedHosts: true,
+    // Local development and Arena preview hosts only; do not allow arbitrary
+    // domains to reach the dev server through DNS rebinding.
+    allowedHosts: ['.e2b.app'],
   },
   base: './',
 });

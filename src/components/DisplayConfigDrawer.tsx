@@ -256,7 +256,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
     const defaults: OLEDState = {
       ...localState,
       mode: 'kadowaz',
-      customTitle: 'KADOWAZ IND.',
+      customTitle: 'ZERO',
       customSubtitle: 'ONLINE',
       brightness: 56,
       inverted: false,
@@ -598,9 +598,9 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
                   </span>
                   <input
                     type="text"
-                    value={localState.customTitle ?? 'KADOWAZ IND.'}
+                    value={localState.customTitle ?? 'ZERO'}
                     onChange={(e) => commit({ ...latest.current, customTitle: e.target.value })}
-                    placeholder="e.g. KADOWAZ IND., STUDIO PRO"
+                    placeholder="e.g. ZERO, STUDIO PRO"
                     className="w-full bg-[#FFFFFF] border border-[#C7C7C7] px-3 py-2 text-xs text-[#141414] font-mono focus:outline-none focus:border-[#444343]"
                   />
                 </div>

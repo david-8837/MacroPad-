@@ -3,6 +3,7 @@ const assert = require('assert');
 const path = require('path');
 const audio = require('../electron/native/audio.cjs');
 const { executeAction } = require('../electron/actionExecutor.cjs');
+require('node:child_process').execFileSync(process.execPath, [path.join(__dirname, 'audioMixerUi.test.cjs')], { stdio: 'inherit' });
 
 async function runTests() {
   // Everything below goes through powershell.exe and the WASAPI COM interop in

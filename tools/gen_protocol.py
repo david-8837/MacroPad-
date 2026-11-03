@@ -169,7 +169,6 @@ def emit_ts(spec: dict) -> str:
     w(f"export type CommandId = {cmd_vals};")
     status_vals = " | ".join(str(int(k)) for k in spec["enums"]["status"])
     w(f"export type StatusCode = {status_vals};")
-    w("")
     return "\n".join(L) + "\n"
 
 

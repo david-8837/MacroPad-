@@ -46,7 +46,6 @@ export interface SystemMetrics {
 }
 
 export interface ElectronAPI {
-  hasNativeTitleBar?: boolean;
   rendererReady?: () => void;
   openHelpLink?: (id: 'project' | 'guide' | 'credits') => Promise<boolean>;
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;

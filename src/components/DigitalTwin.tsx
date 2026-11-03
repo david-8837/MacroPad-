@@ -107,7 +107,7 @@ export const DigitalTwin: React.FC<DigitalTwinProps> = ({
         </span>
       </div>
 
-      <div className="flex items-start justify-center gap-6">
+      <div className="digital-twin-body flex items-start justify-center gap-6">
 
         {/* ── the physical object: an ink slab ──────────────────── */}
         <div className="startup-deck-chassis chassis relative w-[352px] shrink-0 select-none">
