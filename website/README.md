@@ -25,7 +25,7 @@ Home section backgrounds and dividers are part of their own scroll construction.
 
 ## GitHub Pages
 
-The `Deploy ZERO website` workflow publishes the contents of `website/` with GitHub Actions, without building the Electron app. In repository **Settings → Pages**, select **GitHub Actions** as the build source. The intended URL is `https://david-8837.github.io/MacroPad-/`; it becomes available only after a successful deployment. The workflow runs when website files change on `main` or `arena/d088a202-macropad`, and can also be run manually once the workflow is available on the default branch. If the `github-pages` environment restricts deployment branches, allow the session branch or deploy after merging to `main`.
+The `Deploy ZERO website` workflow publishes the contents of `website/` with GitHub Actions, without building the Electron app. In repository **Settings → Pages**, select **GitHub Actions** as the build source. The intended URL is `https://david-8837.github.io/MacroPad-/`; it becomes available only after a successful deployment. The workflow runs when website files change on `main` or `arena/d088a202-macropad`, and can also be run manually once the workflow is available on the default branch. If the `github-pages` environment restricts deployment branches, add `arena/d088a202-macropad` under its deployment branch rules or deploy after merging to `main`.
 
 ## Case model library
 
