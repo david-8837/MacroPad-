@@ -8,7 +8,7 @@ const bundle = readFileSync(join(root, 'website/assets/specular-button.js'), 'ut
 const dom = new JSDOM(html, { url: 'https://example.test/', runScripts: 'outside-only', pretendToBeVisual: true });
 const { window } = dom;
 const fallback = window.document.querySelector('.hero-download-mount a');
-assert.equal(fallback.href, 'https://github.com/david-8837/MacroPad-/releases/download/v1.0.0-test.1/ZERO-Deck-Studio-1.0.0-x64.exe', 'the static fallback is a real link');
+assert.equal(fallback.href, 'https://github.com/david-8837/MacroPad-/releases/download/v1.0.1-test.2/ZERO-Deck-Studio-1.0.1-test.2-x64.exe', 'the static fallback is a real link');
 let webglAttempts = 0;
 window.HTMLCanvasElement.prototype.getContext = type => { if (type === 'webgl2') webglAttempts++; return null; }; // WebGL is optional.
 window.matchMedia = () => ({ matches: true, addEventListener() {} });
