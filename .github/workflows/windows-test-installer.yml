@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/windows-test-installer.yml'
       - 'scripts/export-oled-font.mjs'
+      - 'tests/audioControl.test.cjs'
   workflow_dispatch:
 
 permissions:

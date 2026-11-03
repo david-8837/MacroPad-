@@ -22,6 +22,21 @@ async function runTests() {
   assert.strictEqual(typeof st.detail, 'string', 'selfTest().detail should be string');
   console.log('  ✓ selfTest passed:', st.detail);
 
+  // Hosted Windows CI machines may have no audio endpoints. Check the explicit
+  // no-device failure path, but keep the real-device assertions on normal PCs.
+  if (process.env.CI && st.detail.includes('devices failed: Windows reported no audio devices.')) {
+    const devices = await audio.listDevices();
+    assert.strictEqual(devices.ok, false);
+    assert.match(devices.error, /^Windows reported no audio devices\./);
+    const vol = await audio.getMasterVolume();
+    assert.strictEqual(vol.ok, false);
+    assert.match(vol.error, /Master volume could not be read from Windows/);
+    const result = await executeAction({ category: 'audio_session', payload: { processName: 'master', audioDelta: 0 } });
+    assert.strictEqual(result.success, false, 'a missing endpoint must not report action success');
+    console.log('audioControl: SKIP real-device checks — CI has no audio endpoints.');
+    return;
+  }
+
   // 2. Master volume & mute inspection
   const vol = await audio.getMasterVolume();
   assert.strictEqual(vol.ok, true, 'getMasterVolume() should succeed');

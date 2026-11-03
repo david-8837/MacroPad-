@@ -69,7 +69,7 @@ jobs:
       - name: Verify release executable
         shell: pwsh
         run: |
-          $exePath = "release/win-unpacked/KADOWAZ Deck Studio.exe"
+          $exePath = "release/win-unpacked/ZERO Deck Studio.exe"
           if (-not (Test-Path $exePath)) {
             Write-Error "Packaged executable not found at $exePath!"
             exit 1
