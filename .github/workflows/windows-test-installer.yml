@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -70,9 +70,8 @@ jobs:
           } finally {
             if (-not $app.HasExited) { taskkill /PID $app.Id /T /F | Out-Null }
           }
-      - name: Diagnose Windows test suite
+      - name: Run Windows test suite
         shell: pwsh
-        continue-on-error: true
         run: |
           cmd /c 'npm test > windows-tests.log 2>&1'
           $code = $LASTEXITCODE
@@ -82,3 +81,15 @@ jobs:
             Write-Output "::error title=Windows test failure::$escaped"
             exit $code
           }
+      - name: Publish the requested test release
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-test-installer]')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = (Get-ChildItem -Path release -Filter 'ZERO-Deck-Studio-*-x64.exe' -File).FullName
+          $notes = @'
+          Early test release, not a stable release. This installer is unsigned; Windows may display a security warning. It was built and smoke-tested on a GitHub-hosted Windows runner, but has not been tested on a physical Windows PC with real audio devices or macropad hardware. The bundled firmware and hardware are untested; leave RGB power and data disconnected until the design is approved. Back up settings before testing.
+          '@
+          gh release create v1.0.0-test.1 $installer --target $env:GITHUB_SHA --prerelease --title 'ZERO Deck Studio — Windows test release' --notes $notes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
