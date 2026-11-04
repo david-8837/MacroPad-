@@ -65,20 +65,26 @@ const USAGE_NAMES: Record<string, number> = {
   '5': 0x22, '6': 0x23, '7': 0x24, '8': 0x25, '9': 0x26,
   // editing
   enter: 0x28, return: 0x28, escape: 0x29, esc: 0x29, backspace: 0x2a,
-  tab: 0x2b, space: 0x2c, spacebar: 0x2c, capslock: 0x39,
+  tab: 0x2b, space: 0x2c, spacebar: 0x2c, capslock: 0x39, caps: 0x39, '⌫': 0x2a,
+  contextmenu: 0x65, menu: 0x65,
   // punctuation (US layout)
   '-': 0x2d, minus: 0x2d, _: 0x2d, '=': 0x2e, equal: 0x2e, '+': 0x2e, '[': 0x2f, '{': 0x2f,
   ']': 0x30, '}': 0x30, '\\': 0x31, '|': 0x31, ';': 0x33, ':': 0x33,
   "'": 0x34, '"': 0x34, '`': 0x35, '~': 0x35, ',': 0x36, '<': 0x36,
   '.': 0x37, '>': 0x37, '/': 0x38, '?': 0x38,
   // navigation
-  printscreen: 0x46, scrolllock: 0x47, pause: 0x48, insert: 0x49, ins: 0x49,
+  printscreen: 0x46, prtsc: 0x46, scrolllock: 0x47, scrlk: 0x47, pause: 0x48, insert: 0x49, ins: 0x49,
+  numlock: 0x53, num: 0x53,
+  numpaddivide: 0x54, numpadmultiply: 0x55, numpadsubtract: 0x56, numpadadd: 0x57,
+  numpadenter: 0x58, numpad1: 0x59, numpad2: 0x5a, numpad3: 0x5b,
+  numpad4: 0x5c, numpad5: 0x5d, numpad6: 0x5e, numpad7: 0x5f,
+  numpad8: 0x60, numpad9: 0x61, numpad0: 0x62, numpaddecimal: 0x63,
   home: 0x4a, pageup: 0x4b, pgup: 0x4b, delete: 0x4c, del: 0x4c,
   end: 0x4d, pagedown: 0x4e, pgdn: 0x4e,
-  right: 0x4f, arrowright: 0x4f, rightarrow: 0x4f,
-  left: 0x50, arrowleft: 0x50, leftarrow: 0x50,
-  down: 0x51, arrowdown: 0x51, downarrow: 0x51,
-  up: 0x52, arrowup: 0x52, uparrow: 0x52,
+  right: 0x4f, arrowright: 0x4f, rightarrow: 0x4f, '▶': 0x4f,
+  left: 0x50, arrowleft: 0x50, leftarrow: 0x50, '◀': 0x50,
+  down: 0x51, arrowdown: 0x51, downarrow: 0x51, '▼': 0x51,
+  up: 0x52, arrowup: 0x52, uparrow: 0x52, '▲': 0x52,
   // F-keys
   f1: 0x3a, f2: 0x3b, f3: 0x3c, f4: 0x3d, f5: 0x3e, f6: 0x3f,
   f7: 0x40, f8: 0x41, f9: 0x42, f10: 0x43, f11: 0x44, f12: 0x45,
@@ -86,8 +92,12 @@ const USAGE_NAMES: Record<string, number> = {
 
 /** `KeyA`, `Digit0`, `ArrowLeft`, `KC_ESC` — the spellings other code uses. */
 function normalise(raw: string): string {
-  return String(raw || '')
-    .trim()
+  const name = String(raw || '').trim();
+  // Physical capture and the shortcut catalogue also spell these "Num 1" and
+  // "Numpad .". Preserve the keypad identity instead of sending the main row.
+  const keypad = /^(?:Num|Numpad)\s*(\d|\.|Enter|Add|Subtract|Multiply|Divide|Decimal)$/i.exec(name);
+  if (keypad) return `numpad${keypad[1] === '.' ? 'decimal' : keypad[1].toLowerCase()}`;
+  return name
     .replace(/^KC_/i, '')
     .replace(/^Key(?=[A-Za-z]$)/, '')
     .replace(/^Digit(?=\d$)/, '')
@@ -96,24 +106,60 @@ function normalise(raw: string): string {
 
 export function modifierMask(name: string): number | null {
   const n = normalise(name);
-  return MODIFIER_NAMES[n] ?? null;
+  return Object.prototype.hasOwnProperty.call(MODIFIER_NAMES, n) ? MODIFIER_NAMES[n] : null;
 }
 
 export function hidUsage(name: string): number | null {
   const n = normalise(name);
-  if (USAGE_NAMES[n] !== undefined) return USAGE_NAMES[n];
-  if (n.length === 1) {
-    const lower = n.toLowerCase();
-    if (USAGE_NAMES[lower] !== undefined) return USAGE_NAMES[lower];
-  }
+  if (Object.prototype.hasOwnProperty.call(USAGE_NAMES, n)) return USAGE_NAMES[n];
   return null;
 }
+
+/** A display-only interpretation of HID codes. It never changes/imports config. */
+export function describeHidKeycode(code: number): string {
+  const mods = ['Left Ctrl', 'Left Shift', 'Left Alt', 'Left GUI', 'Right Ctrl', 'Right Shift', 'Right Alt', 'Right GUI']
+    .filter((_, bit) => (code >> 8) & (1 << bit));
+  const usage = code & 0xff;
+  const name = Object.entries(USAGE_NAMES).find(([, n]) => n === usage)?.[0];
+  const key = name ? name.toUpperCase() : `HID usage 0x${usage.toString(16).padStart(2, '0').toUpperCase()}`;
+  return [...mods, key].join(' + ');
+}
+
+// Common DOM, Electron and shortcut-library spellings for the same consumer key.
+const MEDIA_KEY_NAMES: Record<string, keyof typeof MEDIA_CODE> = {
+  audiovolumeup: 'volume_up', volumeup: 'volume_up',
+  audiovolumedown: 'volume_down', volumedown: 'volume_down',
+  audiovolumemute: 'mute', volumemute: 'mute', mute: 'mute',
+  mediaplaypause: 'play_pause', playpause: 'play_pause',
+  mediastop: 'stop',
+  next: 'next', medianext: 'next', medianexttrack: 'next', mediatracknext: 'next',
+  prev: 'prev', previous: 'prev', mediaprev: 'prev', mediaprevioustrack: 'prev', mediatrackprevious: 'prev',
+  brightnessup: 'brightness_up', displaybrightnessup: 'brightness_up',
+  brightnessdown: 'brightness_down', displaybrightnessdown: 'brightness_down',
+};
+
+export function mediaCodeForKey(raw: string): number | null {
+  const input = String(raw || '').trim();
+  if (/^vol\+$/i.test(input)) return MEDIA_CODE.volume_up;
+  if (/^vol-$/i.test(input)) return MEDIA_CODE.volume_down;
+  const name = input.replace(/[\s_-]/g, '').toLowerCase();
+  const action = Object.prototype.hasOwnProperty.call(MEDIA_KEY_NAMES, name) ? MEDIA_KEY_NAMES[name] : undefined;
+  return action === undefined ? null : MEDIA_CODE[action] ?? null;
+}
+
+// US keyboard shifted legends require Shift as well as the underlying key.
+const SHIFTED_SYMBOL_BASE: Record<string, string> = {
+  '!': '1', '@': '2', '#': '3', '$': '4', '%': '5', '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+  '_': '-', '+': '=', '{': '[', '}': ']', '|': '\\', ':': ';', '"': "'", '<': ',', '>': '.', '?': '/', '~': '`',
+};
 
 export type ChordResult =
   /** One key, optionally with modifiers held: ACTION_TYPE_KEYCODE. */
   | { kind: 'keycode'; code: number; text: string }
   /** Modifiers with no key: ACTION_TYPE_MODS. */
   | { kind: 'mods'; mask: number; text: string }
+  /** One USB consumer-page media or brightness action. */
+  | { kind: 'media'; code: number; text: string }
   /** Cannot be expressed on the pad. `reason` goes to the user. */
   | { kind: 'unsupported'; reason: string; text: string };
 
@@ -149,7 +195,17 @@ export function chordToAction(keys: string[]): ChordResult {
     };
   }
 
-  const usage = hidUsage(plain[0]);
+  const mediaCode = mediaCodeForKey(plain[0]);
+  if (mediaCode !== null) {
+    return mods === 0
+      ? { kind: 'media', code: mediaCode, text }
+      : { kind: 'unsupported', reason: 'media keys cannot be combined with modifiers in one pad slot', text };
+  }
+
+  const shiftedBase = Object.prototype.hasOwnProperty.call(SHIFTED_SYMBOL_BASE, plain[0])
+    ? SHIFTED_SYMBOL_BASE[plain[0]] : undefined;
+  if (shiftedBase !== undefined) mods |= MOD.LSFT;
+  const usage = hidUsage(shiftedBase ?? plain[0]);
   if (usage === null) {
     return { kind: 'unsupported', reason: `no HID usage for "${plain[0]}"`, text };
   }

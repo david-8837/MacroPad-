@@ -35,13 +35,20 @@ assert.match(app, /onChannelSwitch\(\(channelIdx\)[\s\S]*?handleCycleDialMode\(c
 assert.doesNotMatch(app, /sendSerialCommand\(`OLED:CH:/,
   'OLED:CH ASCII is unacknowledged; do not use it to claim a pad switch');
 assert.match(editor, /setActiveLayerId\(id\)/);
+const quickAssign = initializer('handleAssignViaKeycode');
+assert.match(quickAssign, /setEditingKeyBinding\(current => current\?\.keyIndex === keyIndex \? binding : current\)/,
+  'quick assignments refresh an open drawer so Save cannot revert them');
+assert.doesNotMatch(app, /OSDFlyout|triggerOSDFlyout|osdVisible/,
+  'changing layers must not show the mini layer preview popup');
 assert.match(twin, /setActiveLayerId\(targetLayer\.id\)/);
 const palette = read('src/components/CommandPalette.tsx');
 const digital = read('src/components/DigitalTwin.tsx');
 const launcher = read('src/components/AppLauncherPanel.tsx');
-assert.match(palette, /label: `Edit \/ preview \$\{l\.name\}`/);
+assert.match(palette, /label: `Edit \/ preview Layer \$\{idx\}`/);
 assert.doesNotMatch(palette, /label: `Switch to \$\{l\.name\}`/);
 assert.match(digital, /Edit Layer/);
+assert.match(app, /layers\.map\(\(_, i\) => `Layer \${i}`\)/);
+assert.doesNotMatch(digital, /'EDIT', 'TOOLS', 'CUSTOM', 'MACROS'/);
 assert.match(digital, /padChannelIndex === null \? 'layer unconfirmed'/);
 assert.match(launcher, /\[0, 1, 2, 3\]\.map/);
 assert.match(launcher, /Edit Layer:/);

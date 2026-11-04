@@ -51,8 +51,6 @@ export const LED_MODE = {
   CHANNEL_TINT: 7,
 } as const;
 
-export type LedModeId = (typeof LED_MODE)[keyof typeof LED_MODE];
-
 export type Rgb = { r: number; g: number; b: number };
 
 export interface LightingConfig {

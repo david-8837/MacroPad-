@@ -103,12 +103,12 @@ async function run() {
 
   const base = defaultConfig();
 
-  await check('the shipped four-layer example has no inert key or knob action on upload', async () => {
+  await check('the new four-layer configuration has no inert key or knob action on upload', async () => {
     const { defaultDeck } = await bundle('src/data/defaultDeck.ts');
     const { normalizeDeckLayers } = await bundle('src/utils/channelLayers.ts');
     const { unsupported } = deckToConfig(normalizeDeckLayers(defaultDeck), base);
     assert.deepStrictEqual(unsupported.filter(u => u.route === 'unavailable'), [],
-      'the initial deck must not advertise example actions with no firmware or PC route');
+      'the initial deck must not advertise with no firmware or PC route');
   });
 
   await check('Ctrl+C becomes one KEYCODE with the modifier in the high byte', () => {
@@ -138,11 +138,89 @@ async function run() {
     assert.strictEqual(config.channels[0].keys[0].code, 0xcd);
   });
 
+  await check('saved and new media hotkeys upload as consumer usages on every layer and knob', () => {
+    const names = {
+      AudioVolumeUp: 0xe9, VolumeUp: 0xe9, AudioVolumeDown: 0xea, VolumeDown: 0xea,
+      AudioVolumeMute: 0xe2, VolumeMute: 0xe2, MediaPlayPause: 0xcd, MediaStop: 0xb7,
+      MediaNext: 0xb5, MediaNextTrack: 0xb5, MediaTrackNext: 0xb5,
+      MediaPrev: 0xb6, MediaPreviousTrack: 0xb6, MediaTrackPrevious: 0xb6,
+      BrightnessUp: 0x6f, BrightnessDown: 0x70,
+    };
+    for (const [name, code] of Object.entries(names)) {
+      const deck = deckWith(hotkey([name]));
+      deck.layers = Array.from({ length: 4 }, (_, index) => {
+        const layer = structuredClone(deckWith(hotkey([name])).layers[0]);
+        layer.id = `L${index}`;
+        layer.dial.cwAction = hotkey([name]);
+        layer.dial.ccwAction = hotkey([name]);
+        layer.dial.pressAction = hotkey([name]);
+        return layer;
+      });
+      const result = deckToConfig(deck, base);
+      assert.deepStrictEqual(result.unsupported, [], name);
+      for (const channel of result.config.channels) {
+        for (const slot of [channel.keys[0], channel.knobCw, channel.knobCcw, channel.knobTap]) {
+          assert.strictEqual(slot.type, ACTION_TYPE.MEDIA, name);
+          assert.strictEqual(slot.code, code, name);
+        }
+      }
+      const legacy = deckToConfig(deckWith({ id: 'legacy', category: 'hotkey', name,
+        payload: { keycode: name } }), base);
+      assert.strictEqual(legacy.config.channels[0].keys[0].code, code, name);
+      assert.strictEqual(legacy.config.channels[0].keys[0].type, ACTION_TYPE.MEDIA, name);
+    }
+  });
+
+  await check('modified or multiple media keys are refused rather than silently changed', () => {
+    for (const keys of [['Ctrl', 'AudioVolumeDown'], ['MediaPlayPause', 'MediaNext']]) {
+      const { config, unsupported } = deckToConfig(deckWith(hotkey(keys)), base);
+      assert.strictEqual(config.channels[0].keys[0].type, ACTION_TYPE.NONE);
+      assert.strictEqual(unsupported.length, 1);
+      assert.strictEqual(unsupported[0].route, 'unavailable');
+    }
+  });
+
+  await check('Win plus arrows, including saved drawer glyphs, map to the right HID chord in every layer', () => {
+    for (const [right, usage] of [['ArrowRight', 0x4f], ['▶', 0x4f], ['◀', 0x50], ['▼', 0x51], ['▲', 0x52]]) {
+      const deck = deckWith(hotkey(['Win', right]));
+      deck.layers = Array.from({ length: 4 }, (_, index) => {
+        const layer = structuredClone(deckWith(hotkey(['Win', right])).layers[0]);
+        layer.id = `L${index}`;
+        layer.dial.cwAction = hotkey(['Win', right]);
+        return layer;
+      });
+      const result = deckToConfig(deck, base);
+      assert.deepStrictEqual(result.unsupported, []);
+      for (const ch of result.config.channels) for (const slot of [ch.keys[0], ch.knobCw]) {
+        assert.strictEqual(slot.type, ACTION_TYPE.KEYCODE);
+        assert.strictEqual(slot.code, (0x08 << 8) | usage);
+      }
+    }
+  });
+
+  await check('application play/pause on Space remains a keyboard action', () => {
+    const { config } = deckToConfig(deckWith(hotkey(['Space'], 'Play / Pause')), base);
+    assert.strictEqual(config.channels[0].keys[0].type, ACTION_TYPE.KEYCODE);
+    assert.strictEqual(config.channels[0].keys[0].code, 0x2c);
+  });
+
   await check('short printable text becomes a TEXT macro on the pad', () => {
     const action = { id: 's', category: 'script', name: 'Type', payload: { command: 'hello there' } };
     const { config } = deckToConfig(deckWith(action), base);
     assert.strictEqual(config.channels[0].keys[0].type, ACTION_TYPE.TEXT);
     assert.strictEqual(config.channels[0].keys[0].text, 'hello there');
+  });
+
+  await check('literal text and legacy drawer text preserve spaces and executable-looking names', () => {
+    for (const action of [
+      { id: 'literal', category: 'text', name: 'Text', payload: { text: ' calc.exe ' } },
+      { id: 'legacy-text', category: 'script', name: 'Type: "calc.exe..."', payload: { command: ' calc.exe ' } },
+    ]) {
+      const { config, unsupported } = deckToConfig(deckWith(action), base);
+      assert.deepStrictEqual(unsupported, []);
+      assert.strictEqual(config.channels[0].keys[0].type, ACTION_TYPE.TEXT);
+      assert.strictEqual(config.channels[0].keys[0].text, ' calc.exe ');
+    }
   });
 
   await check('OLED NEXT is an on-pad manual playlist action, not desktop text', () => {

@@ -4,10 +4,9 @@
 type SerialPort = any;
 
 import { Mpad3Link, LinkError, type DeviceInfo, type LinkEvent } from './mpad3Link';
-import type { OledState } from '../../host/protocol/mpad3-protocol.mjs';
+import type { Cfg, OledState } from '../../host/protocol/mpad3-protocol.mjs';
 import { CHUNK_COUNT } from '../../host/protocol/mpad3-protocol.mjs';
 import { deckToConfig, hasOledNextAction, type UnsupportedBinding } from './deckToConfig';
-import { deckIsLocked } from './deckLock';
 import { loadStoredMacros } from './executeDeckAction';
 import { isMacroReady, requiredPcMacroIds } from './macroStorage';
 import { OLED_MODE_IDS, getOLEDMode, type OLEDMode } from '../oled/modes';
@@ -167,6 +166,8 @@ class HardwareBridgeManager {
   // Request user to select the RP2040 virtual COM port (USB CDC). The OS
   // receives HID keystrokes automatically; only CDC carries MPAD3 pad events.
   public async connectSerial(): Promise<boolean> {
+    // Different UI entry points share one bridge; never open two choosers/ports.
+    if (this.connectionState === 'connecting' || this.connectionState === 'connected') return false;
     if (typeof navigator === 'undefined' || !('serial' in navigator)) {
       alert('Web Serial API is not supported in this browser. Please use Chrome, Edge, or the native Electron app.');
       return false;
@@ -207,7 +208,8 @@ class HardwareBridgeManager {
       return true;
     } catch (err) {
       console.error('Serial Connection Error:', err);
-      this.connectionState = 'disconnected';
+      // No port selected (including a dismissed chooser) and open errors are retryable.
+      this.connectionState = 'error';
       this.notify();
       return false;
     }
@@ -306,6 +308,15 @@ class HardwareBridgeManager {
     this.notify();
   }
 
+  /** Read-only, CRC-validated configuration snapshot. Never changes the editor or pad. */
+  public async readDeviceConfig(): Promise<Cfg> {
+    const link = this.link;
+    if (!link || !this.protocolInfo?.hasFlash) throw new LinkError('Connect a compatible MPAD3 pad with flash first.');
+    const config = await link.readConfig();
+    if (this.link !== link) throw new LinkError('The pad disconnected while reading.');
+    return config;
+  }
+
   // Send deck / keymap configuration packet to the physical microcontroller EEPROM
   /**
    * Push the deck to the pad: read what the pad has, replace the key and knob
@@ -321,12 +332,6 @@ class HardwareBridgeManager {
     onProgress?: (p: UploadProgress) => void,
     options: UploadOptions = {},
   ): Promise<UploadResult> {
-    // A programmatic caller must not bypass the sidebar lock or the modal's
-    // disabled button. Check before GET_CONFIG and before any write or callback.
-    if (deckIsLocked(deck)) {
-      return { ok: false, message: 'Deck is locked. Unlock deck before uploading bindings.',
-        mapped: 0, unsupported: [] };
-    }
     const link = this.link;
     if (!link || !this.protocolInfo?.hasFlash) {
       return {

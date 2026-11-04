@@ -53,14 +53,14 @@ function frame(proto, { index = 0, event = 3, channel = 0, action = 0, value = 0
   assert.deepEqual(catalogue.VIA_LAYER_KEYS.map(x => x.code), ['CH(0)', 'CH(1)', 'CH(2)', 'CH(3)']);
   assert.deepEqual(catalogue.VIA_OLED_KEYS.map(x => x.code), ['OLED_NEXT'], 'the claimed manual step is assignable');
   for (const code of ['MO(1)', 'TG(1)', 'TO(0)', 'TT(1)', 'DF(1)', 'RESET', 'EE_CLR',
-    'KC_TRNS', 'LCTL_T(KC_Z)', 'KC_LCTL', 'MS_BTN1', 'KC_CALC', 'KC_BRIU']) {
+    'KC_TRNS', 'LCTL_T(KC_Z)', 'KC_LCTL', 'MS_BTN1', 'KC_CALC']) {
     assert.ok(!all.some(x => x.code === code), `${code} falsely advertised by MPAD3 quick tray`);
     assert.match(viaItemToBinding(0, { code, category: 'layers', label: code }).error, /not a supported/i);
   }
   assert.match(viaItemToBinding(9, all[0]).error, /nine switches/i);
 
   const expectedMedia = { KC_MPLY: 0xcd, KC_MSTP: 0xb7, KC_MNXT: 0xb5, KC_MPRV: 0xb6,
-    KC_VOLU: 0xe9, KC_VOLD: 0xea, KC_MUTE: 0xe2 };
+    KC_VOLU: 0xe9, KC_VOLD: 0xea, KC_MUTE: 0xe2, KC_BRIU: 0x6f, KC_BRID: 0x70 };
   const { resolveVk, mediaKeys } = require('../electron/actionExecutor.cjs');
   for (const item of all) {
     const assigned = viaItemToBinding(0, item);
@@ -82,8 +82,10 @@ function frame(proto, { index = 0, event = 3, channel = 0, action = 0, value = 0
         assert.equal(slot.type, ACTION_TYPE.MEDIA, item.code);
         assert.equal(slot.code, expectedMedia[item.code], item.code);
         assert.equal(unsupported.length, 0);
-        assert.ok(mediaKeys(assigned.binding.tapAction.payload.mediaAction)?.every(k => resolveVk(k) !== null),
-          `${item.code} has no Windows native preview route`);
+        if (item.code !== 'KC_BRIU' && item.code !== 'KC_BRID') {
+          assert.ok(mediaKeys(assigned.binding.tapAction.payload.mediaAction)?.every(k => resolveVk(k) !== null),
+            `${item.code} has no Windows native preview route`);
+        } // Brightness uses Windows WMI rather than a virtual key (tested in actionExecutor).
         break;
       case 'layers':
         assert.equal(assigned.ownership, 'device');
@@ -141,6 +143,25 @@ function frame(proto, { index = 0, event = 3, channel = 0, action = 0, value = 0
   globalThis.window = { electronAPI: { execAction: async action => {
     native.push(action); return { success: true };
   } } };
+  const legacyMedia = await executeDeckAction({ id: 'legacy-media', category: 'hotkey', name: 'Volume',
+    payload: { keycode: 'AudioVolumeDown' } });
+  assert.equal(legacyMedia.success, true);
+  assert.deepEqual(native.pop().payload.keys, ['AudioVolumeDown']);
+  assert.match((await executeDeckAction({ id: 'legacy-qmk', category: 'hotkey', name: 'MO',
+    payload: { keycode: 'MO(1)' } })).error, /not a supported desktop keycode/i);
+  for (const action of [
+    { id: 'literal', category: 'text', name: 'Text', payload: { text: ' calc.exe ' } },
+    { id: 'old-text', category: 'script', name: 'Type: "calc.exe..."', payload: { command: ' calc.exe ' } },
+    { id: 'old-command', category: 'script', name: 'Words', payload: { command: ' hello ' } },
+  ]) {
+    assert.equal((await executeDeckAction(action)).success, true);
+    const sent = native.pop();
+    assert.equal(sent.category, 'text', 'text is sent through the authorized native IPC');
+    assert.equal(sent.payload.text, action.payload.text ?? action.payload.command);
+  }
+  assert.match((await executeDeckAction({ id: 'old-exe', category: 'script', name: 'Launch',
+    payload: { command: '"C:\\Program Files\\App\\app.exe" --open' } })).error, /blocked.*Open App/i);
+  assert.equal(native.length, 0, 'blocked legacy scripts are not sent to native IPC');
   store.set(MACRO_STORAGE_KEY, JSON.stringify([{ id: 7, name: 'Safe macro', actions: [
     { id: 't', type: 'text', value: 'hello world' },
     { id: 'c', type: 'combo', value: 'Ctrl+C', keys: ['Ctrl', 'C'] },

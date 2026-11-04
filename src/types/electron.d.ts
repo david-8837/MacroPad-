@@ -22,13 +22,19 @@ export interface NowPlayingInfo {
   progress: number;
 }
 
+export interface NowPlayingResult {
+  ok: boolean;
+  value?: NowPlayingInfo | null;
+  error?: string;
+}
+
 export interface SystemMetrics {
   /** null = not measured on this machine. The panel draws `--` for null. */
   cpu: number | null;
   ram: number | null;
   gpu: number | null;
   temp: number | null;
-  /** Which subsystem answered for each value, e.g. {cpu:'typeperf',gpu:'NVIDIA'}. */
+  /** Which subsystem answered for each value. */
   sources?: { cpu: string | null; gpu: string | null; temp: string | null };
   detail?: {
     cores?: number;
@@ -40,6 +46,10 @@ export interface SystemMetrics {
 }
 
 export interface ElectronAPI {
+  /** Windows uses native caption buttons for Snap Layouts. */
+  nativeWindowControls?: boolean;
+  rendererReady?: () => void;
+  openHelpLink?: (id: 'project' | 'guide' | 'credits') => Promise<boolean>;
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   execAction: (action: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
   onHardwareEvent: (callback: (value: ElectronHardwareEvent) => void) => () => void;
@@ -50,8 +60,8 @@ export interface ElectronAPI {
   reportDeck: (deck: { id: string; name: string }) => void;
   onSystemMetrics?: (callback: (metrics: SystemMetrics) => void) => () => void;
 
-  getNowPlaying?: () => Promise<{ ok: boolean; value?: NowPlayingInfo | null; error?: string }>;
-  onMediaState?: (callback: (state: NowPlayingInfo | null) => void) => () => void;
+  getNowPlaying?: () => Promise<NowPlayingResult>;
+  onMediaState?: (callback: (result: NowPlayingResult) => void) => () => void;
 
   getMasterVolume?: () => Promise<{ ok: boolean; value?: number; error?: string }>;
   setMasterVolume?: (percent: number) => Promise<{ ok: boolean; value?: number; error?: string }>;
@@ -66,17 +76,26 @@ export interface ElectronAPI {
 
   // RP2040 Firmware Flashing
   getFirmwareStatus?: () => Promise<FirmwareStatus>;
-  getBuiltinFirmware?: () => Promise<{ available: boolean; filePath?: string; fileName?: string; version?: string; inspection?: { ok: boolean; value?: Uf2Inspection }; error?: string }>;
-  flashBuiltinFirmware?: () => Promise<{ ok: boolean; value?: Uf2Inspection & { flashed: boolean; note?: string }; error?: string }>;
-  browseFirmwareUf2?: () => Promise<({ filePath: string; ok: boolean; value?: Uf2Inspection; error?: string }) | null>;
-  flashFirmwareUf2?: (filePath: string) => Promise<{ ok: boolean; value?: Uf2Inspection & { flashed: boolean; note?: string }; error?: string }>;
+  listBuiltinFirmware?: () => Promise<FirmwareOption[]>;
+  flashBuiltinFirmware?: (id: string, acknowledgedUntested: boolean) => Promise<{ ok: boolean; value?: Uf2Inspection & { flashed: boolean; note?: string }; error?: string }>;
   onFirmwareFlashProgress?: (callback: (progress: FlashProgress) => void) => () => void;
+}
+
+export interface FirmwareOption {
+  id: string;
+  name: string;
+  description: string;
+  available: boolean;
+  untested: boolean;
+  inspection?: Uf2Inspection;
+  error?: string;
 }
 
 export interface FirmwareStatus {
   inBootloader: boolean;
   drivePath: string | null;
   driveInfo: string | null;
+  error?: string;
 }
 
 export interface Uf2Inspection {

@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en" data-intro-page="cases">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore downloadable case models for the ZERO macropad.">
+  <meta name="theme-color" content="#f5f2e9">
+  <title>Cases — ZERO Deck Studio</title>
+  <script>
+    // Refreshing Cases returns to Home. Preserve a normal direct link or
+    // history navigation to Cases, including its anchors.
+    const nav = performance.getEntriesByType?.('navigation')?.[0]?.type;
+    let lastPage = '';
+    try { lastPage = sessionStorage.getItem('zero-scroll-last-page-v1') || ''; } catch (_) {}
+    const refreshed = nav === 'reload' || (!nav && performance.navigation?.type === 1) ||
+      (window.parent !== window && nav !== 'back_forward' && lastPage === 'cases');
+    if (refreshed) {
+      try { sessionStorage.setItem('zero-refresh-home-v1', '1'); } catch (_) {}
+      const inDirectory = /\/cases\/(?:index\.html)?$/.test(location.pathname);
+      const home = new URL(inDirectory ? '../home/' : './home/', location.href);
+      home.search = location.search;
+      location.replace(home.href);
+    } else if (location.pathname.endsWith('/cases/index.html')) {
+      try { history.replaceState(history.state, '', './' + location.search + location.hash); } catch (_) {}
+    } else if (location.pathname.endsWith('/cases.html')) {
+      const cases = new URL('./cases/', location.href);
+      cases.search = location.search; cases.hash = location.hash;
+      location.replace(cases.href);
+    }
+  </script>
+  <!-- Critical loader styles are inline so it appears before site assets arrive. -->
+  <style>
+    .zero-loader{display:none}
+    .zero-loading .zero-loader{display:grid;place-items:center;position:fixed;inset:0;z-index:10000;background:#f5f2e9;color:#262622;clip-path:circle(150% at 50% 50%);transition:clip-path .32s ease-in,opacity .32s ease,visibility .32s ease}
+    .zero-loading .zero-loader.is-leaving{clip-path:circle(0% at 50% 50%);opacity:0;visibility:hidden;pointer-events:none}
+    .zero-loader-symbols{display:flex;align-items:center;justify-content:center;font:700 18px/1 monospace;letter-spacing:0;white-space:nowrap;transition:transform .42s ease-in,opacity .32s ease-in}
+    .zero-loader.is-gathering .zero-loader-symbols{transform:scaleX(.05);opacity:0}
+    .zero-loader-cursor{position:absolute;left:50%;top:50%;color:#d26139;opacity:0;transform:translate(-50%,-50%) scale(.45);transition:opacity .2s ease .16s,transform .3s ease-out .16s;pointer-events:none}
+    .zero-loader.is-gathering .zero-loader-cursor{opacity:1;transform:translate(-50%,-50%) scale(1)}
+    .zero-loader-cursor svg{display:block}
+    .zero-loader-symbols span{display:inline-block;width:.61em;text-align:center}
+    .zero-loader-symbols span::before{content:'-';display:inline-block;animation:zero-symbol 1.2s steps(1,end) infinite}
+    .zero-loader-symbols span:nth-child(1)::before{animation-delay:-.12s}
+    .zero-loader-symbols span:nth-child(2)::before{animation-delay:-.78s}
+    .zero-loader-symbols span:nth-child(3)::before{animation-delay:-.44s}
+    .zero-loader-symbols span:nth-child(4)::before{animation-delay:-.21s}
+    .zero-loader-symbols span:nth-child(5)::before{animation-delay:-.96s}
+    .zero-loader-symbols span:nth-child(6)::before{animation-delay:-.63s}
+    .zero-loader-symbols span:nth-child(7)::before{animation-delay:-.03s}
+    .zero-loader-symbols span:nth-child(8)::before{animation-delay:-.84s}
+    .zero-loader-symbols span:nth-child(9)::before{animation-delay:-.33s}
+    .zero-loader-symbols span:nth-child(10)::before{animation-delay:-.69s}
+    .zero-loader-symbols span:nth-child(11)::before{animation-delay:-.53s}
+    @keyframes zero-symbol{0%,100%{content:'=';transform:translateY(0)} 16%{content:'-';transform:translateY(0)} 33%{content:'+';transform:translate(1px,-1px)} 50%{content:'=';transform:translate(-1px,0)} 66%{content:'-';transform:translate(1px,1px)} 83%{content:'-';transform:translateY(0)}}
+    .zero-loader-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    @media(prefers-reduced-motion:reduce){.zero-loading .zero-loader{display:none}}
+  </style>
+  <script>
+    // A short, optional first-entry transition. Never gate the page on network
+    // images, and do not replay it on ordinary Home/Cases navigation.
+    (() => {
+      const root = document.documentElement;
+      try {
+        const nav = performance.getEntriesByType?.('navigation')?.[0]?.type;
+        const lastPage = sessionStorage.getItem('zero-scroll-last-page-v1');
+        const reload = window.__zeroRefreshHome || nav === 'reload' || (!nav && performance.navigation?.type === 1) ||
+          (window.parent !== window && nav !== 'back_forward' && lastPage === root.dataset.introPage);
+        const legacy = /\/(?:cases|index)\.html$/.test(location.pathname);
+        if (legacy) return;
+        const seen = sessionStorage.getItem('zero-loader-seen-v1');
+        // An anchor or reduced-motion entry still counts as a visit; clicking
+        // to another page should not introduce a loading screen afterward.
+        if (location.hash || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          sessionStorage.setItem('zero-loader-seen-v1', '1');
+          return;
+        }
+        if (seen && !reload) return;
+        sessionStorage.setItem('zero-loader-seen-v1', '1');
+        root.classList.add('zero-loading');
+        const started = Date.now();
+        let done = false, closing = false;
+        const finish = skipped => {
+          if (done) return;
+          done = true;
+          root.classList.remove('zero-loading');
+          // Retain the decision if the deferred intro script is still loading.
+          window.__zeroLoaderOutcome = { skipped };
+          window.removeEventListener('keydown', onKey, true);
+          window.dispatchEvent(new CustomEvent('zero-loader-done', { detail: { skipped } }));
+        };
+        const leave = skipped => {
+          if (done || (closing && !skipped)) return;
+          if (skipped) return finish(true);
+          closing = true;
+          document.querySelector('.zero-loader')?.classList.add('is-leaving');
+          // Start constructing underneath the opening screen. The first
+          // cursor takes over the actual SVG gathered from the symbols.
+          window.dispatchEvent(new CustomEvent('zero-loader-opening'));
+          setTimeout(() => finish(false), 320);
+        };
+        const onKey = event => { if (event.key === 'Tab' || event.key === 'Escape') leave(true); };
+        window.addEventListener('keydown', onKey, true);
+        // A tap dismisses the loading screen only; the construction still plays.
+        // Escape and Tab remain explicit ways to skip all effects.
+        document.addEventListener('click', event => { if (event.target.closest?.('.zero-loader')) finish(false); });
+        document.addEventListener('DOMContentLoaded', () => {
+          setTimeout(() => { if (!done) document.querySelector('.zero-loader')?.classList.add('is-gathering'); }, Math.max(0, 2050 - (Date.now() - started)));
+          setTimeout(() => leave(false), Math.max(0, 2680 - (Date.now() - started)));
+        }, { once: true });
+        window.addEventListener('pagehide', () => finish(true), { once: true });
+        // Even if deferred scripts or DOM parsing stall, the page is released.
+        setTimeout(() => finish(false), 4000);
+      } catch (_) { root.classList.remove('zero-loading'); }
+    })();
+  </script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%231b1b19'/%3E%3Ctext x='11' y='29' font-family='Arial' font-size='25' font-weight='700' fill='white'%3EZ%3C/text%3E%3Ccircle cx='30' cy='28' r='2.5' fill='%23f57646'/%3E%3C/svg%3E">
+  <script>
+    // Hide the first frame only until the real elements have been measured.
+    // If setup fails, the watchdog always reveals the site again.
+    try {
+      let alreadyPlayed = false, lastPage = '';
+      try {
+        alreadyPlayed = sessionStorage.getItem('zero-scroll-intro-v1:' + document.documentElement.dataset.introPage) === 'played';
+        lastPage = sessionStorage.getItem('zero-scroll-last-page-v1') || '';
+      } catch (_) { /* Storage can be unavailable. */ }
+      const navType = performance.getEntriesByType?.('navigation')?.[0]?.type;
+      // Refreshing an embedded preview recreates its iframe as a navigation.
+      const refreshed = window.__zeroRefreshHome || navType === 'reload' || (!navType && performance.navigation?.type === 1) ||
+        (window.parent !== window && navType !== 'back_forward' && lastPage === document.documentElement.dataset.introPage);
+      if ((!alreadyPlayed || refreshed) && !matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+        document.documentElement.classList.add('site-intro-preparing');
+        setTimeout(() => document.documentElement.classList.remove('site-intro-preparing'),
+          document.documentElement.classList.contains('zero-loading') ? 4500 : 1800);
+      }
+    } catch (_) { /* The ordinary site remains visible. */ }
+  </script>
+  <!-- Prepare Home's animation assets in the background, without delaying this page. -->
+  <link rel="prefetch" href="../home/" as="document">
+  <link rel="prefetch" href="../assets/specular-button.css?v=1" as="style">
+  <link rel="prefetch" href="../assets/specular-button.js?v=4" as="script">
+  <link rel="stylesheet" href="../styles.css?v=scroll-build-34">
+  <link rel="stylesheet" href="../intro.css?v=scroll-build-34">
+  <script src="../script.js?v=scroll-build-34" defer></script>
+  <script src="../cases-data.js?v=1" defer></script>
+  <script src="../cases.js?v=2" defer></script>
+  <script src="../intro.js?v=scroll-build-34" defer></script>
+</head>
+<body>
+  <div class="zero-loader">
+    <div class="zero-loader-symbols" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <span class="zero-loader-cursor" aria-hidden="true"><svg width="22" height="28" viewBox="0 0 22 28" fill="none"><path d="M2 1.5V22L7.7 16.8L11.7 25.7L15 24.2L11.1 15.6L19 15.3L2 1.5Z" fill="currentColor" stroke="#141414" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+    <span class="zero-loader-status" role="status">Loading ZERO. Press Escape or Tab to skip.</span>
+  </div>
+  <div id="site-content">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="announcement" role="region" aria-label="Project announcement"><span class="status-dot"></span> A LITTLE DECK FOR BIG IDEAS <span class="announcement-right">DESIGNED FOR YOUR WORKFLOW <span>↗</span></span></div>
+    <header class="site-header">
+      <a class="brand" href="../home/"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a>
+      <nav class="desktop-nav" aria-label="Main navigation"><a href="../home/">Home</a><a href="../home/#studio">The studio</a><a href="../home/#hardware">The hardware</a><a href="../cases/" aria-current="page">Cases</a><a href="../home/#faq">FAQ</a></nav>
+      <a class="nav-cta" href="../home/#support">Buy me a coffee <span aria-hidden="true">↓</span></a>
+      <button class="intro-replay" type="button" aria-label="Replay scroll animations">↻ <span>REPLAY</span></button>
+      <details class="mobile-menu"><summary class="menu-toggle" aria-label="Navigation"><span></span><span></span></summary>
+      <nav id="mobile-menu" class="mobile-nav" aria-label="Mobile navigation"><a href="../home/">Home</a><a href="../home/#studio">The studio</a><a href="../home/#hardware">The hardware</a><a href="../cases/" aria-current="page">Cases</a><a href="#build-guide">Build guide</a><a href="../home/#faq">FAQ</a><a href="../home/#download">Get the app ↓</a><a href="../home/#support">Buy me a coffee ↓</a></nav></details>
+    </header>
+    <main id="main">
+      <section class="cases-hero section-wrap" id="top">
+        <div><div class="eyebrow"><span class="orange-square"></span> MADE FOR YOUR DECK <span class="eyebrow-line"></span> THE CASE LIBRARY</div><h1>Make it feel<br>like <em>yours.</em></h1><p>Explore V1 and V2 case model downloads for the little deck, plus build guidance for your project.</p><a class="case-guide-jump" href="#case-options">SEE THE CASES <span>↘</span></a><a class="case-guide-jump case-guide-secondary" href="#build-guide">SEE THE BUILD GUIDE <span>↘</span></a></div>
+        <div class="cases-hero-index" aria-hidden="true"><span>ZERO / CASES</span><span><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></span></div>
+      </section>
+      <section class="case-sale section-wrap" id="case-options" aria-labelledby="case-sale-title">
+        <div class="case-sale-heading"><div><div class="eyebrow"><span class="orange-square"></span> 3D MODEL DOWNLOADS <span class="eyebrow-line"></span> V1 / V2</div><h2 id="case-sale-title">A case for<br><em>your build.</em></h2></div><p>₹150 PER MODEL / PURCHASE REQUIRED</p></div>
+        <div class="case-sale-grid">
+          <article class="case-sale-card case-sale-v1" aria-labelledby="sale-v1-title">
+            <div class="case-sale-visual"><span>01 / V1</span><svg viewBox="0 0 340 280" aria-hidden="true"><rect class="sale-deck-shadow" x="43" y="53" width="255" height="213" rx="27"/><rect class="sale-deck-body" x="43" y="41" width="255" height="213" rx="27"/><path class="sale-accent-line" d="M88 88h102"/><circle class="sale-knob-outer" cx="252" cy="86" r="24"/><circle class="sale-knob-inner" cx="252" cy="86" r="13"/><g class="sale-keys"><rect x="88" y="132" width="46" height="31" rx="5"/><rect x="141" y="132" width="46" height="31" rx="5"/><rect x="194" y="132" width="46" height="31" rx="5"/><rect x="88" y="169" width="46" height="31" rx="5"/><rect x="141" y="169" width="46" height="31" rx="5"/><rect x="194" y="169" width="46" height="31" rx="5"/><rect x="88" y="206" width="46" height="31" rx="5"/><rect x="141" y="206" width="46" height="31" rx="5"/><rect x="194" y="206" width="46" height="31" rx="5"/></g></svg><small>ILLUSTRATION / NOT FINAL</small></div>
+            <div class="case-sale-info"><div class="case-sale-card-top"><div><span class="case-sale-label">KEYS + KNOB</span><h3 id="sale-v1-title">V1 case model</h3></div><p class="case-sale-price">₹150 <small>/ model</small></p></div><p class="case-sale-description">A 3D model for the keys-and-knob build, without a screen or external LEDs. Case design and fit are not yet verified.</p><button type="button" disabled aria-describedby="case-order-note">Buy &amp; download — coming soon <span aria-hidden="true">↗</span></button></div>
+          </article>
+          <article class="case-sale-card case-sale-v2" aria-labelledby="sale-v2-title">
+            <div class="case-sale-visual"><span>02 / V2</span><svg viewBox="0 0 340 280" aria-hidden="true"><rect class="sale-deck-shadow" x="43" y="53" width="255" height="213" rx="27"/><rect class="sale-deck-body" x="43" y="41" width="255" height="213" rx="27"/><rect class="sale-display" x="87" y="66" width="122" height="35" rx="5"/><path class="sale-display-line" d="M98 78h54M98 86h76"/><circle class="sale-knob-outer" cx="252" cy="86" r="24"/><circle class="sale-knob-inner" cx="252" cy="86" r="13"/><g class="sale-keys"><rect x="88" y="132" width="46" height="31" rx="5"/><rect x="141" y="132" width="46" height="31" rx="5"/><rect x="194" y="132" width="46" height="31" rx="5"/><rect x="88" y="169" width="46" height="31" rx="5"/><rect x="141" y="169" width="46" height="31" rx="5"/><rect x="194" y="169" width="46" height="31" rx="5"/><rect x="88" y="206" width="46" height="31" rx="5"/><rect x="141" y="206" width="46" height="31" rx="5"/><rect x="194" y="206" width="46" height="31" rx="5"/></g><g class="sale-rgb-indicators"><circle cx="61" cy="58" r="3"/><circle cx="61" cy="71" r="3"/><circle cx="61" cy="84" r="3"/></g></svg><small>ILLUSTRATION / NOT FINAL</small></div>
+            <div class="case-sale-info"><div class="case-sale-card-top"><div><span class="case-sale-label">DISPLAY + PLANNED RGB</span><h3 id="sale-v2-title">V2 case model</h3></div><p class="case-sale-price">₹150 <small>/ model</small></p></div><p class="case-sale-description">A 3D model for the planned screen and RGB build. Case design and fit are not yet verified.</p><button type="button" disabled aria-describedby="case-order-note">Buy &amp; download — coming soon <span aria-hidden="true">↗</span></button></div>
+          </article>
+        </div>
+        <p class="case-order-note" id="case-order-note">₹150 per model. Purchase is required to download. Payment and secure file delivery aren’t connected yet; no paid files are available. Illustrations are placeholders and fit is unverified.</p>
+      </section>
+      <section class="cases-gallery section-wrap" aria-labelledby="cases-gallery-title">
+        <div class="cases-gallery-heading"><h2 id="cases-gallery-title">Other case models<span class="orange-text">.</span></h2><p>SEPARATE MODEL LIBRARY</p></div>
+        <div class="case-list-area">
+          <div class="cases-empty" id="cases-empty">
+            <div class="cases-future" aria-hidden="true">
+              <div class="cases-future-top"><span>ZERO / CASE LIBRARY</span><span>IN PROGRESS ↗</span></div>
+              <div class="cases-future-body"><div class="cases-future-title">MADE TO<br><em>MAKE.</em></div><div class="cases-future-grid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+              <div class="cases-future-bottom"><span>MORE ROOM FOR YOUR IDEAS.</span><span><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></span></div>
+            </div>
+          </div>
+          <div class="case-grid" id="case-grid"></div>
+        </div>
+      </section>
+      <section class="case-guide section-wrap" id="build-guide" aria-labelledby="case-guide-title">
+        <div class="case-guide-intro"><div class="eyebrow"><span class="orange-square"></span> FROM PARTS TO SHORTCUTS <span class="eyebrow-line"></span> THE BUILD GUIDE</div><h2 id="case-guide-title">Make it.<br><em>Set it up.</em></h2><p>A quick overview of the build, firmware, and desktop setup. Take your time and check the complete wiring guide before connecting power.</p></div>
+        <div class="guide-steps">
+          <article class="guide-step"><div class="guide-step-number">01 <span>THE CASE</span></div><h3>Choose a case.</h3><p>Choose a case model when files are available. The V1 and V2 models require purchase. Print your model and check the fit of your switches, board, and knob before final assembly.</p></article>
+          <article class="guide-step"><div class="guide-step-number">02 <span>THE WIRING</span></div><h3>Wire the deck.</h3><p>With power disconnected, follow the diagram for your build. Check the board silkscreen, component terminals, and continuity before connecting USB.</p><a class="guide-link" href="#wiring">SEE THE DIAGRAMS <span>↘</span></a></article>
+          <article class="guide-step"><div class="guide-step-number">03 <span>THE SOFTWARE</span></div><h3>Get Deck Studio.</h3><p>The Windows desktop app is used for setup and flashing. The installer is an unsigned test build; Windows may warn you, and hardware and firmware are untested.</p><a class="guide-link" href="https://github.com/david-8837/MacroPad-/releases/download/v1.0.1-test.2/ZERO-Deck-Studio-1.0.1-test.2-x64.exe" target="_top" rel="noreferrer">DOWNLOAD WINDOWS TEST BUILD <span>↗</span></a></article>
+          <article class="guide-step"><div class="guide-step-number">04 <span>THE FIRMWARE</span></div><h3>Flash the firmware.</h3><p>Unplug USB, hold the RP2040-Zero’s BOOT button while reconnecting, then release. In the desktop app, open <strong>RP2040 Firmware &amp; Bootloader</strong>, select <strong>Keys &amp; Knob</strong> for V1 or <strong>Full Deck</strong> for V2, review the warning, and flash. Afterward, verify the board reconnects.</p></article>
+          <article class="guide-step"><div class="guide-step-number">05 <span>YOUR SHORTCUTS</span></div><h3>Make it yours.</h3><p>Once the compatible pad is connected, assign keys and the knob across your layers. Review your setup in <strong>Upload to deck</strong>, then upload all layers.</p></article>
+        </div>
+        <aside class="guide-safety"><strong>Before you begin.</strong> The hardware and both firmware images have not been physically tested. Verify your board and wiring before flashing. For V2, the RGB power design is not approved; leave LED power and data disconnected. The PDF also depicts an unapproved RGB circuit: low brightness does not make it safe. The website itself cannot flash the device.</aside>
+      </section>
+      <section class="case-wiring section-wrap" id="wiring" aria-labelledby="case-wiring-title">
+        <div class="case-wiring-intro"><div><div class="eyebrow"><span class="orange-square"></span> THE CONNECTIONS <span class="eyebrow-line"></span> WIRING</div><h2 id="case-wiring-title">A closer look<br>at the <em>connections.</em></h2></div><p>Illustrative wiring references for the Waveshare RP2040-Zero. The supplied diagrams and PDF use the old version names: their V2 is now V1, and their V1 is now V2. Verify real pin labels and switch terminals with a meter.</p></div>
+        <div class="guide-diagrams">
+          <figure class="guide-diagram"><img src="../assets/wiring-v2-photo.webp" alt="Keys-and-knob wiring diagram from the supplied guide, labeled V2 in the original guide but corresponding to the current V1; no display or external LEDs" loading="lazy"><figcaption><div><span class="guide-diagram-tag">V1 / KEYS + KNOB</span><h3>The simple build.</h3><p>Nine switches and a clickable rotary encoder. No display or external LEDs.</p></div><a class="guide-link" href="../assets/wiring-v2-photo.webp" target="_top">OPEN DIAGRAM <span>↗</span></a></figcaption></figure>
+          <figure class="guide-diagram"><img src="../assets/wiring-v1-photo.webp" alt="Display wiring diagram from the supplied guide, labeled V1 in the original guide but corresponding to the current V2; RGB is not wired" loading="lazy"><figcaption><div><span class="guide-diagram-tag">V2 / DISPLAY + PLANNED RGB</span><h3>The display build.</h3><p>Adds a 3.3 V OLED. RGB power and data must remain disconnected until the design is approved.</p></div><a class="guide-link" href="../assets/wiring-v1-photo.webp" target="_top">OPEN DIAGRAM <span>↗</span></a></figcaption></figure>
+        </div>
+        <div class="guide-reference"><p>These pictures are illustrative, not a substitute for checking actual parts. Unplug power before soldering and confirm connections before powering the board. The PDF’s old “V1 + RGB” page describes the current V2 and is unapproved: do not connect LED power or data, even at low brightness.</p><a class="button button-dark" href="../assets/Macropad_Complete_Wiring_Guide.pdf" target="_top" rel="noreferrer">Read the complete wiring guide <span>↗</span></a></div>
+      </section>
+    </main>
+    <footer><a class="brand footer-brand" href="../home/"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a><p>A LITTLE DECK FOR THE SHORTCUTS YOU USE A LOT.</p><div><a href="../home/">HOME</a><a href="../home/#hardware">HARDWARE</a><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">GITHUB ↗</a></div></footer>
+  </div>
+</body>
+</html>

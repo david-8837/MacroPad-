@@ -1,5 +1,6 @@
 import { ActionDefinition } from '../types';
 import { MACRO_STORAGE_KEY, isPcMacroBinding, isMacroReady, pcMacroId } from './macroStorage';
+import { mediaCodeForKey } from './deviceKeymap';
 
 export interface MacroActionStep {
   type: 'down' | 'up' | 'combo' | 'text' | 'delay';
@@ -107,10 +108,27 @@ export async function executeDeckAction(action: ActionDefinition | null | undefi
   /* A legacy raw keycode (MO(1), etc.) works on neither this pad nor the PC.
    * Fail instead of sending an empty chord and reporting success. */
   if (action.payload?.keycode) {
+    const keycode = action.payload.keycode;
+    if (action.category === 'hotkey' && !action.payload.keys?.length && mediaCodeForKey(keycode) !== null) {
+      return sendNativeAction({ ...action, payload: { ...action.payload, keycode: undefined, keys: [keycode] } });
+    }
     return {
       success: false,
-      error: `${action.payload.keycode} is a keycode the macropad sends itself — the PC cannot type it.`,
+      error: `${keycode} is not a supported desktop keycode; reassign the switch.`,
     };
+  }
+
+  // The old text drawer saved literal text as a script, but native IPC blocks
+  // scripts. Translate those safe text actions without turning arbitrary legacy
+  // executable commands into program launches.
+  if (action.category === 'script') {
+    const command = action.payload?.command ?? '';
+    if (!command) return { success: false, error: 'No text to type' };
+    const first = command.trim().match(/^"[^"]+"|^\S+/)?.[0] ?? '';
+    if (!action.name?.startsWith('Type: ') && /\.(exe|cmd|bat|lnk)$/i.test(first.replace(/^"+|"+$/g, ''))) {
+      return { success: false, error: 'Legacy executable scripts are blocked; reassign using Open App.' };
+    }
+    return sendNativeAction({ ...action, category: 'text', payload: { text: command } });
   }
 
   // Firmware owns OLED_NEXT. The desktop native key injector cannot send an

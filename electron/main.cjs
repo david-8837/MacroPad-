@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
 const { createWebhookServer, generateToken } = require('./webhookServer.cjs');
 const {
   discoverApplications,
@@ -14,20 +15,50 @@ const util = require('./native/util.cjs');
 const firmware = require('./native/firmware.cjs');
 
 let mainWindow = null;
+let splashWindow = null;
+let startupTimer = null;
+let startupAttempt = 0;
+let startupFailed = false;
+let maximizeOnStartup = false;
 let tray = null;
 let isQuitting = false;
 let webhookServer = null;
 let webhookToken = '';
 let metricsTimer = null;
+let metricsPollBusy = false;
 let mediaTimer = null;
+let mediaPollBusy = false;
 let lastMediaJson = '';
 const WEBHOOK_PORT = 38491;
 
+// The preload grants native capabilities. Only the editor's own top-level page
+// may use them; a different file, a redirected URL, or a subframe is untrusted.
+function isTrustedEditorUrl(address) {
+  try {
+    const url = new URL(address);
+    if (url.username || url.password) return false;
+    if (!app.isPackaged && url.origin === 'http://localhost:5173' && url.pathname === '/') return true;
+    const editor = new URL(pathToFileURL(path.join(__dirname, '../dist/index.html')).href);
+    return url.protocol === 'file:' && url.host === editor.host && url.pathname === editor.pathname;
+  } catch { return false; }
+}
+function isTrustedEditorIpc(event) {
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents &&
+    event.senderFrame && event.senderFrame === mainWindow.webContents.mainFrame && isTrustedEditorUrl(event.senderFrame.url));
+}
+function handleEditor(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isTrustedEditorIpc(event)) throw new Error('Unauthorized IPC sender');
+    return handler(event, ...args);
+  });
+}
+
 // One deck per install now — the tray just reports which deck is open.
-const deckState = { id: 'deck-main', name: 'Studio Deck' };
+const deckState = { id: 'deck-main', name: 'Macropad' };
+let hardwareListenerReady = false;
 
 function sendToRenderer(payload) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  if (hardwareListenerReady && mainWindow && !mainWindow.isDestroyed() && isTrustedEditorUrl(mainWindow.webContents.getURL())) {
     mainWindow.webContents.send('hardware-event', payload);
     return true;
   }
@@ -49,7 +80,7 @@ function loadOrCreateWebhookToken() {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, token, { mode: 0o600 });
   } catch (err) {
-    console.error('[KADOWAZ Daemon] Could not persist webhook token (using session-only token):', err.message);
+    console.error('[ZERO Daemon] Could not persist webhook token (using session-only token):', err.message);
   }
   return token;
 }
@@ -66,23 +97,63 @@ function startLocalhostWebhookServer() {
 
   server.on('error', (err) => {
     // EADDRINUSE etc. Without this the app would run with a silently dead API.
-    console.error('[KADOWAZ Daemon] Webhook server error:', err.message);
+    console.error('[ZERO Daemon] Webhook server error:', err.message);
     if (webhookServer === server) webhookServer = null;
   });
 
   server.listen(WEBHOOK_PORT, '127.0.0.1', () => {
-    console.log(`[KADOWAZ Daemon] Local Webhook API listening at http://127.0.0.1:${WEBHOOK_PORT}`);
+    console.log(`[ZERO Daemon] Local Webhook API listening at http://127.0.0.1:${WEBHOOK_PORT}`);
   });
   webhookServer = server;
 }
 
+function showStartupFailure() {
+  clearTimeout(startupTimer);
+  startupFailed = true;
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.webContents.send('startup:failure');
+    splashWindow.show();
+  } else if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    dialog.showErrorBox('ZERO could not start', 'Quit and restart the app. If the problem continues, reinstall from a trusted release.');
+  }
+}
+
+function loadEditor() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const attempt = ++startupAttempt;
+  startupFailed = false;
+  clearTimeout(startupTimer);
+  // This is a failure threshold, not a minimum splash duration or fake progress.
+  startupTimer = setTimeout(showStartupFailure, 20000);
+  const packagedPage = () => mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  const loading = app.isPackaged ? packagedPage() :
+    mainWindow.loadURL('http://localhost:5173').catch(() => {
+      if (attempt === startupAttempt) return packagedPage();
+    });
+  loading.catch((err) => {
+    if (attempt !== startupAttempt) return;
+    console.error('[startup] Failed to load editor:', err);
+    showStartupFailure();
+  });
+}
+
 function createWindow() {
+  maximizeOnStartup = true;
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
-    minWidth: 900,
-    minHeight: 640,
-    frame: false,
+    // Windows sizes are in device-independent pixels. High display scaling can
+    // make a laptop's work area much smaller than its native pixel resolution.
+    minWidth: 480,
+    minHeight: 320,
+    show: false,
+    // Native Windows caption buttons provide Win11 Snap Layouts without adding
+    // a separate title bar. Other platforms keep the existing custom chrome.
+    ...(process.platform === 'win32'
+      ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#e9e8e4', symbolColor: '#141414', height: 32 } }
+      : { frame: false }),
+    icon: path.join(__dirname, 'assets/zero.png'),
     backgroundColor: '#0C0E14',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -90,39 +161,99 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
     },
-    title: 'KADOWAZ Deck Studio',
+    title: 'ZERO Deck Studio',
   });
 
-  const isDev = !app.isPackaged;
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173').catch(() => {
-      mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-    });
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-  }
+  splashWindow = new BrowserWindow({
+    width: 390, height: 245, resizable: false, frame: false,
+    show: false, skipTaskbar: true, backgroundColor: '#FFFFFF',
+    icon: path.join(__dirname, 'assets/zero.png'),
+    webPreferences: { preload: path.join(__dirname, 'splash-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  const splash = splashWindow;
+  splash.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  splash.webContents.on('will-navigate', (event) => event.preventDefault());
+  splash.once('ready-to-show', () => { if (!splash.isDestroyed()) splash.show(); });
+  splash.webContents.on('did-finish-load', () => {
+    if (startupFailed) splash.webContents.send('startup:failure');
+  });
+  splash.loadFile(path.join(__dirname, 'splash.html')).catch((err) => {
+    console.error('[startup] Failed to load splash:', err);
+    if (!splash.isDestroyed()) splash.destroy();
+    if (splashWindow === splash) splashWindow = null;
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+  });
 
   // The UI is a closed local app: never open new windows or navigate away from it.
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowed = url.startsWith('http://localhost:5173') || url.startsWith('file://');
-    if (!allowed) event.preventDefault();
+  const guardNavigation = (event, legacyUrl) => { if (!isTrustedEditorUrl(event.url || legacyUrl)) event.preventDefault(); };
+  mainWindow.webContents.on('will-navigate', guardNavigation);
+  mainWindow.webContents.on('will-redirect', guardNavigation);
+  // The editor has no embedded frames, so no subframe may navigate or inherit
+  // the application's native permissions. This event carries details on event.
+  mainWindow.webContents.on('will-frame-navigate', (event) => {
+    if (!event.isMainFrame || !isTrustedEditorUrl(event.url)) event.preventDefault();
   });
-
+  mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) hardwareListenerReady = false;
+  });
+  mainWindow.webContents.on('render-process-gone', () => {
+    hardwareListenerReady = false;
+    if (splashWindow && !splashWindow.isDestroyed()) showStartupFailure();
+    else dialog.showErrorBox('ZERO stopped unexpectedly', 'Quit and restart the app. Your locally saved settings are not intentionally removed.');
+  });
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
       mainWindow.hide();
     }
   });
+  loadEditor();
 }
+
+ipcMain.on('hardware-event:subscription', (event, ready) => {
+  if (isTrustedEditorIpc(event) && typeof ready === 'boolean') hardwareListenerReady = ready;
+});
+
+ipcMain.on('startup:ready', (event) => {
+  if (!isTrustedEditorIpc(event)) return;
+  clearTimeout(startupTimer);
+  // maximize() may show a hidden window, so wait until the renderer is ready.
+  // Only do this once per new window: a later reload must not override the
+  // user's choice to restore or resize it.
+  if (maximizeOnStartup) {
+    maximizeOnStartup = false;
+    mainWindow.maximize();
+  }
+  mainWindow.show();
+  if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
+  splashWindow = null;
+});
+ipcMain.on('startup:retry', (event) => {
+  if (splashWindow && event.sender === splashWindow.webContents) loadEditor();
+});
+ipcMain.on('startup:quit', (event) => {
+  if (splashWindow && event.sender === splashWindow.webContents) { isQuitting = true; app.quit(); }
+});
+
+const HELP_LINKS = Object.freeze({
+  project: 'https://github.com/david-8837/MacroPad-',
+  guide: 'https://github.com/david-8837/MacroPad-/blob/main/docs/USER_GUIDE.md',
+  credits: 'https://github.com/david-8837/MacroPad-/blob/main/src/assets/preset-icons/README.md',
+});
+ipcMain.handle('help:open', async (event, id) => {
+  if (!isTrustedEditorIpc(event) || !Object.hasOwn(HELP_LINKS, id)) return false;
+  await shell.openExternal(HELP_LINKS[id]);
+  return true;
+});
 
 function buildTrayMenu() {
   return Menu.buildFromTemplate([
     {
-      label: 'Open KADOWAZ Studio',
+      label: 'Open ZERO Studio',
       click: () => {
-        if (mainWindow) {
+        if (splashWindow && !splashWindow.isDestroyed()) { splashWindow.show(); splashWindow.focus(); }
+        else if (mainWindow) {
           mainWindow.show();
           mainWindow.focus();
         }
@@ -142,7 +273,7 @@ function buildTrayMenu() {
 }
 
 function createTrayIcon() {
-  const pngPath = path.join(__dirname, '../b90a1e3c-36e8-45d6-8fec-2b4e8802a836.png');
+  const pngPath = path.join(__dirname, 'assets/zero.png');
   try {
     const img = nativeImage.createFromPath(pngPath);
     if (!img.isEmpty()) return img.resize({ width: 16, height: 16 });
@@ -158,9 +289,10 @@ function createTrayIcon() {
 function createTray() {
   if (tray) return;
   tray = new Tray(createTrayIcon());
-  tray.setToolTip('KADOWAZ Deck Studio');
+  tray.setToolTip('ZERO Deck Studio');
   tray.setContextMenu(buildTrayMenu());
   tray.on('click', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) { splashWindow.show(); splashWindow.focus(); return; }
     if (!mainWindow) return;
     if (mainWindow.isVisible()) mainWindow.hide();
     else {
@@ -174,8 +306,8 @@ function rebuildTray() {
   if (tray) tray.setContextMenu(buildTrayMenu());
 }
 
-ipcMain.on('window-control', (_event, action) => {
-  if (!mainWindow) return;
+ipcMain.on('window-control', (event, action) => {
+  if (!isTrustedEditorIpc(event)) return;
   if (action === 'minimize') mainWindow.minimize();
   if (action === 'maximize') {
     if (mainWindow.isMaximized()) mainWindow.unmaximize();
@@ -198,15 +330,34 @@ function normalizeIncomingAction(incoming) {
   return { category, name: incoming?.actionName, payload };
 }
 
+// The renderer process is untrusted authority. Only safe UI-authorable
+// action categories may be executed over native IPC; arbitrary scripts are forbidden.
+const ALLOWED_EXEC_CATEGORIES = new Set([
+  'hotkey',
+  'media',
+  'text',
+  'audio_session',
+  'midi',
+  'navigation',
+  'app_launch',
+  'app-launch',
+]);
+
 async function runIncomingAction(incoming) {
   const action = normalizeIncomingAction(incoming);
+  if (!action || !action.category || !ALLOWED_EXEC_CATEGORIES.has(action.category)) {
+    return {
+      success: false,
+      error: `Blocked: category '${action?.category}' is not authorized for native execution`,
+    };
+  }
   if (action.category === 'app_launch' || action.category === 'app-launch') {
     return launchApplication(action.payload || incoming);
   }
   return executeAction(action);
 }
 
-ipcMain.handle('exec-action', async (_event, incoming) => {
+handleEditor('exec-action', async (_event, incoming) => {
   try {
     return await runIncomingAction(incoming);
   } catch (err) {
@@ -214,7 +365,8 @@ ipcMain.handle('exec-action', async (_event, incoming) => {
   }
 });
 
-ipcMain.on('exec-action', async (_event, incoming) => {
+ipcMain.on('exec-action', async (event, incoming) => {
+  if (!isTrustedEditorIpc(event)) return;
   try {
     const res = await runIncomingAction(incoming);
     if (incoming?.category === 'app_launch' || incoming?.category === 'app-launch') {
@@ -230,33 +382,33 @@ ipcMain.on('exec-action', async (_event, incoming) => {
   }
 });
 
-ipcMain.handle('get-webhook-info', async () => ({
+handleEditor('get-webhook-info', async () => ({
   port: WEBHOOK_PORT,
   token: webhookToken,
   listening: Boolean(webhookServer && webhookServer.listening),
 }));
 
-ipcMain.handle('discover-apps', async () => discoverApplications());
+handleEditor('discover-apps', async () => discoverApplications());
 
 // What is actually playing right now, from Windows' own media session (SMTC).
 // Answers {ok:true, value:null} when nothing is playing — that is a state, not a
 // failure, and the panel draws NO MEDIA for it.
-ipcMain.handle('media:now-playing', async () => audio.getNowPlaying({ cacheMs: 0 }));
-ipcMain.handle('browse-for-app', async () => browseForApp());
-ipcMain.handle('launch-app', async (_event, appInfo) => launchApplication(appInfo));
+handleEditor('media:now-playing', async () => audio.getNowPlaying({ cacheMs: 0 }));
+handleEditor('browse-for-app', async () => browseForApp());
+handleEditor('launch-app', async (_event, appInfo) => launchApplication(appInfo));
 
 // Real Windows Audio & Per-App Mixer IPC handlers
-ipcMain.handle('audio:volume:get', async () => audio.getMasterVolume());
-ipcMain.handle('audio:volume:set', async (_event, percent) => audio.setMasterVolume(percent));
-ipcMain.handle('audio:volume:adjust', async (_event, delta) => audio.adjustMasterVolume(delta));
-ipcMain.handle('audio:mute:get', async () => audio.getMasterMute());
-ipcMain.handle('audio:mute:toggle', async () => audio.toggleMasterMute());
-ipcMain.handle('audio:mic:get', async () => audio.getMic());
-ipcMain.handle('audio:mic:set', async (_event, opts) => audio.setMic(opts));
+handleEditor('audio:volume:get', async () => audio.getMasterVolume());
+handleEditor('audio:volume:set', async (_event, percent) => audio.setMasterVolume(percent));
+handleEditor('audio:volume:adjust', async (_event, delta) => audio.adjustMasterVolume(delta));
+handleEditor('audio:mute:get', async () => audio.getMasterMute());
+handleEditor('audio:mute:toggle', async () => audio.toggleMasterMute());
+handleEditor('audio:mic:get', async () => audio.getMic());
+handleEditor('audio:mic:set', async (_event, opts) => audio.setMic(opts));
 
 // Diagnostics & Subsystem Health Self-Tests
-ipcMain.handle('diag:log', async () => ({ ok: true, value: util.getLog() }));
-ipcMain.handle('diag:selftest', async () => {
+handleEditor('diag:log', async () => ({ ok: true, value: util.getLog() }));
+handleEditor('diag:selftest', async () => {
   const [sys, aud] = await Promise.all([
     systemSelfTest(),
     audio.selfTest(),
@@ -276,52 +428,31 @@ ipcMain.handle('diag:selftest', async () => {
 });
 
 // In-App RP2040 UF2 Firmware Flashing Handlers
-ipcMain.handle('firmware:status', async () => firmware.status());
-ipcMain.handle('firmware:inspect', async (_event, filePath) => firmware.inspectUf2(filePath));
-ipcMain.handle('firmware:builtin', async () => firmware.getBuiltinFirmware());
-ipcMain.handle('firmware:flashBuiltin', async () => {
-  const builtin = firmware.getBuiltinFirmware();
-  if (!builtin || !builtin.filePath) {
-    return { ok: false, error: 'Official project firmware binary not found in project.' };
-  }
-  return firmware.flash(builtin.filePath, (progress) => {
+handleEditor('firmware:status', async () => firmware.status());
+const bundledFirmwareDirectory = () => app.isPackaged ? path.join(process.resourcesPath, 'firmware') : undefined;
+handleEditor('firmware:list', async () => firmware.listBuiltinFirmware(bundledFirmwareDirectory()));
+handleEditor('firmware:flashBuiltin', async (_event, id, acknowledgedUntested) => {
+  return firmware.flashBuiltinFirmware(id, acknowledgedUntested, (progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('firmware-flash-progress', progress);
     }
-  });
-});
-ipcMain.handle('firmware:browse', async () => {
-  if (!mainWindow) return null;
-  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    title: 'Select RP2040 Firmware Image (.uf2)',
-    filters: [{ name: 'UF2 Firmware Image', extensions: ['uf2'] }],
-    properties: ['openFile'],
-  });
-  if (canceled || !filePaths.length) return null;
-  const filePath = filePaths[0];
-  const inspected = firmware.inspectUf2(filePath);
-  return { filePath, ...inspected };
-});
-ipcMain.handle('firmware:flash', async (_event, filePath) => {
-  return firmware.flash(filePath, (progress) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('firmware-flash-progress', progress);
-    }
-  });
+  }, bundledFirmwareDirectory());
 });
 
 function startMetricsBroadcasting() {
   if (metricsTimer) return;
   metricsTimer = setInterval(async () => {
-    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
-      try {
-        const res = await getMetrics();
-        if (res && res.ok && mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('system-metrics', res.value);
-        }
-      } catch (err) {
-        // silent recovery on next tick
+    if (metricsPollBusy || !mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+    metricsPollBusy = true;
+    try {
+      const res = await getMetrics();
+      if (res && res.ok && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('system-metrics', res.value);
       }
+    } catch (err) {
+      // Recover on the next tick.
+    } finally {
+      metricsPollBusy = false;
     }
   }, 1200);
 }
@@ -337,19 +468,22 @@ function startMetricsBroadcasting() {
 function startMediaBroadcasting() {
   if (mediaTimer) return;
   mediaTimer = setInterval(async () => {
-    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+    if (mediaPollBusy || !mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+    mediaPollBusy = true;
     try {
       const res = await audio.getNowPlaying({ cacheMs: 1500 });
-      if (!res.ok) return;
-      const payload = res.value || null;
-      const json = JSON.stringify(payload);
+      const json = JSON.stringify(res);
       if (json === lastMediaJson) return;
       lastMediaJson = json;
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('media-state-changed', payload);
+        mainWindow.webContents.send('media-state-changed', res);
       }
-    } catch {
-      // A media session disappearing mid-read is normal; try again next tick.
+    } catch (error) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('media-state-changed', { ok: false, error: `Media detection failed: ${error.message}` });
+      }
+    } finally {
+      mediaPollBusy = false;
     }
   }, 2000);
 }
@@ -368,7 +502,8 @@ function stopMetricsBroadcasting() {
   }
 }
 
-ipcMain.on('deck-sync', (_event, payload) => {
+ipcMain.on('deck-sync', (event, payload) => {
+  if (!isTrustedEditorIpc(event)) return;
   if (payload && typeof payload.name === 'string' && payload.name) {
     deckState.id = typeof payload.id === 'string' ? payload.id : deckState.id;
     deckState.name = payload.name;
@@ -403,8 +538,11 @@ async function chooseDevice(kind, list) {
 
 function setupDeviceAccess() {
   const ses = session.defaultSession;
-  ses.setPermissionCheckHandler((_wc, permission) => permission === 'serial' || permission === 'hid');
-  ses.setDevicePermissionHandler((details) => details.deviceType === 'serial' || details.deviceType === 'hid');
+  ses.setPermissionCheckHandler((wc, permission, _origin, details) =>
+    Boolean(mainWindow && wc === mainWindow.webContents && isTrustedEditorUrl(wc.getURL()) &&
+      details?.isMainFrame !== false && (permission === 'serial' || permission === 'hid')));
+  // Keep Electron's default per-device grants from the chooser. A blanket
+  // device permission handler would silently authorize unrelated devices.
 
   ses.on('select-serial-port', (event, portList, _wc, callback) => {
     event.preventDefault();
@@ -423,7 +561,8 @@ if (!gotSingleInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
+    if (splashWindow && !splashWindow.isDestroyed()) { splashWindow.show(); splashWindow.focus(); }
+    else if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
@@ -440,6 +579,7 @@ if (!gotSingleInstanceLock) {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      else if (splashWindow && !splashWindow.isDestroyed()) splashWindow.show();
       else mainWindow?.show();
     });
   });

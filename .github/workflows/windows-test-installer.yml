@@ -1,0 +1,98 @@
+name: Build Windows test installer
+
+on:
+  push:
+    branches:
+      - arena/d088a202-macropad
+    paths:
+      - '.github/workflows/windows-test-installer.yml'
+      - 'package.json'
+      - 'scripts/export-oled-font.mjs'
+      - 'tests/audioControl.test.cjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build unsigned test installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify packaging configuration
+        run: node tests/packagingConfig.test.cjs
+      - name: Build the app and verify Electron assets
+        run: |
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build:electron
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package Windows installer
+        run: npx electron-builder --win nsis --x64 --publish never
+      - name: Verify packaged files
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path release -Filter 'ZERO-Deck-Studio-*-x64.exe' -File
+          if (@($installer).Count -ne 1 -or $installer.Length -lt 1MB) {
+            throw 'Expected one non-empty Windows installer.'
+          }
+          $app = 'release/win-unpacked/ZERO Deck Studio.exe'
+          if (-not (Test-Path $app)) { throw 'Packaged app executable is missing.' }
+          Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
+      - name: Upload test installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZERO-Windows-test-installer
+          path: release/ZERO-Deck-Studio-*-x64.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Smoke-test installed app startup
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem -Path release -Filter 'ZERO-Deck-Studio-*-x64.exe' -File).FullName
+          $installDir = Join-Path $env:RUNNER_TEMP 'zero-test-install'
+          $install = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installDir") -PassThru -Wait
+          if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)" }
+          $exe = Join-Path $installDir 'ZERO Deck Studio.exe'
+          if (-not (Test-Path $exe)) { throw 'Installed executable was not found.' }
+          $app = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 20
+            $app.Refresh()
+            if ($app.HasExited) { throw "App exited during startup with code $($app.ExitCode)" }
+          } finally {
+            if (-not $app.HasExited) { taskkill /PID $app.Id /T /F | Out-Null }
+          }
+      - name: Run Windows test suite
+        shell: pwsh
+        run: |
+          cmd /c 'npm test > windows-tests.log 2>&1'
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $tail = (Get-Content windows-tests.log -Tail 35) -join "`n"
+            $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Windows test failure::$escaped"
+            exit $code
+          }
+      - name: Publish the requested test release
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-test-installer]')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = (Get-ChildItem -Path release -Filter 'ZERO-Deck-Studio-*-x64.exe' -File).FullName
+          $notes = @'
+          Early test release, not a stable release. This installer is unsigned; Windows may display a security warning. It was built and smoke-tested on a GitHub-hosted Windows runner, but has not been tested on a physical Windows PC with real audio devices or macropad hardware. The bundled firmware and hardware are untested; leave RGB power and data disconnected until the design is approved. Back up settings before testing.
+          '@
+          $version = node -p "require('./package.json').version"
+          if ($LASTEXITCODE -ne 0 -or -not $version) { throw 'Could not determine the app version.' }
+          gh release create "v$version" $installer --target $env:GITHUB_SHA --prerelease --title 'ZERO Deck Studio — Windows test release' --notes $notes
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

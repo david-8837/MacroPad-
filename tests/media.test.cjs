@@ -8,6 +8,7 @@
 const assert = require('assert');
 const {
   parseNowPlaying,
+  parseMediaProbe,
   friendlyApp,
   isPlayingFrom,
   toSeconds,
@@ -116,7 +117,23 @@ function runTests() {
   assert.strictEqual(artistOnly.title, '');
   assert.strictEqual(artistOnly.artist, 'NTS Radio');
 
-  console.log('media: all assertions passed (SMTC payloads, extrapolation, no-session state)');
+  /* ── full probe result and multi-session selection ───────────────────── */
+  const probe = sessions => ({ code: 0, timedOut: false, stdout: JSON.stringify({ sessions }), stderr: '' });
+  const pausedCurrent = { ...JSON.parse(payload()), title: 'Paused Spotify', status: 5, current: true };
+  const playingBrowser = { ...JSON.parse(payload()), title: 'YouTube Video', app: 'chrome.exe', status: 'Playing', current: false };
+  assert.strictEqual(parseMediaProbe(probe([pausedCurrent, playingBrowser])).value.title, 'YouTube Video', 'playing session wins over paused current');
+  assert.strictEqual(parseMediaProbe(probe([playingBrowser, { ...playingBrowser, title: 'Current', current: true }])).value.title, 'Current', 'current wins among playing sessions');
+  assert.strictEqual(parseMediaProbe(probe([pausedCurrent])).value.title, 'Paused Spotify', 'paused session remains visible');
+  assert.deepStrictEqual(parseMediaProbe(probe([])), { ok: true, value: null });
+  assert.strictEqual(parseMediaProbe(probe([{ title: '', artist: '' }])).value, null);
+  assert.strictEqual(parseMediaProbe({ code: 1, stdout: '', stderr: 'WinRT failed', timedOut: false }).ok, false, 'probe failure is not no media');
+  assert.strictEqual(parseMediaProbe({ code: 0, stdout: '', stderr: '', timedOut: false }).ok, false, 'invalid output is not no media');
+  assert.strictEqual(parseMediaProbe({ code: -1, stdout: '', stderr: '', timedOut: true }).ok, false, 'timeout is an error');
+  const script = require('fs').readFileSync(require('path').join(__dirname, '../electron/native/now-playing.ps1'), 'utf8');
+  assert(script.includes('[System.WindowsRuntimeSystemExtensions].GetMethods()'), 'WinRT AsTask uses the static extension');
+  assert(script.includes('$manager.GetSessions()') && script.includes('.Position.Ticks'));
+  assert(script.includes('System.Text.UTF8Encoding'), 'media titles use UTF-8');
+  console.log('media: parsing, session selection and probe failures passed');
 }
 
 runTests();

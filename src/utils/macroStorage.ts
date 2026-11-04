@@ -57,12 +57,32 @@ export interface StoredMacroStep {
 export interface StoredMacro {
   id: number;
   name: string;
-  actions: StoredMacroStep[];
+  description?: string;
+  actions: (StoredMacroStep & { id: string })[];
+}
+
+/** Validate before loading or backing up; never silently replace bad data. */
+export function validMacroLibrary(value: unknown): value is StoredMacro[] {
+  if (!Array.isArray(value) || value.length > 16) return false;
+  const ids = new Set<number>();
+  for (const slot of value) {
+    if (!slot || typeof slot !== 'object' || Array.isArray(slot) || !Number.isInteger(slot.id) || slot.id < 0 || slot.id > 15 || ids.has(slot.id) ||
+        typeof slot.name !== 'string' || (slot.description !== undefined && typeof slot.description !== 'string') || !Array.isArray(slot.actions) ||
+        slot.actions.some((step: unknown) => {
+          if (!step || typeof step !== 'object' || Array.isArray(step)) return true;
+          const s = step as Record<string, unknown>;
+          return typeof s.id !== 'string' || !['down', 'up', 'combo', 'text', 'delay'].includes(String(s.type)) || typeof s.value !== 'string' ||
+            (s.keys !== undefined && (!Array.isArray(s.keys) || !s.keys.every(key => typeof key === 'string'))) ||
+            (s.delayMs !== undefined && (typeof s.delayMs !== 'number' || !Number.isFinite(s.delayMs)));
+        })) return false;
+    ids.add(slot.id);
+  }
+  return true;
 }
 
 /** A stored M-slot is assignable only when every step has an actual route.
  * The native shell still validates the individual key names at execution. */
-export function isMacroReady(macro: Partial<StoredMacro> | null | undefined): boolean {
+export function isMacroReady(macro: { actions?: StoredMacroStep[] } | null | undefined): boolean {
   return !!macro && Array.isArray(macro.actions) && macro.actions.length > 0 &&
     macro.actions.every(step => step && (
       step.type === 'delay' ||

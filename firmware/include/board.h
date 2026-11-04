@@ -68,10 +68,11 @@
  *   exist; it cost both ADC0 and ADC1 for two digital keys.
  *
  *   Header pin numbers assume USB-C pointing up, front (component) side facing
- *   you, pin 1 = 5V at the top-left, counting counter-clockwise: the left column
- *   is pins 1..11 top to bottom (5V, GND, 3V3, GP29, GP28, GP27, GP26, GP15,
- *   GP14, GP13, GP12) and the right column is pins 12..23 bottom to top (GP11,
- *   GP10, GP9, GP8, GP7, GP6, GP5, GP4, GP3, GP2, GP1, GP0). That is the
+ *   you, pin 1 = 5V at top-left, counting counter-clockwise: left edge 1..9
+ *   top to bottom (5V, GND, 3V3, GP29, GP28, GP27, GP26, GP15, GP14),
+ *   bottom edge 10..14 left to right (GP13, GP12, GP11, GP10, GP9),
+ *   right edge 15..23 bottom to top (GP8, GP7, GP6, GP5, GP4, GP3, GP2,
+ *   GP1, GP0). That is the
  *   Waveshare schematic's own numbering for header P1. tools/check_board.py
  *   derives this table and cross-checks it against docs/HARDWARE.md and
  *   protocol.json, so the three cannot drift apart silently. Still confirm
@@ -100,6 +101,15 @@
  */
 #ifndef BOARD_H
 #define BOARD_H
+
+/* Keys-and-knob model: no external display or lighting hardware. The full
+ * model remains the default; serialized configuration layout stays identical. */
+#ifndef BOARD_KEYS_ONLY
+#define BOARD_KEYS_ONLY 0
+#endif
+#if BOARD_KEYS_ONLY != 0 && BOARD_KEYS_ONLY != 1
+#error "BOARD_KEYS_ONLY must be 0 or 1"
+#endif
 
 /* ---- keys: direct wiring, one pin each, active LOW ------------------------ */
 #define BOARD_KEY_COUNT 9
@@ -148,6 +158,9 @@
 #ifndef BOARD_LED_OUTPUT_ENABLED
 #define BOARD_LED_OUTPUT_ENABLED 0
 #endif
+#if BOARD_KEYS_ONLY && BOARD_LED_OUTPUT_ENABLED
+#error "The keys-only model cannot enable LED output"
+#endif
 #if BOARD_LED_OUTPUT_ENABLED != 0 && BOARD_LED_OUTPUT_ENABLED != 1
 #error "BOARD_LED_OUTPUT_ENABLED must be 0 or 1"
 #endif
@@ -170,7 +183,11 @@
  * Some four-pin modules have built-in pull-ups; otherwise fit external ~4.7k
  * resistors to 3V3. Firmware probes for an ACK and reports OLED capability
  * only when the physical display is responding. */
+#if !BOARD_KEYS_ONLY
 #define BOARD_OLED_PRESENT 1
+#else
+#define BOARD_OLED_PRESENT 0
+#endif
 #define BOARD_OLED_SDA_PIN 28
 #define BOARD_OLED_SCL_PIN 29
 #define BOARD_OLED_I2C_INST 0 /* i2c0 */

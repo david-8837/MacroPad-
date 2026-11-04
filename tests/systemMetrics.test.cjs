@@ -1,9 +1,23 @@
 // Run: node tests/systemMetrics.test.cjs
 const assert = require('assert');
-const { getMetrics, cpuPercent, selfTest } = require('../electron/native/system.cjs');
+const { getMetrics, cpuPercent, cpuPercentFromDelta, gpuPercentFromCounters, selfTest } = require('../electron/native/system.cjs');
 const { clamp, parseJsonLoose } = require('../electron/native/util.cjs');
 
 async function runTests() {
+  // CPU is computed over an interval, not since boot or from one counter sample.
+  assert.equal(cpuPercentFromDelta(null, { idle: 1, busy: 1 }), null);
+  assert.equal(cpuPercentFromDelta({ idle: 100, busy: 100 }, { idle: 180, busy: 120 }), 20);
+  assert.equal(cpuPercentFromDelta({ idle: 100, busy: 100 }, { idle: 100, busy: 100 }), null);
+  assert.equal(cpuPercentFromDelta({ idle: 100, busy: 100 }, { idle: 90, busy: 105 }), null);
+  // GPU engine counters are per-process: add shares of one engine, then take
+  // the busiest engine/adapter, never add independent engines together.
+  const counter = (pid, luid, engine, value, type = '3D') => ({ instance: `pid_${pid}_luid_0x0_${luid}_phys_0_eng_${engine}_engtype_${type}`, value });
+  assert.equal(gpuPercentFromCounters([counter(1, '0xA', 0, 10), counter(2, '0xA', 0, 12), counter(3, '0xA', 1, 17, 'Copy')]), 22);
+  assert.equal(gpuPercentFromCounters([counter(1, '0xA', 0, 10), counter(2, '0xB', 0, 25)]), 25);
+  assert.equal(gpuPercentFromCounters([counter(1, '0xA', 0, 80), counter(2, '0xA', 0, 50)]), 100);
+  assert.equal(gpuPercentFromCounters([counter(1, '0xA', 0, 0)]), 0);
+  assert.equal(gpuPercentFromCounters([counter(1, '0xA', 0, null), counter(2, '0xA', 0, 'bad')]), null);
+  assert.equal(gpuPercentFromCounters([]), null);
   // 1. Check clamp logic
   assert.strictEqual(clamp(50, 0, 100), 50);
   assert.strictEqual(clamp(-10, 0, 100), 0);

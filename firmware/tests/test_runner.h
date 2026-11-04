@@ -17,6 +17,7 @@ extern const test_case_t gesture_tests[];
 extern const test_case_t scan_tests[];
 extern const test_case_t config_tests[];
 extern const test_case_t actions_tests[];
+extern const test_case_t keyboard_hold_tests[];
 extern const test_case_t leds_tests[];
 extern const test_case_t protocol_tests[];
 extern const test_case_t oled_tests[];

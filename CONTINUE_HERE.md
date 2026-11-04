@@ -13,7 +13,7 @@ If you only have ten minutes: read [§1](#1-get-it-running-10-minutes),
 ## 0. What this project is
 
 A **desktop application** (Electron + React + TypeScript + Vite) for configuring a
-custom 12-key macropad — "mpad3" — with an **RP2040/Pico** firmware on the other
+custom 9-key mechanical macropad — "mpad3" — with an **RP2040/Pico** firmware on the other
 end of a USB serial link. Plus the firmware itself (C, Pico SDK) and a host-side
 protocol library used by both the tests and the app.
 

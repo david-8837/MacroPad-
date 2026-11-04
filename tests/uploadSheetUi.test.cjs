@@ -34,13 +34,18 @@ assert.doesNotMatch(palette, /\bonSyncEEPROM\b/);
 assert.match(app, /if \(!isUploadSheetOpen\) setIsCommandPaletteOpen/,
   'a second panel must not obscure an in-progress upload or readback');
 
+assert.match(sheet, /aria-hidden="true"[\s\S]*?onClick=\{closeSheet\}[\s\S]*?backdrop-blur-\[6px\]/,
+  'the dismissible backdrop must blur the page behind the upload sheet');
 assert.match(sheet, /justify-end/);
-assert.match(sheet, /transition-transform duration-300/);
+assert.match(sheet, /transition-transform duration-\[440ms\]/);
 assert.match(sheet, /visible \? 'translate-y-0' : 'translate-y-full'/);
 assert.match(sheet, /if \(!isFlashing\) onClose\(\)/,
   'an in-flight upload and readback cannot be dismissed');
 assert.ok((sheet.match(/disabled=\{isFlashing\}/g) || []).length >= 2,
   'both close and cancel controls must be disabled while writing');
+assert.match(sheet, /phase === 'sending' && progress && progress.total > 0/, 'only actual chunk transfers get a progress bar');
+assert.match(sheet, /aria-valuenow=\{progress.sent\}/);
+assert.doesNotMatch(sheet, /phase !== 'sending' \|\| i </, 'other stages must not look fully complete');
 assert.match(sheet, /await onSyncEEPROM\(/, 'upload only starts after explicit confirmation');
 assert.match(sheet, /tabIndex=\{-1\}/);
 assert.match(sheet, /handleDetachedFocus/, 'Escape and Tab must still work after clicking non-focusable content');

@@ -8,18 +8,12 @@ import {
   Clock, 
   Check, 
   Type, 
-  Terminal, 
   Sparkles, 
-  Layers, 
-  RotateCcw, 
   Keyboard as KeyboardIcon,
-  Copy,
-  ArrowRight,
   ChevronRight,
-  AlertCircle
 } from 'lucide-react';
 import { executeMacroSlot } from '../../utils/executeDeckAction';
-import { isMacroReady, MACRO_STORAGE_KEY } from '../../utils/macroStorage';
+import { isMacroReady, MACRO_STORAGE_KEY, validMacroLibrary } from '../../utils/macroStorage';
 import { playKeyClick } from '../../utils/soundEffects';
 
 export interface MacroAction {
@@ -152,32 +146,30 @@ const INITIAL_MACROS: MacroSlot[] = Array.from({ length: 16 }, (_, i) => ({
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta']);
 
 interface ViaMacroEditorProps {
-  isDeckLocked?: boolean;
   onTriggerAction?: (actionId: string, actionName: string, category: string) => void;
+  onStorageError?: (message: string) => void;
 }
 
 export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
-  isDeckLocked = false,
   onTriggerAction,
+  onStorageError,
 }) => {
-  const [macros, setMacros] = useState<MacroSlot[]>(() => {
-    const saved = localStorage.getItem(MACRO_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Keep each valid ID once and fill absent slots from the empty
-          // defaults. An old/partial/corrupt local store must not crash the
-          // editor or make a forged M-slot look ready for physical playback.
-          return INITIAL_MACROS.map(fallback => {
-            const found = parsed.find(m => m && m.id === fallback.id && Array.isArray(m.actions));
-            return found ? { ...fallback, ...found } : fallback;
-          });
-        }
-      } catch { /* ignore */ }
-    }
-    return INITIAL_MACROS;
+  const [initialMacros] = useState(() => {
+    try {
+      const saved = localStorage.getItem(MACRO_STORAGE_KEY);
+      if (saved === null) return { slots: INITIAL_MACROS, blocked: false };
+      const parsed: unknown = JSON.parse(saved);
+      if (!validMacroLibrary(parsed)) throw new Error('Invalid macro library');
+      return { slots: INITIAL_MACROS.map(fallback => {
+        const found = parsed.find(m => m.id === fallback.id);
+        return found ? { ...fallback, ...found } as MacroSlot : fallback;
+      }), blocked: false };
+    } catch { return { slots: INITIAL_MACROS, blocked: true }; }
   });
+  const [macros, setMacros] = useState<MacroSlot[]>(initialMacros.slots);
+  const [storageError, setStorageError] = useState(initialMacros.blocked
+    ? 'Saved macros could not be read. The original data has not been overwritten; this temporary library cannot be saved or run.' : '');
+  useEffect(() => { onStorageError?.(storageError); }, [onStorageError, storageError]);
 
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
   const [activeBuilderTab, setActiveBuilderTab] = useState<'combo' | 'text' | 'delay' | 'templates'>('combo');
@@ -189,6 +181,12 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   
   // What the last press looked like, echoed back to the user
   const [lastCaptured, setLastCaptured] = useState<string | null>(null);
+  const [winForNextKey, setWinForNextKey] = useState(false);
+  const [editingStep, setEditingStep] = useState<{ id: string; index: number; type: 'combo' | 'text' | 'delay'; draft: string } | null>(null);
+  const [editError, setEditError] = useState('');
+  // Never carry a staged modifier into a different macro slot.
+  useEffect(() => { setWinForNextKey(false); setEditingStep(null); setEditError(''); setLastCaptured(null); setTestNotice(null); }, [selectedSlot]);
+  const captureRef = useRef<HTMLDivElement>(null);
   const [presetQuery, setPresetQuery] = useState('');
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'all'>('all');
   const [testNotice, setTestNotice] = useState<string | null>(null);
@@ -199,16 +197,24 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   const [activePlayStep, setActivePlayStep] = useState<number | null>(null);
 
 
-  // Macro bodies are PC-owned but can change what an assigned M-slot does.
-  // The lock applies to them too; the state guard protects against a stale
-  // event handler while the disabled fieldset keeps the page read-only.
+  // Macro bodies are PC-owned and may change what an assigned M-slot does.
   const changeMacros = (edit: (current: MacroSlot[]) => MacroSlot[]) => {
-    setMacros(prev => isDeckLocked ? prev : edit(prev));
+    setTestNotice(null);
+    setMacros(edit);
   };
 
-  useEffect(() => {
-    if (!isDeckLocked) localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
-  }, [macros, isDeckLocked]);
+  const persistMacros = () => {
+    if (initialMacros.blocked) return false;
+    try {
+      localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
+      setStorageError('');
+      return true;
+    } catch {
+      setStorageError('Macros could not be saved on this computer. Check storage permissions or free space.');
+      return false;
+    }
+  };
+  useEffect(() => { persistMacros(); }, [macros]);
 
   const currentMacro = macros.find(m => m.id === selectedSlot) || macros[0];
 
@@ -235,22 +241,21 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     return key;
   };
 
-  /* Type the keys you want. The page listens while the Key Combo tab is open,
-   * turns what you press into a step, and shows it back to you. Text fields keep
-   * their own keystrokes so renaming a slot still word-processes normally. */
+  /* Capture only while the dedicated box has focus. Window-wide capture steals
+   * Enter/Space from buttons and records shortcuts typed elsewhere in the app. */
   useEffect(() => {
-    if (isDeckLocked || activeBuilderTab !== 'combo') return;
+    if (activeBuilderTab !== 'combo') return;
 
     const handleCaptureKeyDown = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
-      const tag = el?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      if (!el || !captureRef.current?.contains(el)) return;
       if (e.key === 'Tab') return;            // keep keyboard navigation
-      if (e.ctrlKey && e.key.toLowerCase() === 'r') return; // keep browser refresh
+      if ((e.ctrlKey || e.metaKey) && ['r', 'k'].includes(e.key.toLowerCase())) return; // browser refresh / command palette
       e.preventDefault();
       if (e.repeat) return;
 
       if (e.key === 'Escape') {
+        setWinForNextKey(false);
         setLastCaptured(null);
         return;
       }
@@ -261,14 +266,15 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
       if (e.ctrlKey) mods.push('Ctrl');
       if (e.shiftKey) mods.push('Shift');
       if (e.altKey) mods.push('Alt');
-      if (e.metaKey) mods.push('Win');
+      if (e.metaKey || winForNextKey) mods.push('Win');
 
       commitCombo(mods, normalizeKeyName(e.key));
+      setWinForNextKey(false);
     };
 
     window.addEventListener('keydown', handleCaptureKeyDown);
     return () => window.removeEventListener('keydown', handleCaptureKeyDown);
-  }, [activeBuilderTab, selectedSlot, isDeckLocked]);
+  }, [activeBuilderTab, selectedSlot, winForNextKey, editingStep]);
 
   const handleUpdateName = (name: string) => {
     changeMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, name } : m));
@@ -279,6 +285,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const commitCombo = (mods: string[], key: string) => {
+    if (editingStep && editingStep.type !== 'combo') { setEditError('Save or cancel the current step edit first.'); return; }
     const keys = [...mods];
     if (key && !keys.includes(key)) {
       keys.push(key);
@@ -292,13 +299,40 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
       keys
     };
 
-    changeMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, actions: [...m.actions, action] } : m));
+    changeMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, actions: editingStep?.type === 'combo'
+      ? m.actions.map((existing, index) => index === editingStep.index && existing.id === editingStep.id ? { ...action, id: existing.id } : existing)
+      : [...m.actions, action] } : m));
+    setEditingStep(null); setEditError('');
     setLastCaptured(keys.join(' + '));
     playKeyClick('down');
   };
 
 
+  const beginEditStep = (action: MacroAction, index: number) => {
+    if (action.type !== 'combo' && action.type !== 'text' && action.type !== 'delay') return;
+    setWinForNextKey(false);
+    setEditError('');
+    setEditingStep({ id: action.id, index, type: action.type, draft: action.type === 'delay' ? String(action.delayMs ?? '') : action.value });
+    if (action.type === 'combo') setActiveBuilderTab('combo');
+  };
+
+  const saveEditedStep = () => {
+    if (!editingStep || editingStep.type === 'combo') return;
+    const value = editingStep.draft;
+    if (editingStep.type === 'text' && !value) { setEditError('Text cannot be empty.'); return; }
+    const delayMs = Number(value);
+    if (editingStep.type === 'delay' && (!Number.isInteger(delayMs) || delayMs < 10 || delayMs > 5000)) {
+      setEditError('Choose a whole number from 10 to 5000 milliseconds.'); return;
+    }
+    changeMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, actions: m.actions.map((action, index) => {
+      if (index !== editingStep.index || action.id !== editingStep.id) return action;
+      return editingStep.type === 'delay' ? { ...action, value: String(delayMs), delayMs } : { ...action, value };
+    }) } : m));
+    setEditingStep(null); setEditError('');
+  };
+
   const addTextAction = () => {
+    if (editingStep) { setEditError('Save or cancel the current step edit first.'); return; }
     if (!newText) return;
     const actions: MacroAction[] = [
       {
@@ -329,7 +363,10 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const addDelayAction = () => {
-    const ms = parseInt(newDelay, 10) || 100;
+    if (editingStep) { setEditError('Save or cancel the current step edit first.'); return; }
+    const ms = Number(newDelay);
+    if (!Number.isInteger(ms) || ms < 10 || ms > 5000) { setEditError('Choose a whole number from 10 to 5000 milliseconds.'); return; }
+    setEditError('');
     const action: MacroAction = {
       id: `del-${Date.now()}-${Math.random()}`,
       type: 'delay',
@@ -341,6 +378,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const applyPreset = (preset: MacroPreset) => {
+    setEditingStep(null); setEditError(''); setWinForNextKey(false);
     changeMacros(prev => prev.map(m => {
       if (m.id !== selectedSlot) return m;
       return {
@@ -354,6 +392,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const removeAction = (idx: number) => {
+    if (editingStep) { setEditingStep(null); setEditError(''); setWinForNextKey(false); }
     changeMacros(prev => prev.map(m => {
       if (m.id !== selectedSlot) return m;
       return {
@@ -365,6 +404,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const moveAction = (idx: number, direction: 'up' | 'down') => {
+    if (editingStep) { setEditingStep(null); setEditError(''); setWinForNextKey(false); }
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (targetIdx < 0 || targetIdx >= currentMacro.actions.length) return;
 
@@ -379,13 +419,13 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const clearCurrentMacro = () => {
+    setEditingStep(null); setEditError(''); setWinForNextKey(false);
     changeMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, actions: [] } : m));
     playKeyClick('up');
   };
 
   const handleSave = () => {
-    if (isDeckLocked) return;
-    localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
+    if (!persistMacros()) { setSavedSuccess(false); return; }
     setSavedSuccess(true);
     playKeyClick('heavy');
     onTriggerAction?.(`macro-save-${selectedSlot}`, `Saved Macro M${selectedSlot} on this PC`, 'info');
@@ -396,15 +436,15 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
    * There must not be a second implementation that quietly treats down/up as
    * valid combos or reports a failed native step as success. */
   const handleTestMacroRun = async () => {
-    if (isDeckLocked || isPlayingTest || !isMacroReady(currentMacro)) return;
+    if (isPlayingTest || !isMacroReady(currentMacro)) return;
     playKeyClick('down');
     if (!window.electronAPI?.execAction) {
-      setTestNotice('Test Run needs the Kadowaz desktop app. Browser preview cannot send keystrokes, so nothing was sent.');
+      setTestNotice('Test Run needs the ZERO desktop app. Browser preview cannot send keystrokes, so nothing was sent.');
       onTriggerAction?.(`test-macro-blocked-${currentMacro.id}`, 'Test Run blocked: no desktop shell, nothing was sent.', 'info');
       return;
     }
-    // Use the editor's latest values even before its save effect has flushed.
-    localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macros));
+    // Playback reads the stored slot; never run a stale slot when saving fails.
+    if (!persistMacros()) { setTestNotice('Test Run stopped: the macro library could not be saved.'); return; }
     setTestNotice(null);
     setIsPlayingTest(true);
     onTriggerAction?.(`test-macro-start-${currentMacro.id}`,
@@ -423,7 +463,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
       return;
     }
     playKeyClick('heavy');
-    setTestNotice(`Sent all ${currentMacro.actions.length} steps to Windows.`);
+    setTestNotice(`Completed ${currentMacro.actions.length} steps. The target app decides how to respond.`);
     onTriggerAction?.(`test-macro-done-${currentMacro.id}`,
       `✓ Finished Macro M${currentMacro.id} Execution`, 'info');
   };
@@ -431,10 +471,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
 
   return (
     <div className="w-full max-w-5xl space-y-5 animate-in fade-in duration-150 select-none">
-      {isDeckLocked && <p role="status" className="panel p-3 font-mono text-[11px] text-[#1351AA]">
-        DECK LOCKED · PC macro steps are read-only because assigned M-slots would change behavior. Unlock the deck in the sidebar to edit or test macros.
-      </p>}
-      <fieldset disabled={isDeckLocked} className="w-full min-w-0 space-y-5">
+      <div className="w-full min-w-0 space-y-5">
       {/* Top Banner & Header */} الاشت=functions.edit_file? wait tool result? no end marker? It ended sent json? I need verify. It shows tool call content but no result? Let's see. get? maybe I didn't close? The tool action seems called; UI result not yet displayed? Actually transcript shows `to=functions.edit_file...` but no returned, maybe tool time? Hmm message ends? Let's continue from we can check. Need send tool? in this environment tool result should return, maybe call again? We'll inspect `sed` before next. Need not duplicate if succeeded. Use bash. experiment. A lone commentary tool call didn't show result because couldn't parse? Wait in above assistant tool call text ended with `
       <div className="panel p-5 border border-[#E3E2DE] flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -479,6 +516,8 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
           </button>
         </div>
       </div>
+
+      {storageError && <p role="alert" className="border border-[#aa6200] bg-[#fff2db] p-3 text-xs text-[#663900]">{storageError}</p>}
 
       {/* Main Studio Grid: Left Slots List + Right Sequence Editor */}
       <div className="grid grid-cols-12 gap-5">
@@ -588,7 +627,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
             </div>
 
             {testNotice && (
-              <div className="px-2.5 py-2 bg-[#F4F3F0] border border-[#C7C7C7] text-[11px] font-mono text-[#444343]">
+              <div role="status" className="px-2.5 py-2 bg-[#F4F3F0] border border-[#C7C7C7] text-[11px] font-mono text-[#444343]">
                 {testNotice}
               </div>
             )}
@@ -644,7 +683,8 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                         </span>
 
                         {/* Move / Remove tools */}
-                        <div className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-0.5 ml-1">
+                          {(act.type === 'combo' || act.type === 'text' || act.type === 'delay') && <button type="button" disabled={isPlayingTest} onClick={() => beginEditStep(act, idx)} aria-label={`Edit step ${idx + 1}`} className="border border-[#C7C7C7] px-1.5 py-1 text-[10px] hover:bg-white">Edit</button>}
                           {idx > 0 && (
                             <button
                               onClick={() => moveAction(idx, 'up')}
@@ -676,6 +716,16 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                   })
                 )}
               </div>
+              {editingStep && <div className="border border-[#1351AA] bg-[#F4F7FC] p-3 space-y-2" role="group" aria-label="Edit macro step">
+                <p className="text-xs font-bold text-[#141414]">Edit {editingStep.type === 'combo' ? 'key combination' : editingStep.type === 'text' ? 'text' : 'delay'}</p>
+                {editingStep.type === 'combo' ? <p className="text-xs text-[#444343]">Use the key capture box below or Add Win key to replace this step. The old step remains until you choose a replacement.</p> : <>
+                  <label className="block text-xs text-[#444343]" htmlFor="macro-edit-value">{editingStep.type === 'delay' ? 'Milliseconds (10–5000)' : 'Text to type'}</label>
+                  {editingStep.type === 'text' ? <textarea id="macro-edit-value" value={editingStep.draft} onChange={e => setEditingStep({ ...editingStep, draft: e.target.value })} className="w-full border border-[#777] bg-white p-2 text-sm" /> : <input id="macro-edit-value" type="number" min="10" max="5000" step="1" value={editingStep.draft} onChange={e => setEditingStep({ ...editingStep, draft: e.target.value })} className="w-full border border-[#777] bg-white p-2 text-sm" />}
+                  <button type="button" onClick={saveEditedStep} className="bg-[#1351AA] text-white px-3 py-1 text-xs font-bold">Save step</button>
+                </>}
+                {' '}<button type="button" onClick={() => { setEditingStep(null); setEditError(''); setWinForNextKey(false); }} className="border border-[#777] px-3 py-1 text-xs font-bold">Cancel edit</button>
+                {editError && <p role="alert" className="text-xs text-[#8A2A00]">{editError}</p>}
+              </div>}
             </div>
           </div>
 
@@ -735,14 +785,27 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
             {/* TAB 1: TYPE THE KEYS */}
             {activeBuilderTab === 'combo' && (
               <div className="space-y-2">
+                <div className="flex flex-wrap gap-2 items-center" aria-label="Windows key options">
+                  <button type="button" onClick={() => { setWinForNextKey(false); commitCombo([], 'Win'); }}
+                    className="px-3 py-1.5 border border-[#C7C7C7] bg-white text-xs font-bold text-[#141414] hover:border-[#1351AA]">
+                    Add Win key
+                  </button>
+                  <button type="button" aria-pressed={winForNextKey} onClick={() => setWinForNextKey(value => !value)}
+                    className={`px-3 py-1.5 border text-xs font-bold ${winForNextKey ? 'bg-[#1351AA] border-[#1351AA] text-white' : 'border-[#C7C7C7] bg-white text-[#141414] hover:border-[#1351AA]'}`}>
+                    Win + next key
+                  </button>
+                  <span className="text-[10px] text-[#444343]">Choose Win + next key, then focus the box and type the other key. Windows may intercept physical Win shortcuts.</span>
+                </div>
                 <div
+                  ref={captureRef}
+                  role="region"
                   tabIndex={0}
                   aria-label="Type the keys you want to log"
                   className="w-full px-4 py-7 bg-[#FFFFFF] border border-[#C7C7C7] flex flex-col items-center justify-center gap-2 focus:outline-hidden focus:border-[#1351AA]"
                 >
                   <KeyboardIcon className="w-5 h-5 text-[#646464]" />
                   <span className="text-xs font-mono text-[#444343] text-center">
-                    Press the keys you want on your keyboard — each press is logged as a step.
+                    Click or focus this box, then press the keys you want — each press is logged as a step.
                   </span>
                   <span className="text-[10px] font-mono text-[#646464] text-center">
                     Modifiers count · held with a key it logs as one step · Escape clears the readout
@@ -821,6 +884,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
             {/* TAB 3: DELAYS */}
             {activeBuilderTab === 'delay' && (
               <div className="space-y-3">
+                {editError && !editingStep && <p role="alert" className="text-xs text-[#8A2A00]">{editError}</p>}
                 <label className="text-[11px] font-mono text-[#646464] uppercase block">
                   Insert Timing Delay
                 </label>
@@ -845,13 +909,13 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                   <input
                     type="number"
                     min="10"
-                    max="10000"
+                    max="5000"
                     step="10"
                     value={newDelay}
                     onChange={(e) => setNewDelay(e.target.value)}
                     className="w-32 px-3 py-1.5 bg-[#EDECE8] border border-[#E3E2DE] text-xs font-mono text-[#141414] focus:outline-hidden"
                   />
-                  <span className="text-xs text-[#646464] font-mono">milliseconds</span>
+                  <span className="text-xs text-[#646464] font-mono">milliseconds (10–5000)</span>
                   <button
                     onClick={addDelayAction}
                     className="ml-auto px-4 py-2 bg-[#1351AA] hover:bg-[#1351AA] text-[#E3E2DE] font-bold text-xs flex items-center gap-1.5 active:scale-95"
@@ -925,7 +989,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
           </div>
         </div>
       </div>
-      </fieldset>
+      </div>
     </div>
   );
 };

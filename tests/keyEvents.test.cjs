@@ -14,6 +14,9 @@ const assert = require('node:assert');
 const { mkdtempSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
+for (const test of ['keyMatrixGestures.test.cjs', 'rotaryGestures.test.cjs']) {
+  require('node:child_process').execFileSync(process.execPath, [join(__dirname, test)], { stdio: 'inherit' });
+}
 
 const root = join(__dirname, '..');
 

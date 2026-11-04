@@ -2,26 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DialBinding, ActionDefinition } from '../types';
 import { playDetentClick, playKeyClick } from '../utils/soundEffects';
 import { DIAL_MODES } from '../utils/channelLayers';
+import { chordToAction } from '../utils/deviceKeymap';
+import { capturedSystemKey } from '../utils/capturedSystemKey';
 import {
   X,
   Check,
   RotateCw,
   RotateCcw,
-  Sliders,
-  Volume2,
-  VolumeX,
   Sparkles,
-  Command,
-  Disc3,
-  Layers,
   Zap,
-  Play,
-  Keyboard as KeyboardIcon,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
-  ShieldAlert,
-  Gauge
 } from 'lucide-react';
 import {
   DRAWER_MEDIA_KEYS,
@@ -33,7 +23,6 @@ interface KnobConfigDrawerProps {
   onSave: (updatedDial: DialBinding) => void;
   onClose: () => void;
   onTriggerAction: (actionId: string, actionName: string, category: string, payload?: ActionDefinition['payload']) => void;
-  onSelectChannel?: (channelIndex: number) => void;
 }
 
 export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
@@ -41,7 +30,6 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   onSave,
   onClose,
   onTriggerAction,
-  onSelectChannel,
 }) => {
   /* Four modes, one per layer, straight from the deck. */
   const channelList = dial?.availableModes?.length ? [...dial.availableModes] : [...DIAL_MODES];
@@ -51,9 +39,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     channelList.findIndex(m => m === dial?.activeModeName)
   );
 
-  const [activeChannel, setActiveChannel] = useState<number>(
-    initialChannelIdx === -1 ? 0 : initialChannelIdx
-  );
+  const [activeChannel, setActiveChannel] = useState<number>(initialChannelIdx);
   const [channelNames, setChannelNames] = useState<string[]>([...channelList]);
 
   // 4 Rotary Actions
@@ -130,12 +116,6 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     setSensitivity(dial.sensitivity || 5);
   }, [dial]);
 
-  const handleChannelChange = (idx: number) => {
-    setActiveChannel(idx);
-    onSelectChannel?.(idx);
-    playDetentClick('cw');
-  };
-
   // Get active Action Definition and Setter based on selected rotary key
   const getActiveAction = (): ActionDefinition => {
     if (selectedRotaryKey === 'cw') return cwAction;
@@ -145,6 +125,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
 
   const activeAction = getActiveAction();
   const recordedKeys = activeAction?.payload?.keys || [];
+  const padMapping = chordToAction(recordedKeys);
 
   // Helper to commit updated key sequence to active rotary action (Strictly 1 shortcut)
   const commitUpdatedKeys = (newKeys: string[], customName?: string) => {
@@ -162,6 +143,8 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
       ),
       payload: {
         ...(prev.payload || {}),
+        keycode: undefined,
+        mediaAction: undefined,
         keys: newKeys,
       },
     });
@@ -241,17 +224,22 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
       if (e.metaKey) detectedKeys.push('Win');
 
       let primaryKey = e.key;
-      if (e.code.startsWith('Numpad')) {
+      const systemKey = capturedSystemKey(e.key, e.code);
+      if (systemKey) {
+        primaryKey = systemKey;
+      } else if (e.key === 'Unidentified') {
+        return;
+      } else if (e.code.startsWith('Numpad')) {
         const sub = e.code.replace('Numpad', '');
         primaryKey = sub === 'Enter' ? 'Num Enter' : `Num ${sub}`;
       } else if (e.code === 'ArrowUp') {
-        primaryKey = '▲';
+        primaryKey = 'ArrowUp';
       } else if (e.code === 'ArrowDown') {
-        primaryKey = '▼';
+        primaryKey = 'ArrowDown';
       } else if (e.code === 'ArrowLeft') {
-        primaryKey = '◀';
+        primaryKey = 'ArrowLeft';
       } else if (e.code === 'ArrowRight') {
-        primaryKey = '▶';
+        primaryKey = 'ArrowRight';
       } else if (primaryKey === ' ') {
         primaryKey = 'Space';
       } else if (['Control', 'Shift', 'Alt', 'Meta'].includes(primaryKey)) {
@@ -433,7 +421,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   const contextualPresets = getContextualPresets();
 
   return (
-    <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden animate-in slide-in-from-right duration-200">
+    <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden editor-slide-in">
       
       {/* DRAWER TOP BAR: Switch Navigator & Direct Switch Selector */}
       <div className="px-4 py-2.5 border-b border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between gap-3 shrink-0">
@@ -697,6 +685,10 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
                 )}
               </div>
 
+              {recordedKeys.length > 0 && padMapping.kind === 'unsupported' && (
+                <p role="status" className="text-xs text-[#8A4B00]">Cannot upload this combination to the pad: {padMapping.reason}. The desktop test may behave differently.</p>
+              )}
+
               {/* Quick Modifier Toggle Badges */}
               <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#E3E2DE] text-[10px] font-mono">
                 <span className="text-[#646464] uppercase tracking-wider text-[9px]">Add Modifiers:</span>
@@ -793,7 +785,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
       {/* FOOTER SAVE BAR */}
       <div className="p-3 border-t border-[#E3E2DE] bg-[#FFFFFF] flex items-center justify-between shrink-0">
         <div className="text-[10px] font-mono text-[#646464]">
-          Configuring <span className="text-[#141414] font-bold">{activeKeyMeta.badge}</span> on {channelNames[activeChannel] || 'Active Layer'}
+          Configuring <span className="text-[#141414] font-bold">{activeKeyMeta.badge}</span> on {`Layer ${activeChannel}`}
         </div>
         <div className="flex items-center gap-2">
           <button

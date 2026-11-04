@@ -31,7 +31,15 @@ preview's RAF. Without fresh complete frames, firmware instead draws a local
 fallback from `oled_runtime.c` (no invented PC values, uptime instead of an RTC
 clock). `scripts/export-oled-font.mjs` generates those offline glyphs from the
 same 5×7 font. Source/fake-CDC tests establish a byte path, not physical parity
-on an assembled pad.
+on an assembled pad. Deck Status and Layer Indicator are streamed only after a
+physical layer report; until then the pad's local renderer shows its actual layer.
+Changing the layer being edited on the PC does not change that physical layer.
+
+**Bundled firmware limitation:** the user-supplied Full Deck UF2 is unchanged and
+its source and OLED protocol are unverified. The refreshed baked frames and local
+fallbacks are in this repository's firmware source; they are not installed by
+saving display settings. Using them on a pad would require a compatible firmware
+build and hardware validation. The Keys & Knob image has no OLED support.
 
 ## Rules a mode must follow
 
@@ -39,7 +47,7 @@ on an assembled pad.
 | --- | --- |
 | 1-bit only, no greys and no antialiasing | the panel has no other colour |
 | 5×7 text, 6 px advance, uppercase | 21 characters per line; two lines fit in 32 px |
-| Text rows start at `y = 1, 9, 17, 25` | keeps the 7 px glyph box off the panel edge |
+| Text stays inside the 128×32 panel and avoids neighbouring content | keeps headings, values and artwork legible |
 | Loops are `frames` frames at `fps`, and wrap exactly | the firmware steps frames by timestamp, so a non-wrapping loop would jump |
 | Motion is linear | a bouncy curve cannot be represented in 12 fixed frames |
 | Live-data screens are marked `runtime: true` | they cannot be baked; the host or firmware draws them |
@@ -48,18 +56,18 @@ on an assembled pad.
 
 | id | Title | Kind | Loop | Notes |
 | --- | --- | --- | --- | --- |
-| `kadowaz` | Deck Status | runtime | — | title, `ONLINE` badge, layer hero line, deck name |
+| `kadowaz` | Deck Status | runtime | — | custom title and badge, large zero-based layer number and four layer marks |
 | `system` | System Telemetry | runtime | — | three meters on a common baseline; `--` for anything the machine does not measure |
 | `media` | Now Playing | runtime | — | marquee title, artist, progress meter; `NO MEDIA` when the session is empty |
 | `channel` | Layer Indicator | runtime | — | keycap silhouettes + rounded badge on the active stop |
-| `loader` | Progress Loader | baked | 12 @ 8 fps | `LOADING` at 2× over eight blocks |
+| `loader` | Progress Loader | baked | 12 @ 8 fps | decorative loading animation over ten blocks |
 | `creature` | Pixel Buddy | baked | 16 @ 6 fps | 16×16 character: blink, look, bob |
-| `wave` | Signal Wave | baked | 15 @ 15 fps | sine over a dotted graticule, one cycle per loop |
+| `wave` | Signal Wave | baked | 15 @ 15 fps | decorative sine trace with a dotted axis; not measured voltage |
 | `starfield` | Starfield | baked | 24 @ 12 fps | three depth bands, deterministic star table |
-| `rain` | Digital Rain | baked | 24 @ 12 fps | 16 columns, 2×2 heads, 1 px tails |
+| `rain` | Digital Rain | baked | 24 @ 12 fps | 16 wrapping columns with bright heads and dotted tails |
 | `clock` | Clock | runtime | — | `HH:MM` at 2×, seconds sweep, day and date |
 | `radar` | Radar Sweep | baked | 24 @ 12 fps | dotted scope, rotating sweep, blips |
-| `pulse` | Heartbeat | baked | 12 @ 12 fps | scrolling ECG, beating heart, BPM |
+| `pulse` | Heartbeat | baked | 12 @ 12 fps | decorative scrolling trace and heart; no heart-rate measurement |
 
 The preview's layer track has its own choreography: 120 ms paint, 320 ms
 travel and a hold before the previous screen returns. Physical firmware uses a
@@ -92,20 +100,22 @@ measured is `null`, and the panel prints `--`.
 
 | Screen | Value | Source |
 | --- | --- | --- |
-| System Telemetry | CPU % | `typeperf.exe \Processor(_Total)\% Processor Time`, falling back to an `os.cpus()` tick delta |
+| System Telemetry | CPU % | `os.cpus()` active-time delta over the sample interval |
 | System Telemetry | RAM % | `os.totalmem()` / `os.freemem()` |
-| System Telemetry | GPU % | `nvidia-smi`, then `amd-smi`, then the Windows `\GPU Engine(*engtype_3D)` counters |
-| System Telemetry | °C | ACPI `MSAcpi_ThermalZoneTemperature`, else the GPU's own sensor |
+| System Telemetry | GPU % | Windows GPU Engine counters, summing processes per engine and reporting the busiest engine across available adapters; NVIDIA/AMD tools are a fallback |
+| System Telemetry | °C | ACPI `MSAcpi_ThermalZoneTemperature`, else a vendor GPU sensor; an ACPI zone is not necessarily CPU temperature |
 | Now Playing | title, artist, album, app | Windows media session (SMTC) via `GlobalSystemMediaTransportControlsSessionManager` |
 | Now Playing | transport state | `PlaybackInfo.PlaybackStatus` |
 | Now Playing | position | `TimelineProperties.Position` at `LastUpdatedTime`, extrapolated by the elapsed time while playing (capped at 5 s, so a stale timeline cannot jump the bar) |
 
 Consequences worth knowing:
 
-- On a laptop with no ACPI thermal zone and no vendor GPU tool, GPU and °C read
-  `--`. That is the correct answer; the alternative is a plausible fiction.
-- `media` needs an app that talks to SMTC (Spotify, browsers, VLC, iTunes). A
-  player that does not will leave the screen on `NO MEDIA`.
+- GPU and temperature show `--` when no corresponding source is available.
+  Vendor GPU utilization and Windows engine counters measure different things;
+  sampling times and the selected GPU can differ from Task Manager.
+- `media` needs a player that exposes an SMTC session to Windows. A player that
+  does not may leave the screen on `NO MEDIA`; a failed probe shows `MEDIA ERROR`
+  and an explanation in the display drawer instead.
 - CPU and RAM are real on every platform; GPU and temperature are Windows-only.
 
 ## Capacity: how many screens fit

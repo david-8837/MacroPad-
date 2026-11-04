@@ -34,8 +34,8 @@ export interface PaletteItem {
 export interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
-  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros';
-  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros') => void;
+  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets';
+  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets') => void;
   deck: Deck;
   activeLayer: Layer;
   onSelectLayer: (layerId: string) => void;
@@ -115,7 +115,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       {
         id: 'tab-designer',
         group: 'Page',
-        label: 'Deck Studio',
+        label: 'Configure Keys',
         where: 'Layout editor & digital twin',
         also: 'home editor keymap pad simulator twin buttons',
         icon: <Sliders className="w-4 h-4 text-[#1351AA]" />,
@@ -174,7 +174,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'action-diagnostics',
         group: 'Action',
         label: 'Hardware Status & Diagnostics',
-        where: 'Studio inspector · action history, wire log & self-tests',
+        where: 'Key editor · action history, wire log & self-tests',
         also: 'diagnostics action history logs debug health selftest errors',
         icon: <Activity className="w-4 h-4 text-[#1351AA]" />,
         run: onOpenDiagnostics,
@@ -191,8 +191,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       {
         id: 'action-export-deck',
         group: 'Action',
-        label: 'Export Deck to JSON',
-        where: 'Backup the deck and its 4 layers',
+        label: 'Export Backup to JSON',
+        where: 'Back up layers, presets, macros, screen and lighting',
         also: 'export backup json save share deck layout',
         icon: <Download className="w-4 h-4 text-[#1351AA]" />,
         run: onExportDeck,
@@ -201,7 +201,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
     // 3. Hardware Interop Actions
     if (hardwareState === 'connected') {
-      if (!deck.isLocked) list.push(
+      list.push(
         {
           id: 'hw-sync',
           group: 'Hardware',
@@ -245,9 +245,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       list.push({
         id: `layer-${l.id}`,
         group: 'Layer',
-        label: `Edit / preview ${l.name}`,
+        label: `Edit / preview Layer ${idx}`,
         where: l.id === activeLayer.id ? 'Editing here · pad unchanged' : `Preview Layer ${idx} · pad unchanged`,
-        also: `edit preview layer channel ${l.name} ch${idx} layer${idx}`,
+        also: `edit preview layer channel ch${idx} layer${idx}`,
         icon: <Layers className="w-4 h-4 text-[#1351AA]" />,
         run: () => {
           onSelectLayer(l.id);
@@ -263,7 +263,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: `key-${idx}`,
         group: 'Key',
         label: `Key ${idx + 1}: ${actionName}`,
-        where: `${activeLayer.name} · Switch #${idx + 1}`,
+        where: `Layer ${deck.layers.findIndex(layer => layer.id === activeLayer.id)} · Switch #${idx + 1}`,
         also: `key ${idx + 1} switch button ${actionName} edit`,
         icon: <Sliders className="w-4 h-4 text-[#646464]" />,
         run: () => {
@@ -277,7 +277,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       id: 'knob-edit',
       group: 'Key',
       label: `Rotary Encoder: ${activeLayer.dial.label || 'Dial Controls'}`,
-      where: `${activeLayer.name} · Encoder`,
+      where: `Layer ${deck.layers.findIndex(layer => layer.id === activeLayer.id)} · Encoder`,
       also: 'knob dial rotary encoder volume scrub cw ccw press',
       icon: <Volume2 className="w-4 h-4 text-[#1351AA]" />,
       run: () => {
@@ -296,8 +296,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         also: 'audio master volume mute sound silence speaker',
         icon: <Volume2 className="w-4 h-4 text-[#1351AA]" />,
         run: async () => {
-          await window.electronAPI?.toggleMasterMute?.();
-          onTriggerAction?.('Master Mute Toggled', 'Windows master mute changed', 'info');
+          const result = await window.electronAPI?.toggleMasterMute?.();
+          if (!result?.ok) throw new Error(result?.error || 'Windows audio control is unavailable');
+          onTriggerAction?.('Master Mute Toggled', 'Windows master mute changed', 'success');
         },
       },
       {
@@ -309,10 +310,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         icon: <Volume2 className="w-4 h-4 text-[#141414]" />,
         run: async () => {
           const mic = await window.electronAPI?.getMic?.();
-          if (mic?.ok && mic.value) {
-            await window.electronAPI?.setMic?.({ muted: !mic.value.muted });
-            onTriggerAction?.('Mic Mute Toggled', `Microphone ${mic.value.muted ? 'unmuted' : 'muted'}`, 'info');
-          }
+          if (!mic?.ok || !mic.value) throw new Error(mic?.error || 'Microphone control is unavailable');
+          const result = await window.electronAPI?.setMic?.({ muted: !mic.value.muted });
+          if (!result?.ok) throw new Error(result?.error || 'Microphone mute failed');
+          onTriggerAction?.('Mic Mute Toggled', `Microphone ${mic.value.muted ? 'unmuted' : 'muted'}`, 'success');
         },
       },
       {
@@ -323,7 +324,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         also: 'volume up louder master sound',
         icon: <Volume2 className="w-4 h-4 text-[#1351AA]" />,
         run: async () => {
-          await window.electronAPI?.adjustMasterVolume?.(5);
+          const result = await window.electronAPI?.adjustMasterVolume?.(5);
+          if (!result?.ok) throw new Error(result?.error || 'Windows audio control is unavailable');
         },
       },
       {
@@ -334,7 +336,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         also: 'volume down quieter softer sound',
         icon: <Volume2 className="w-4 h-4 text-[#1351AA]" />,
         run: async () => {
-          await window.electronAPI?.adjustMasterVolume?.(-5);
+          const result = await window.electronAPI?.adjustMasterVolume?.(-5);
+          if (!result?.ok) throw new Error(result?.error || 'Windows audio control is unavailable');
         },
       }
     );
@@ -352,12 +355,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         also: `${s.category} ${s.description} ${s.appName || ''} ${s.keys.join(' ')}`,
         icon: <Flame className="w-4 h-4 text-[#1351AA]" />,
         run: async () => {
-          await executeDeckAction({
+          const result = await executeDeckAction({
             id: `palette-shortcut-${s.id}`,
             category: 'hotkey',
             name: s.name,
             payload: { keys: s.keys },
           });
+          if (!result.success) throw new Error(result.error || 'Shortcut failed');
           onTriggerAction?.(`Executed: ${s.name}`, `Keys: ${s.keys.join('+')}`, 'success');
         },
       });
@@ -388,8 +392,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     if (!isOpen) return;
     setQuery('');
     setSelected(0);
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
+    return () => { cancelAnimationFrame(frame); if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, [isOpen]);
 
   useEffect(() => {
@@ -409,7 +414,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     const item = results[index];
     if (!item) return;
     onClose();
-    await item.run();
+    try { await item.run(); }
+    catch (error) { onTriggerAction?.(`[ACTION FAILED] ${item.label}`, error instanceof Error ? error.message : 'Action failed', 'error'); }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -464,6 +470,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="Global Command Palette"
+      onKeyDown={(e) => {
+        if (e.defaultPrevented) return;
+        if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+        if (e.key !== 'Tab') return;
+        const focusable = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('input, button:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+        if (!focusable.length) return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }}
     >
       <div className="relative w-full max-w-2xl bg-[#FFFFFF] border border-[#C7C7C7] flex flex-col overflow-hidden animate-in zoom-in-95 duration-100">
         {/* Search Input Bar */}
@@ -478,8 +494,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             placeholder="Type a command, shortcut, layer, key, or page..."
             className="w-full bg-transparent text-sm text-[#141414] placeholder-[#7A7A7A] focus:outline-hidden font-sans"
             role="combobox"
+            aria-label="Search commands"
+            aria-autocomplete="list"
             aria-expanded="true"
             aria-controls="palette-results-list"
+            aria-activedescendant={results[selected] ? `palette-option-${selected}` : undefined}
           />
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="text-[10px] font-mono px-2 py-0.5 bg-[#EDECE8] text-[#646464] border border-[#E3E2DE]">
@@ -507,6 +526,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                 <button
                   key={item.id}
                   data-index={index}
+                  id={`palette-option-${index}`}
                   type="button"
                   role="option"
                   aria-selected={isSelected}

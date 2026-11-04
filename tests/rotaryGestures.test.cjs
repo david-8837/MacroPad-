@@ -1,0 +1,41 @@
+const assert = require('node:assert/strict');
+const { mkdtempSync, rmSync, writeFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join, resolve } = require('node:path');
+const { buildSync } = require('esbuild');
+const { JSDOM } = require('jsdom');
+(async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rotary-gestures-'));
+  const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'http://localhost/' });
+  global.window = dom.window; global.document = dom.window.document; global.navigator = dom.window.navigator;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  global.requestAnimationFrame = fn => setTimeout(fn, 5); global.cancelAnimationFrame = clearTimeout;
+  const oldChannel = global.MessageChannel;
+  global.MessageChannel = class { constructor() { this.port1 = { onmessage: null }; this.port2 = { postMessage: () => setTimeout(() => this.port1.onmessage?.(), 0) }; } };
+  try {
+    const entry = join(dir, 'entry.tsx');
+    writeFileSync(entry, `import React, { act } from ${JSON.stringify(resolve('node_modules/react/index.js'))};
+import { createRoot } from ${JSON.stringify(resolve('node_modules/react-dom/client.js'))};
+import { RotaryEncoder } from ${JSON.stringify(resolve('src/components/RotaryEncoder.tsx'))};
+export { act }; export function create(el) { const root = createRoot(el); return { render: (dial, trigger, cycle, channel=0) => root.render(<RotaryEncoder dial={dial} channelIndex={channel} onTriggerAction={trigger} onCycleMode={cycle}/>), unmount: () => root.unmount() }; }`);
+    const out = join(dir, 'bundle.cjs'); buildSync({ entryPoints: [entry], outfile: out, bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent', nodePaths: [resolve('node_modules')] });
+    const { act, create } = require(out); const ui = create(document.getElementById('root'));
+    const action = { id: 'tap', name: 'tap', category: 'hotkey', payload: { keys: ['A'] } };
+    const dial = { label: 'Test', availableModes: ['a','b','c','d'], activeModeName: 'a', cwAction: action, ccwAction: action, pressAction: action, channelHoldThresholdMs: 60, accelerationCurve: 'linear', sensitivity: 5 };
+    const events = [], cycles = [];
+    const render = async (d = dial, channel = 0) => act(async () => ui.render(d, id => events.push(id), idx => cycles.push(idx), channel));
+    const button = () => document.querySelector('button[title^="Tap:"]');
+    const keyboard = async (type, repeat = false) => act(async () => button().dispatchEvent(new window.KeyboardEvent(type, { key: ' ', bubbles: true, cancelable: true, repeat })));
+    const pointer = async type => act(async () => { const e = new window.MouseEvent(type, { bubbles: true, button: 0, clientX: 0, clientY: 0 }); Object.defineProperty(e, 'pointerId', { value: 3 }); button().dispatchEvent(e); });
+    const wait = async ms => act(async () => { await new Promise(r => setTimeout(r, ms)); });
+    await render(); await keyboard('keydown'); await keyboard('keyup'); assert.deepEqual(events.splice(0), ['tap']);
+    await keyboard('keydown'); await keyboard('keydown', true); await wait(90); await keyboard('keyup'); assert.deepEqual(events.splice(0), []); assert.deepEqual(cycles.splice(0), [1]);
+    await pointer('pointerdown'); await pointer('pointerout'); await wait(90); assert.deepEqual(events.splice(0), []); assert.deepEqual(cycles.splice(0), []);
+    await pointer('pointerdown'); await pointer('pointercancel'); await wait(90); assert.deepEqual(events.splice(0), []); assert.deepEqual(cycles.splice(0), []);
+    await pointer('pointerdown'); await act(async () => { const e = new window.MouseEvent('pointermove', { bubbles: true, clientX: 50, clientY: 50 }); Object.defineProperty(e, 'pointerId', { value: 3 }); window.dispatchEvent(e); });
+    await wait(90); assert.deepEqual(events.splice(0), []); assert.deepEqual(cycles.splice(0), [], 'window movement cancels even without pointer capture');
+    await pointer('pointerdown'); await act(async () => window.dispatchEvent(new window.Event('blur'))); await wait(90); assert.deepEqual(events.splice(0), []); assert.deepEqual(cycles.splice(0), [], 'window blur cancels a pending hold');
+    await keyboard('keydown'); await render({ ...dial }, 1); await wait(90); await keyboard('keyup'); assert.deepEqual(events.splice(0), []); assert.deepEqual(cycles.splice(0), []);
+    await act(async () => ui.unmount()); console.log('rotaryGestures: tap, hold, cancellation and layer change passed');
+  } finally { global.MessageChannel = oldChannel; dom.window.close(); rmSync(dir, { recursive: true, force: true }); }
+})().catch(err => { console.error(err); process.exitCode = 1; });

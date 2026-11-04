@@ -1,52 +1,43 @@
 import React, { useState } from 'react';
 import { ConnectedDeviceInfo, HardwareConnectionState } from '../utils/hardwareBridge';
 import {
-  Sliders,
   Minus,
   Square,
   X,
-  Radio,
-  Video,
-  Music,
-  Terminal,
   ChevronDown,
-  Plus,
   Usb,
   Cpu,
   Power,
   Activity,
   Zap,
-  Search,
+  CircleHelp,
 } from 'lucide-react';
 
 interface TopNavbarProps {
-  deckName: string;
-  onTriggerOSD: () => void;
-  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros';
-  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros') => void;
+  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets';
+  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets') => void;
   hardwareState: HardwareConnectionState;
   deviceInfo: ConnectedDeviceInfo | null;
   onConnectSerial: () => void;
   onDisconnectHardware?: () => void;
   onOpenDiagnostics?: () => void;
   onOpenFirmwarePanel?: () => void;
-  onOpenCommandPalette?: () => void;
+  onOpenHelp: () => void;
 }
 
 // The Applications page is deliberately not a tab: it is a launcher you visit to
 // assign one key, not a workspace you sit in. Reach it from Ctrl+K or from the
 // App action in the key drawer; the page carries its own way back.
 const TABS = [
-  { id: 'designer', label: 'Studio', index: '01' },
-  { id: 'tester', label: 'Tester', index: '02' },
-  { id: 'shortcuts', label: 'Shortcuts', index: '03' },
-  { id: 'lighting', label: 'Lighting', index: '04' },
-  { id: 'macros', label: 'Macros', index: '05' },
+  { id: 'designer', label: 'Keys', index: '01' },
+  { id: 'presets', label: 'Presets', index: '02' },
+  { id: 'tester', label: 'Tester', index: '03' },
+  { id: 'shortcuts', label: 'Shortcuts', index: '04' },
+  { id: 'lighting', label: 'Lighting', index: '05' },
+  { id: 'macros', label: 'Macros', index: '06' },
 ] as const;
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
-  deckName,
-  onTriggerOSD,
   activeTab,
   onChangeTab,
   hardwareState,
@@ -55,38 +46,32 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onDisconnectHardware,
   onOpenDiagnostics,
   onOpenFirmwarePanel,
-  onOpenCommandPalette,
+  onOpenHelp,
 }) => {
   const [showConnectMenu, setShowConnectMenu] = useState(false);
 
+  const nativeWindowControls = window.electronAPI?.nativeWindowControls === true;
+  const connecting = hardwareState === 'connecting';
   const connected = hardwareState === 'connected';
-  const compact = typeof window !== 'undefined' && window.innerWidth < 1500;
 
   return (
-    <header className="h-16 shrink-0 border-b border-[#C7C7C7] bg-[#E3E2DE] select-none z-50">
-      <div className="h-full flex items-stretch min-w-0">
+    <header className={`app-header ${nativeWindowControls ? 'app-header--native-controls' : ''} h-16 shrink-0 border-b border-[#C7C7C7] bg-[#E3E2DE] select-none z-50`}>
+      <div className="navbar-layout h-full flex items-stretch min-w-0">
 
         {/* ── identity · brand + deck ───────────────────────────── */}
-        <div className="flex items-center gap-3 pl-4 pr-4 border-r border-[#C7C7C7] shrink-0 min-w-0">
+        <div className="navbar-brand flex items-center gap-3 pl-4 pr-4 border-r border-[#C7C7C7] shrink-0 min-w-0">
           <div className="flex items-center gap-2 shrink-0">
-            <span className="w-6 h-6 bg-[#141414] text-[#E3E2DE] font-mono text-[11px] font-bold flex items-center justify-center">
-              K
+            <span className="brand-mark w-6 h-6 bg-[#141414] text-[#E3E2DE] font-mono text-[11px] font-bold flex items-center justify-center">
+              Z
             </span>
             <span className="text-[13px] font-bold uppercase tracking-[-0.02em] text-[#141414] leading-none">
-              Kadowaz<span className="text-[#646464]"> / Deck</span>
+              ZERO<span className="text-[#646464]"> / Macropad</span>
             </span>
           </div>
-          <button
-            onClick={onTriggerOSD}
-            title="Show on-deck overlay"
-            className="hidden lg:flex items-center gap-1.5 max-w-[170px] px-2 py-1.5 border border-[#C7C7C7] hover:border-[#141414] text-[11px] font-semibold text-[#444343] transition-colors"
-          >
-            <span className="truncate">{deckName}</span>
-          </button>
         </div>
 
         {/* ── cols 4–9 · modules ─────────────────────────────────── */}
-        <nav className="flex-1 flex items-stretch justify-start px-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Modules">
+        <nav className="module-navigation flex-1 flex items-stretch justify-start px-1 min-w-0 overflow-x-auto" aria-label="Modules">
           {TABS.map((t) => {
             const on = activeTab === t.id;
             return (
@@ -94,7 +79,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                 key={t.id}
                 onClick={() => onChangeTab(t.id)}
                 aria-current={on ? 'true' : undefined}
-                className={`group relative px-3 flex items-center gap-1.5 border-b-2 transition-colors duration-300 shrink-0 ${
+                className={`premium-nav-link group relative px-3 flex items-center gap-1.5 border-b-2 transition-colors duration-300 shrink-0 ${
                   on
                     ? 'border-[#1351AA] text-[#1351AA]'
                     : 'border-transparent text-[#646464] hover:text-[#141414]'
@@ -109,7 +94,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </nav>
 
         {/* ── cols 10–12 · hardware + actions ────────────────────── */}
-        <div className="flex items-center justify-end gap-1.5 pr-3 pl-3 border-l border-[#C7C7C7] shrink-0">
+        <div className="navbar-actions flex items-center justify-end gap-1.5 pr-3 pl-3 border-l border-[#C7C7C7] shrink-0">
           {/* hardware state */}
           <div className="relative">
             {connected ? (
@@ -130,16 +115,21 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               <>
                 <button
                   onClick={() => setShowConnectMenu(!showConnectMenu)}
+                  disabled={connecting}
+                  aria-label={connecting ? "Connecting macropad" : "Connect macropad"}
+                  aria-expanded={showConnectMenu}
+                  aria-busy={connecting}
                   className="flex items-center gap-2 h-8 px-2 border border-[#C7C7C7] hover:border-[#141414] transition-colors"
                 >
                   <span className="mark mark--off" />
                   <Usb className="w-3 h-3 text-[#646464]" />
-                  <span className="hidden 2xl:inline font-mono text-[9px] font-bold tracking-[0.1em] text-[#444343]">OFFLINE</span>
+                  <span className="font-mono text-[9px] font-bold tracking-[0.1em] text-[#444343]">{connecting ? 'CONNECTING…' : hardwareState === 'error' ? 'RETRY CONNECT' : 'CONNECT'}</span>
                   <ChevronDown className="w-3 h-3 text-[#646464]" />
                 </button>
 
                 {showConnectMenu && (
                   <div className="absolute top-full right-0 mt-2 w-[248px] bg-[#FFFFFF] border border-[#C7C7C7] z-50">
+                    {hardwareState === 'error' && <p role="alert" className="px-3 py-2 text-[11px] text-[#a13224] border-b border-[#E3E2DE]">No port selected or connection failed. Check the USB cable and close other apps using the port, then try again.</p>}
                     <div className="px-3 py-2 border-b border-[#C7C7C7]">
                       <span className="eyebrow">Connect device</span>
                     </div>
@@ -176,13 +166,14 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
           {/* tool squares */}
           {[
-            { icon: <Activity className="w-3.5 h-3.5" />, title: 'Expand Hardware Status & Diagnostics in Studio', fn: onOpenDiagnostics },
-            { icon: <Search className="w-3.5 h-3.5" />, title: 'Command palette · Ctrl+K', fn: onOpenCommandPalette },
+            { icon: <CircleHelp className="w-3.5 h-3.5" />, title: 'Help & About', fn: onOpenHelp },
+            { icon: <Activity className="w-3.5 h-3.5" />, title: 'Expand Hardware Status & Diagnostics', fn: onOpenDiagnostics },
           ].map((b) => (
             <button
               key={b.title}
               onClick={b.fn}
               title={b.title}
+              aria-label={b.title}
               className="w-8 h-8 flex items-center justify-center border border-[#C7C7C7] text-[#444343] hover:border-[#141414] hover:bg-[#141414] hover:text-[#E3E2DE] transition-colors"
             >
               {b.icon}
@@ -190,7 +181,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           ))}
 
           {/* window controls */}
-          <div className="flex items-center ml-1 border-l border-[#C7C7C7] pl-2 gap-0.5">
+          {!nativeWindowControls && <div className="flex items-center ml-1 border-l border-[#C7C7C7] pl-2 gap-0.5">
             {[
               { icon: <Minus className="w-3 h-3" />, act: 'minimize', hover: 'hover:bg-[#EDECE8]' },
               { icon: <Square className="w-2.5 h-2.5" />, act: 'maximize', hover: 'hover:bg-[#EDECE8]' },
@@ -198,6 +189,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             ].map((w) => (
               <button
                 key={w.act}
+                type="button"
+                aria-label={w.act === 'close' ? 'Close to tray' : w.act === 'maximize' ? 'Maximize or restore window' : 'Minimize window'}
+                title={w.act === 'close' ? 'Close to tray' : w.act === 'maximize' ? 'Maximize or restore window' : 'Minimize window'}
                 onClick={() => {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   (window as any).electronAPI?.windowControl?.(w.act);
@@ -207,7 +201,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                 {w.icon}
               </button>
             ))}
-          </div>
+          </div>}
         </div>
       </div>
     </header>

@@ -270,4 +270,3 @@ export interface DecodedFrame {
 
 export type CommandId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 128 | 129 | 130 | 131 | 133 | 134 | 136 | 140 | 141 | 192 | 193 | 254 | 255;
 export type StatusCode = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
-

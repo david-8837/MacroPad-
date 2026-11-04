@@ -220,8 +220,10 @@ const headerPath = join(root, 'firmware', 'include', 'oled_frames.h');
 const sourcePath = join(root, 'firmware', 'src', 'drivers', 'oled_frames.c');
 
 if (checkOnly) {
-  const sameHeader = existsSync(headerPath) && readFileSync(headerPath, 'utf8') === header;
-  const sameSource = existsSync(sourcePath) && readFileSync(sourcePath, 'utf8') === source;
+  // Git may check generated C files out with CRLF on Windows.
+  const norm = (s) => s.replace(/\r\n/g, '\n');
+  const sameHeader = existsSync(headerPath) && norm(readFileSync(headerPath, 'utf8')) === norm(header);
+  const sameSource = existsSync(sourcePath) && norm(readFileSync(sourcePath, 'utf8')) === norm(source);
   if (!sameHeader || !sameSource) {
     console.error('oled frames are stale — run: node scripts/export-oled-frames.mjs');
     process.exit(1);
