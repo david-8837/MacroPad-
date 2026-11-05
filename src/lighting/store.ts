@@ -12,6 +12,7 @@
  */
 import { createLighting, LED_MODE, type LightingConfig, LED_COUNT } from './engine';
 import { CHANNEL_COUNT } from '../../host/protocol/mpad3-protocol.mjs';
+import { validLighting } from '../utils/backup';
 
 /* One lighting config per device channel. The deck's four layers are these four
  * channels: same number, same order, one concept with two names. */
@@ -49,6 +50,8 @@ const DEFAULTS: LightingConfig[] = [
   createLighting({ mode: LED_MODE.REACTIVE, brightness: 180, speed: 128, r: 32, g: 224, b: 96 }),
 ];
 
+let storageError = '';
+let unreadable = false;
 let channels: LightingConfig[] = load();
 const listeners = new Set<() => void>();
 
@@ -90,33 +93,41 @@ function load(): LightingConfig[] {
   if (typeof localStorage === 'undefined') return fresh;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fresh;
-    const parsed = JSON.parse(raw) as PersistedLighting;
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.channels)) return fresh;
+    if (raw === null) { unreadable = false; storageError = ''; return fresh; }
+    const parsed: unknown = JSON.parse(raw);
+    if (!validLighting(parsed) || parsed === null) throw new Error('Invalid lighting settings');
+    unreadable = false; storageError = '';
     return fresh.map((f, i) => sanitise(parsed.channels[i], f));
   } catch {
+    unreadable = true;
+    storageError = 'Saved lighting settings could not be read. The original data has not been overwritten; temporary lighting edits will not be saved. Restore a trusted backup to replace them.';
     return fresh;
   }
 }
 
 function persist() {
-  if (typeof localStorage === 'undefined') return;
+  if (typeof localStorage === 'undefined' || unreadable) return;
   try {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ version: 1, channels: channels.map(clone) } satisfies PersistedLighting),
     );
+    storageError = '';
   } catch {
-    /* private mode / quota: the session keeps working, the value just is not kept */
+    storageError = 'Lighting changes could not be saved on this computer. Check storage permissions or free space before closing the app.';
   }
 }
 
-export function getChannel(channel: number): LightingConfig {
-  return channels[channel] ?? channels[0];
+/** Reload after an explicit backup restore; never writes to the pad. */
+export function reloadLightingFromStorage(): void {
+  channels = load();
+  listeners.forEach((fn) => fn());
 }
 
-export function getAllChannels(): LightingConfig[] {
-  return channels.map(clone);
+export function getLightingStorageError(): string { return storageError; }
+
+export function getChannel(channel: number): LightingConfig {
+  return channels[channel] ?? channels[0];
 }
 
 export function setChannel(channel: number, patch: Partial<LightingConfig>): LightingConfig {
@@ -145,11 +156,4 @@ export function resetChannel(channel: number): LightingConfig {
 export function subscribe(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
-}
-
-/** Test hook: drop in-memory state back to the defaults. */
-export function __resetForTests() {
-  channels = DEFAULTS.map(clone);
-  persist();
-  listeners.forEach((fn) => fn());
 }

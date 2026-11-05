@@ -3,6 +3,7 @@ const assert = require('assert');
 const path = require('path');
 const audio = require('../electron/native/audio.cjs');
 const { executeAction } = require('../electron/actionExecutor.cjs');
+require('node:child_process').execFileSync(process.execPath, [path.join(__dirname, 'audioMixerUi.test.cjs')], { stdio: 'inherit' });
 
 async function runTests() {
   // Everything below goes through powershell.exe and the WASAPI COM interop in
@@ -21,6 +22,21 @@ async function runTests() {
   assert.strictEqual(typeof st.ok, 'boolean', 'selfTest().ok should be boolean');
   assert.strictEqual(typeof st.detail, 'string', 'selfTest().detail should be string');
   console.log('  ✓ selfTest passed:', st.detail);
+
+  // Hosted Windows CI machines may have no audio endpoints. Check the explicit
+  // no-device failure path, but keep the real-device assertions on normal PCs.
+  if (process.env.CI && st.detail.includes('devices failed: Windows reported no audio devices.')) {
+    const devices = await audio.listDevices();
+    assert.strictEqual(devices.ok, false);
+    assert.match(devices.error, /^Windows reported no audio devices\./);
+    const vol = await audio.getMasterVolume();
+    assert.strictEqual(vol.ok, false);
+    assert.match(vol.error, /Master volume could not be read from Windows/);
+    // The action executor can fall back to sending a media key, so its success
+    // result does not establish that a hardware audio endpoint exists.
+    console.log('audioControl: SKIP real-device checks — CI has no audio endpoints.');
+    return;
+  }
 
   // 2. Master volume & mute inspection
   const vol = await audio.getMasterVolume();

@@ -320,12 +320,16 @@ static void handle_led_test(const uint8_t *payload, uint16_t len) {
 }
 
 static void handle_get_oled_state(void) {
+#if BOARD_KEYS_ONLY
+    tx_error(STATUS_BAD_ARG);
+#else
     uint8_t mode = oled_playlist_current();
     /* Tests and a late caller may not have installed the playlist listener.
      * The actual cursor always wins; never advertise a stale mode. */
     if (!s_mode_known || s_announced_mode != mode) usb_proto_oled_mode_changed(mode);
     const uint8_t state[3] = {mode, (uint8_t)s_mode_epoch, (uint8_t)(s_mode_epoch >> 8)};
     tx_queue(CMD_OLED_STATE, state, sizeof(state));
+#endif
 }
 
 static void handle_set_oled_mode(const uint8_t *payload, uint16_t len) {
@@ -341,6 +345,10 @@ static void handle_set_oled_mode(const uint8_t *payload, uint16_t len) {
 }
 
 static void handle_oled_frame(const uint8_t *payload, uint16_t len) {
+#if BOARD_KEYS_ONLY
+    /* No display: never buffer pixels or advertise an acknowledgement. */
+    if (!(len > 3u && payload[3] == 0u)) tx_error(STATUS_BAD_ARG);
+#else
     /* There is no request ID on ERROR. Report at most one application error
      * for a two-packet transfer: an invalid first half is silently discarded,
      * then the final half returns BAD_ARG/CRC/BUSY once. Two asynchronous ERRORs
@@ -359,6 +367,7 @@ static void handle_oled_frame(const uint8_t *payload, uint16_t len) {
     } else if (result < 0 && !first_half) {
         tx_error(STATUS_BAD_ARG);
     }
+#endif
 }
 
 static void handle_bootloader(void) {

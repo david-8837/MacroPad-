@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { playKeyClick } from '../utils/soundEffects';
+import { appLibraryNeedsIconRefresh, loadAppLibrary, readAppLibrary, mergeAppLibrary, saveAppLibrary } from '../utils/appLibrary';
+import { DiscoveredAppIcon } from './DiscoveredAppIcon';
 import {
   Search,
   Package,
@@ -18,7 +20,6 @@ import {
   ChevronRight,
   AlertCircle,
   Code,
-  Play,
   X,
   Sparkles,
   Plus,
@@ -32,7 +33,6 @@ import { DiscoveredApp } from '../types';
 
 export interface AppLauncherPanelProps {
   selectedKeyIndex: number | null;
-  isDeckLocked?: boolean;
   onAssignApp: (
     keyIndex: number,
     app: DiscoveredApp,
@@ -51,7 +51,6 @@ export interface AppLauncherPanelProps {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = 'kadowaz_app_library';
 const CACHE_TIMESTAMP_KEY = 'kadowaz_app_library_ts';
 
 type SortMode = 'az' | 'za' | 'recent';
@@ -107,7 +106,6 @@ const SkeletonCard: React.FC = () => (
 
 export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   selectedKeyIndex,
-  isDeckLocked = false,
   onAssignApp,
   onTriggerAction,
   activeChannelIndex = 0,
@@ -115,6 +113,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
 }) => {
   // ── State ──────────────────────────────────────────────────────────────────
   const [apps, setApps] = useState<DiscoveredApp[]>([]);
+  const appsRef = useRef<DiscoveredApp[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [hasScannedOnce, setHasScannedOnce] = useState(false);
@@ -148,22 +147,21 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   const electronAvailable = typeof window !== 'undefined' && !!(window as any).electronAPI?.discoverApps;
 
   // ── Cache helpers ──────────────────────────────────────────────────────────
-  const loadCache = useCallback((): DiscoveredApp[] | null => {
+  const loadCache = useCallback((): DiscoveredApp[] => {
     try {
-      const raw = localStorage.getItem(CACHE_KEY);
       const ts = localStorage.getItem(CACHE_TIMESTAMP_KEY);
-      if (raw) {
-        if (ts) setLastScanTimestamp(ts);
-        return JSON.parse(raw) as DiscoveredApp[];
-      }
+      if (ts) setLastScanTimestamp(ts);
     } catch { /* noop */ }
-    return null;
+    const result = readAppLibrary();
+    if (result.error) setScanError(result.error);
+    return result.apps;
   }, []);
 
-  const saveCache = useCallback((data: DiscoveredApp[]) => {
+  const saveCache = useCallback((data: DiscoveredApp[], refreshed = false) => {
+    const error = saveAppLibrary(data, refreshed);
+    if (error) { setScanError(error); return; }
     try {
       const ts = new Date().toISOString();
-      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
       localStorage.setItem(CACHE_TIMESTAMP_KEY, ts);
       setLastScanTimestamp(ts);
     } catch { /* noop */ }
@@ -176,8 +174,14 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
     setScanError(null);
     try {
       const result: DiscoveredApp[] = await (window as any).electronAPI.discoverApps();
-      setApps(result);
-      saveCache(result);
+      if (!Array.isArray(result) || result.length === 0) {
+        setScanError(readAppLibrary().error || 'No applications found. The saved list was kept.');
+        return;
+      }
+      const merged = mergeAppLibrary([...loadAppLibrary(), ...appsRef.current], result);
+      appsRef.current = merged;
+      setApps(merged);
+      saveCache(merged, true);
       setHasScannedOnce(true);
     } catch (err: any) {
       setScanError(err?.message ?? 'Unknown error during app discovery.');
@@ -189,12 +193,12 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   // ── Mount: load cache or scan ──────────────────────────────────────────────
   useEffect(() => {
     const cached = loadCache();
-    if (cached && cached.length > 0) {
+    if (cached.length > 0) {
+      appsRef.current = cached;
       setApps(cached);
       setHasScannedOnce(true);
-    } else if (electronAvailable) {
-      runDiscovery();
     }
+    if (electronAvailable && appLibraryNeedsIconRefresh(cached)) runDiscovery();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -205,12 +209,12 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
     try {
       const browsed: DiscoveredApp | null = await (window as any).electronAPI.browseForApp();
       if (browsed) {
-        setApps((prev) => {
-          const exists = prev.some((a) => a.id === browsed.id);
-          const next = exists ? prev.map((a) => (a.id === browsed.id ? browsed : a)) : [browsed, ...prev];
-          saveCache(next);
-          return next;
-        });
+        const prev = appsRef.current;
+        const exists = prev.some((a) => a.id === browsed.id);
+        const next = exists ? prev.map((a) => (a.id === browsed.id ? browsed : a)) : [browsed, ...prev];
+        appsRef.current = next;
+        setApps(next);
+        saveCache(next);
         setSelectedAppId(browsed.id);
       }
     } catch { /* noop */ }
@@ -263,7 +267,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
   }, []);
 
   const handleAssign = useCallback(() => {
-    if (!selectedApp || isDeckLocked) return;
+    if (!selectedApp) return;
     const targetIdx = targetSwitchIndex;
     playKeyClick('heavy');
     onAssignApp(
@@ -281,7 +285,6 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
     setTimeout(() => setAssignedAppId(null), 1800);
   }, [
     selectedApp,
-    isDeckLocked,
     targetSwitchIndex,
     targetChannelIndex,
     onAssignApp,
@@ -335,7 +338,7 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
           Desktop Companion Required
         </h3>
         <p className="text-xs text-[#646464] text-center max-w-md leading-relaxed">
-          Application discovery requires the KADOWAZ desktop companion.
+          Application discovery requires the ZERO desktop companion.
           <br />
           Run the app via Electron to scan and manage installed applications.
         </p>
@@ -597,17 +600,8 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
                       {/* Icon + Validity dot */}
                       <div className="flex items-start gap-3 mb-2.5">
                         <div className="relative shrink-0">
-                          {app.iconDataUrl ? (
-                            <img
-                              src={app.iconDataUrl}
-                              alt={app.name}
-                              className="w-10 h-10 object-contain bg-[#F4F3F0] p-1"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 bg-[#F4F3F0] flex items-center justify-center">
-                              <CatIcon className="w-5 h-5 text-[#646464]" />
-                            </div>
-                          )}
+                          <DiscoveredAppIcon src={app.iconDataUrl} alt={app.name} className="w-10 h-10 object-contain bg-[#F4F3F0] p-1"
+                            fallback={<div className="w-10 h-10 bg-[#F4F3F0] flex items-center justify-center"><CatIcon className="w-5 h-5 text-[#646464]" /></div>} />
                           {/* Validity indicator */}
                           <span
                             className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-[#FFFFFF] ${
@@ -668,20 +662,11 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
               <div className="p-5 space-y-5">
                 {/* Header */}
                 <div className="flex items-start gap-4">
-                  {selectedApp.iconDataUrl ? (
-                    <img
-                      src={selectedApp.iconDataUrl}
-                      alt={selectedApp.name}
-                      className="w-14 h-14 object-contain bg-[#F4F3F0] p-1.5 shrink-0"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 bg-[#F4F3F0] flex items-center justify-center shrink-0">
-                      {(() => {
-                        const Icon = getCategoryIcon(selectedApp.category);
-                        return <Icon className="w-7 h-7 text-[#646464]" />;
-                      })()}
-                    </div>
-                  )}
+                  <DiscoveredAppIcon src={selectedApp.iconDataUrl} alt={selectedApp.name} className="w-14 h-14 object-contain bg-[#F4F3F0] p-1.5 shrink-0"
+                    fallback={<div className="w-14 h-14 bg-[#F4F3F0] flex items-center justify-center shrink-0">{(() => {
+                      const Icon = getCategoryIcon(selectedApp.category);
+                      return <Icon className="w-7 h-7 text-[#646464]" />;
+                    })()}</div>} />
                   <div className="min-w-0 flex-1">
                     <h3 className="text-base font-bold text-[#141414] leading-tight break-words">
                       {selectedApp.name}
@@ -841,17 +826,13 @@ export const AppLauncherPanel: React.FC<AppLauncherPanelProps> = ({
                   {/* Assign Button */}
                   <button
                     onClick={handleAssign}
-                    disabled={isDeckLocked}
-                    title={isDeckLocked ? 'Unlock deck in the sidebar before assigning an app' : undefined}
                     className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 text-xs font-mono font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
  assignedAppId === selectedApp.id
  ? 'bg-[#1351AA] text-[#E3E2DE]'
  : 'bg-[#EDECE8] hover:bg-[#1351AA] text-[#1351AA] hover:text-[#E3E2DE] border border-[#C7C7C7] hover:border-[#1351AA]'
  }`}
                   >
-                    {isDeckLocked ? (
-                      <span>UNLOCK DECK TO ASSIGN</span>
-                    ) : assignedAppId === selectedApp.id ? (
+                    {assignedAppId === selectedApp.id ? (
                       <>
                         <Check className="w-4 h-4 stroke-[3]" />
                         <span>ASSIGNED!</span>

@@ -1,12 +1,19 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  nativeWindowControls: process.platform === 'win32',
+  rendererReady: () => ipcRenderer.send('startup:ready'),
+  openHelpLink: (id) => ipcRenderer.invoke('help:open', id),
   windowControl: (action) => ipcRenderer.send('window-control', action),
   execAction: (action) => ipcRenderer.invoke('exec-action', action),
   onHardwareEvent: (callback) => {
     const listener = (_event, value) => callback(value);
     ipcRenderer.on('hardware-event', listener);
-    return () => ipcRenderer.removeListener('hardware-event', listener);
+    ipcRenderer.send('hardware-event:subscription', true);
+    return () => {
+      ipcRenderer.removeListener('hardware-event', listener);
+      ipcRenderer.send('hardware-event:subscription', false);
+    };
   },
   reportDeck: (deck) => ipcRenderer.send('deck-sync', deck),
 
@@ -45,10 +52,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // In-App RP2040 Firmware Flasher
   getFirmwareStatus: () => ipcRenderer.invoke('firmware:status'),
-  getBuiltinFirmware: () => ipcRenderer.invoke('firmware:builtin'),
-  flashBuiltinFirmware: () => ipcRenderer.invoke('firmware:flashBuiltin'),
-  browseFirmwareUf2: () => ipcRenderer.invoke('firmware:browse'),
-  flashFirmwareUf2: (filePath) => ipcRenderer.invoke('firmware:flash', filePath),
+  listBuiltinFirmware: () => ipcRenderer.invoke('firmware:list'),
+  flashBuiltinFirmware: (id, acknowledgedUntested) => ipcRenderer.invoke('firmware:flashBuiltin', id, acknowledgedUntested),
   onFirmwareFlashProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on('firmware-flash-progress', listener);

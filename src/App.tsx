@@ -1,16 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { makeBackup, validDeck, validOled } from './utils/backup';
+import { getLightingStorageError, reloadLightingFromStorage, subscribe as subscribeLighting } from './lighting/store';
+import React, { useState, useEffect, useRef, useReducer } from 'react';
+import { createDeckHistory, deckHistoryReducer } from './utils/deckHistory';
 import { Deck, Layer, KeyBinding, DialBinding, OLEDState, ActionDefinition, DiscoveredApp } from './types';
 import { defaultDeck } from './data/defaultDeck';
 import { TopNavbar } from './components/TopNavbar';
+import { HelpPanel } from './components/HelpPanel';
+import { WelcomeTour } from './components/WelcomeTour';
+import { INTRO_REPLAY_EVENT } from './intro/config';
+import { shouldShowWelcome } from './utils/welcome';
 import { DigitalTwin } from './components/DigitalTwin';
-import { KeyConfigDrawer } from './components/KeyConfigDrawer';
-import { KnobConfigDrawer } from './components/KnobConfigDrawer';
-import { DisplayConfigDrawer } from './components/DisplayConfigDrawer';
-import { ShortcutsPanel } from './components/ShortcutsPanel';
-import { AppLauncherPanel } from './components/AppLauncherPanel';
-import { PCShortcut } from './data/pcShortcuts';
-import { normalizeDeckLayers } from './utils/channelLayers';
-import { deckIsLocked, editDeckWhenUnlocked } from './utils/deckLock';
+
+
+
+
+import { assignShortcutToBinding } from './utils/shortcutBindings';
+
+import { restoreMacropadConfig } from './utils/macropadConfig';
 import { getOLEDMode, isOLEDMode, OLED_MODE_IDS, type OLEDMode } from './oled/modes';
 import { startOledStreaming, type OledStreamSnapshot } from './oled/streamer';
 import { AUTO_CYCLE_DEFAULT_S, capacityFor } from './oled/capacity';
@@ -21,10 +27,9 @@ import {
   normalizePlaylist,
 } from './oled/playlist';
 
-import { OSDFlyout } from './components/OSDFlyout';
-import { ViaKeyTester } from './components/via/ViaKeyTester';
-import { ViaLightingPanel } from './components/via/ViaLightingPanel';
-import { ViaMacroEditor } from './components/via/ViaMacroEditor';
+
+
+
 import { ViaKeycodePicker } from './components/via/ViaKeycodePicker';
 import type { ViaKeycodeItem } from './data/viaKeycodes';
 import { viaItemToBinding } from './utils/viaBindings';
@@ -41,17 +46,50 @@ import { routePhysicalAction } from './utils/physicalActionRouter';
 import { WebhookDocPanel } from './components/WebhookDocPanel';
 import { AudioMixerPanel } from './components/AudioMixerPanel';
 import { HardwareDiagnosticsPanel, ActionHistoryEntry } from './components/HardwareDiagnosticsPanel';
+import { AnimatedDetails } from './components/AnimatedDetails';
 import { FirmwarePanel } from './components/FirmwarePanel';
+import { BackupPanel } from './components/BackupPanel';
+import { PadInspector } from './components/PadInspector';
 import { UploadSheet } from './components/UploadSheet';
 import { CommandPalette } from './components/CommandPalette';
-import type { ElectronHardwareEvent, NowPlayingInfo, SystemMetrics } from './types/electron';
+
+import { applyLayerPreset, LayerPreset } from './data/layerPresets';
+import type { ElectronHardwareEvent, NowPlayingResult, SystemMetrics } from './types/electron';
 import {
   Trash2,
   Activity,
   ChevronDown,
   Zap,
+  Sun,
 } from 'lucide-react';
 
+// These chunks are loaded only when needed (or when the user points at a tab).
+const loadShortcuts = () => import('./components/ShortcutsPanel');
+const loadApps = () => import('./components/AppLauncherPanel');
+const loadTester = () => import('./components/via/ViaKeyTester');
+const loadLighting = () => import('./components/via/ViaLightingPanel');
+const loadMacros = () => import('./components/via/ViaMacroEditor');
+const loadPresets = () => import('./components/PresetsPage');
+const ShortcutsPanel = React.lazy(() => loadShortcuts().then(m => ({ default: m.ShortcutsPanel })));
+const AppLauncherPanel = React.lazy(() => loadApps().then(m => ({ default: m.AppLauncherPanel })));
+const ViaKeyTester = React.lazy(() => loadTester().then(m => ({ default: m.ViaKeyTester })));
+const ViaLightingPanel = React.lazy(() => loadLighting().then(m => ({ default: m.ViaLightingPanel })));
+const ViaMacroEditor = React.lazy(() => loadMacros().then(m => ({ default: m.ViaMacroEditor })));
+const PresetsPage = React.lazy(() => loadPresets().then(m => ({ default: m.PresetsPage })));
+type AppTab = React.ComponentProps<typeof TopNavbar>['activeTab'];
+const tabLoaders: Partial<Record<AppTab, () => Promise<unknown>>> = {
+  shortcuts: loadShortcuts, apps: loadApps, tester: loadTester,
+  lighting: loadLighting, macros: loadMacros, presets: loadPresets,
+};
+function prepareTab(tab: AppTab) {
+  // If speculative loading fails, the normal page/error handling still runs on click.
+  const load = tabLoaders[tab];
+  if (load) void load().catch(() => {});
+}
+
+const KeyConfigDrawer = React.lazy(() => import('./components/KeyConfigDrawer').then(m => ({ default: m.KeyConfigDrawer })));
+const KnobConfigDrawer = React.lazy(() => import('./components/KnobConfigDrawer').then(m => ({ default: m.KnobConfigDrawer })));
+const DisplayConfigDrawer = React.lazy(() => import('./components/DisplayConfigDrawer').then(m => ({ default: m.DisplayConfigDrawer })));
 const SESSION_KEY = 'kadowaz_session';
 const OLED_KEY = 'kadowaz_oled';
 const DECK_KEY = 'kadowaz_deck';
@@ -85,6 +123,7 @@ function loadOledState(fallback: OLEDState): OLEDState {
     const raw = localStorage.getItem(OLED_KEY);
     if (!raw) return fallback;
     const saved = JSON.parse(raw) as Partial<OLEDState>;
+    if (!saved || !validOled(saved)) return fallback;
     const merged: OLEDState = { ...fallback };
     for (const key of OLED_PREF_KEYS) {
       if (saved[key] !== undefined) (merged as unknown as Record<string, unknown>)[key] = saved[key];
@@ -109,66 +148,131 @@ export const App: React.FC = () => {
   // The deck's activeLayerId is the ONE selected layer for display and edits.
   // Adopt the older separate session preference once when loading a deck, then
   // keep it in sync with the deck so changing layers cannot edit another page.
-  const [deck, setDeck] = useState<Deck>(() => {
-    let restored = normalizeDeckLayers(defaultDeck);
-    const saved = localStorage.getItem(DECK_KEY);
-    if (saved) {
-      try {
+  const [initialDeck] = useState(() => {
+    let restored = restoreMacropadConfig(defaultDeck);
+    let blocked = false;
+    try {
+      const saved = localStorage.getItem(DECK_KEY);
+      if (saved !== null) {
         const parsed = JSON.parse(saved) as Deck;
-        if (parsed && Array.isArray(parsed.layers) && parsed.layers.length > 0) {
-          restored = normalizeDeckLayers(parsed);
+        if (!validDeck(parsed, true)) {
+          throw new Error('Invalid saved deck');
         }
-      } catch { /* ignore */ }
-    }
+        restored = restoreMacropadConfig(parsed);
+      }
+    } catch { blocked = true; }
     const selected = loadSession().activeLayerId;
-    return selected && restored.layers.some((l) => l.id === selected)
+    const value = selected && restored.layers.some((l) => l.id === selected)
       ? { ...restored, activeLayerId: selected }
       : restored;
+    return { value, blocked };
   });
+  const [deckHistory, dispatchDeck] = useReducer(deckHistoryReducer, initialDeck.value, createDeckHistory);
+  const deck = deckHistory.deck;
+  const setDeck = (update: Deck | ((current: Deck) => Deck)) => dispatchDeck({ type: 'edit', update: typeof update === 'function' ? update : () => update });
+  const [deckSaveBlocked, setDeckSaveBlocked] = useState(initialDeck.blocked);
+  const [storageErrors, setStorageErrors] = useState<Record<string, boolean>>({});
+  const [backupNotice, setBackupNotice] = useState('');
+  const [backupOpen, setBackupOpen] = useState(false);
+  // Opt-in and session-only: never affect physical pad events or unrelated tests.
+  const [safePreview, setSafePreview] = useState(false);
+  const safePreviewRef = useRef(false);
+  const [brightnessToast, setBrightnessToast] = useState<{ level: number; atLimit: boolean } | null>(null);
+  useEffect(() => {
+    if (!brightnessToast) return;
+    const timer = window.setTimeout(() => setBrightnessToast(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [brightnessToast]);
+  const [virtualFeedback, setVirtualFeedback] = useState<{ type: 'info' | 'success' | 'error'; message: string }>({ type: 'info', message: 'Select a key, assign an action, then press it here to test.' });
+  const virtualActionSequence = useRef(0);
+  const [macroStorageError, setMacroStorageError] = useState('');
+  const [lightingStorageError, setLightingStorageError] = useState(getLightingStorageError);
+  useEffect(() => subscribeLighting(() => setLightingStorageError(getLightingStorageError())), []);
+  const persist = (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+      setStorageErrors(prev => {
+        if (!prev[key]) return prev;
+        const next = { ...prev }; delete next[key]; return next;
+      });
+    } catch {
+      setStorageErrors(prev => prev[key] ? prev : { ...prev, [key]: true });
+    }
+  };
 
   const activeLayerId = deck.activeLayerId;
-  const setActiveLayerId = (id: string) => setDeck(prev =>
-    prev.activeLayerId === id || !prev.layers.some((l) => l.id === id)
-      ? prev
-      : { ...prev, activeLayerId: id },
-  );
+  const setActiveLayerId = (id: string) => dispatchDeck({ type: 'select', id });
   const layers = deck.layers;
-  /** Short pill label per layer, derived from its name (EDIT / TOOLS / …). */
-  const layerNames = layers.map((l, i) =>
-    (l.name.split(/[^A-Za-z0-9]+/).find(Boolean) || `L${i}`).toUpperCase().slice(0, 7),
-  );
+  // The four hardware layers are always identified by number in the UI.
+  // Keep any legacy names in saved data without displaying or rewriting them.
+  const layerNames = layers.map((_, i) => `Layer ${i}`);
 
-  /* All deck-binding writes use a functional lock guard. The handler also
-   * checks before claiming a save: the state guard closes the queued-update
-   * race and protects every caller of these shared mutators. */
+  // Edits stay in the local configuration until the user uploads all layers.
   const writeActiveLayer = (mutate: (layer: Layer) => Partial<Layer>) => {
-    setDeck(prev => editDeckWhenUnlocked(prev, current => ({
+    setDeck(current => ({
       ...current,
       layers: current.layers.map(l => (l.id === current.activeLayerId ? { ...l, ...mutate(l) } : l)),
-    })));
+    }));
   };
 
   const putKey = (keyIndex: number, next: KeyBinding, layerIndex?: number) => {
-    setDeck(prev => editDeckWhenUnlocked(prev, current => ({
+    setDeck(current => ({
       ...current,
       layers: current.layers.map((l, i) => {
         const target = layerIndex !== undefined ? i === layerIndex : l.id === current.activeLayerId;
         if (!target) return l;
         return {
           ...l,
-          // The first edit makes the layer yours; the EXAMPLE tag goes away.
           isExample: false,
           keys: l.keys.map(k => (k.keyIndex === keyIndex ? { ...next, keyIndex } : k)),
         };
       }),
-    })));
+    }));
   };
 
+  // Never show onboarding over settings from an existing installation.
+  const [firstRunWelcome] = useState(() => {
+    try { return shouldShowWelcome(localStorage); } catch { return false; }
+  });
+  const [showWelcome, setShowWelcome] = useState(firstRunWelcome);
+  const [introFinished, setIntroFinished] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  // Let the existing staged introduction finish (or be skipped) before opening
+  // another modal. Observe its class rather than changing its choreography.
+  useEffect(() => {
+    const update = () => setIntroFinished(!document.documentElement.classList.contains('intro-running'));
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    update();
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (firstRunWelcome) try { localStorage.setItem('kadowaz_welcome_pending', '1'); } catch { /* optional */ }
+  }, [firstRunWelcome]);
+  const dismissWelcome = () => {
+    setShowWelcome(false);
+    try {
+      localStorage.setItem('kadowaz_guide_seen', '1');
+      localStorage.removeItem('kadowaz_welcome_pending');
+    } catch { /* storage may be unavailable */ }
+  };
+  // The entrance is visual only, runs once, and yields immediately to input.
+  const [isStarting, setIsStarting] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIsStarting(false), 900);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const [railOpen, setRailOpen] = useState(false);
+  const [backupRevision, setBackupRevision] = useState(0);
   const [selectedKeyIndex, setSelectedKeyIndex] = useState<number | null>(0);
   const [editingKeyBinding, setEditingKeyBinding] = useState<KeyBinding | null>(null);
   const [isEditingKnob, setIsEditingKnob] = useState<boolean>(false);
   const [isEditingDisplay, setIsEditingDisplay] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros'>('designer');
+  const [activeTab, setActiveTab] = useState<AppTab>('designer');
+  const [pagePending, startPageTransition] = React.useTransition();
+  // Keep the existing page available while a real lazy import is pending.
+  // React can cancel an older request if the user chooses another tab.
+  const changeTab = (tab: AppTab) => startPageTransition(() => setActiveTab(tab));
   
   // Hardware Connection State
   const [hardwareState, setHardwareState] = useState<HardwareConnectionState>('disconnected');
@@ -182,30 +286,34 @@ export const App: React.FC = () => {
   // Quick assignments come from one reviewed MPAD3 mapper. Raw QMK strings
   // were offered by the old tray but neither our firmware nor desktop runs them.
   const handleAssignViaKeycode = (keyIndex: number, item: ViaKeycodeItem) => {
-    if (deckIsLocked(deck)) {
-      pushLog('[DECK LOCKED] Unlock deck to change quick assignments', 'deck', 'info');
-      return;
-    }
     const mapped = viaItemToBinding(keyIndex, item);
     if ('error' in mapped) {
       pushLog(`[NOT ASSIGNED] ${mapped.error}`, 'hardware', 'error');
       return;
     }
-    putKey(keyIndex, mapped.binding);
+    const previousIcon = activeLayer.keys.find(key => key.keyIndex === keyIndex)?.iconName || '';
+    const binding = { ...mapped.binding, iconName: mapped.ownership === 'clear' ? '' : previousIcon };
+    putKey(keyIndex, binding);
+    // The quick tray remains usable with the drawer open. Refresh the drawer's
+    // snapshot too, or its Save button can overwrite this newer assignment.
+    setEditingKeyBinding(current => current?.keyIndex === keyIndex ? binding : current);
     handleTriggerAction('via-assign', mapped.description, 'info');
   };
 
-  const [osdVisible, setOsdVisible] = useState(false);
   const [actionLogs, setActionLogs] = useState<ActionHistoryEntry[]>([]);
   const [isHardwareDiagnosticsExpanded, setIsHardwareDiagnosticsExpanded] = useState(false);
   const hardwareDiagnosticsRef = useRef<HTMLDetailsElement>(null);
   const [isFirmwareExpanded, setIsFirmwareExpanded] = useState(false);
   const firmwareDisclosureRef = useRef<HTMLDetailsElement>(null);
   const [isUploadSheetOpen, setIsUploadSheetOpen] = useState(false);
-  const [isDeckUploadBusy, setIsDeckUploadBusy] = useState(false);
   const uploadBusyRef = useRef(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
+  // Do not replace unreadable screen settings with the fallback on startup.
+  const [oledSaveBlocked, setOledSaveBlocked] = useState(() => {
+    try { const raw = localStorage.getItem(OLED_KEY); if (raw === null) return false; const saved: unknown = JSON.parse(raw); return saved === null || !validOled(saved); }
+    catch { return true; }
+  });
   // Live OLED state
   const [oledState, setOledState] = useState<OLEDState>(() => loadOledState({
     mode: 'kadowaz',
@@ -216,12 +324,14 @@ export const App: React.FC = () => {
     cpuTemp: null,
     nowPlayingTrack: null,
     nowPlayingArtist: null,
+    mediaStatus: window.electronAPI?.onMediaState ? 'checking' : 'unavailable',
+    mediaError: null,
     isPlaying: false,
     trackProgress: null,
     // Preferences, with the same defaults the drawer's reset button restores, so
     // the saved object always carries every field instead of leaving the drawer
     // to guess with ?? at each use.
-    customTitle: 'KADOWAZ IND.',
+    customTitle: 'ZERO',
     customSubtitle: 'ONLINE',
     brightness: 56, // SSD1306 reset contrast 0x8F maps to 56% of 0..255
     inverted: false,
@@ -235,12 +345,12 @@ export const App: React.FC = () => {
   /* Serial frames read this on a 200ms timer, independently of RAF and drawer
    * visibility. The callback never captures stale layer/media/metrics values. */
   const oledStreamSnapshot = useRef<OledStreamSnapshot>({
-    state: oledState, deckName: deck.name, layerName: activeLayer.name,
-    layerIndex: activeChannelIdx, layerCount: layers.length,
+    state: oledState, deckName: deck.name, layerName: padChannelIndex === null ? '' : `Layer ${padChannelIndex}`,
+    layerIndex: padChannelIndex, layerCount: layers.length,
   });
   oledStreamSnapshot.current = {
-    state: oledState, deckName: deck.name, layerName: activeLayer.name,
-    layerIndex: activeChannelIdx, layerCount: layers.length,
+    state: oledState, deckName: deck.name, layerName: padChannelIndex === null ? '' : `Layer ${padChannelIndex}`,
+    layerIndex: padChannelIndex, layerCount: layers.length,
   };
   const modeFromPadRef = useRef<OLEDMode | null>(null);
 
@@ -254,20 +364,21 @@ export const App: React.FC = () => {
 
   // Save to localStorage on change
   useEffect(() => {
-    localStorage.setItem(DECK_KEY, JSON.stringify(deck));
-  }, [deck]);
+    // Never replace an unreadable saved deck with the empty fallback.
+    if (!deckSaveBlocked) persist(DECK_KEY, JSON.stringify(deck));
+  }, [deck, deckSaveBlocked]);
 
   useEffect(() => {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ activeLayerId }));
-  }, [activeLayerId]);
+    if (!deckSaveBlocked) persist(SESSION_KEY, JSON.stringify({ activeLayerId }));
+  }, [activeLayerId, deckSaveBlocked]);
 
   // Serialised through the preference whitelist so the dependency is the
   // preference slice, not the telemetry: the panel repaints twice a second and
   // this must not write to disk twice a second.
   const oledPrefsJson = JSON.stringify(oledPreferences(oledState));
   useEffect(() => {
-    localStorage.setItem(OLED_KEY, oledPrefsJson);
-  }, [oledPrefsJson]);
+    if (!oledSaveBlocked) persist(OLED_KEY, oledPrefsJson);
+  }, [oledPrefsJson, oledSaveBlocked]);
 
   // The pad owns mode selection during automatic rotation or an OLED_NEXT
   // gesture. Do not echo its MODE_EVENT back as another selection (which would
@@ -383,13 +494,9 @@ export const App: React.FC = () => {
       channelIndex?: number;
     }
   ) => {
-    if (deckIsLocked(deck)) {
-      pushLog('[DECK LOCKED] Unlock deck to assign an app', 'deck', 'info');
-      return;
-    }
     const targetChannel = options?.channelIndex !== undefined ? options.channelIndex : activeChannelIdx;
 
-    putKey(keyIndex, {
+    const binding: KeyBinding = {
       keyIndex,
       label: (options?.customLabel || app.name).slice(0, 14),
       sublabel: 'App',
@@ -413,7 +520,11 @@ export const App: React.FC = () => {
       },
       holdAction: null,
       doubleTapAction: null,
-    }, targetChannel);
+    };
+    putKey(keyIndex, binding, targetChannel);
+    if (targetChannel === activeChannelIdx) {
+      setEditingKeyBinding(current => current?.keyIndex === keyIndex ? binding : current);
+    }
 
     handleTriggerAction(
       `assign-app-${app.id}`,
@@ -477,7 +588,20 @@ export const App: React.FC = () => {
       name: actionName,
       payload: payload || {},
     };
+    const showVirtualFeedback = !actionName.startsWith('[HARDWARE') && !actionName.startsWith('[WEBHOOK]');
+    const sequence = showVirtualFeedback ? ++virtualActionSequence.current : 0;
+    if (showVirtualFeedback) setVirtualFeedback({ type: 'info', message: `Sending ${actionName}…` });
     void executeDeckAction(action).then((res) => {
+      if (showVirtualFeedback && sequence === virtualActionSequence.current) {
+        if (res.success && typeof res.brightness === 'number' && Number.isFinite(res.brightness) && res.brightness >= 0 && res.brightness <= 100) {
+          setBrightnessToast({ level: res.brightness, atLimit: Boolean(res.brightnessAtLimit) });
+        }
+        setVirtualFeedback(res.success
+          ? { type: 'success', message: res.brightness !== undefined
+            ? `${actionName}: brightness ${res.brightness}%${res.brightnessAtLimit ? ' (already at this limit)' : ' requested'}.`
+            : `${actionName}: ${res.message || 'request sent. The active app or Windows must respond.'}` }
+          : { type: 'error', message: `${actionName}: ${res.error || 'The action could not be sent.'}` });
+      }
       if (res.success) {
         pushLog(actionName, category, isSafety ? 'safety' : 'success');
       } else if (res.error?.includes('Native desktop shell')) {
@@ -486,6 +610,7 @@ export const App: React.FC = () => {
         pushLog(`[ACTION FAILED] ${actionName}: ${res.error || 'unknown error'}`, category, 'error');
       }
     }).catch((err) => {
+      if (showVirtualFeedback && sequence === virtualActionSequence.current) setVirtualFeedback({ type: 'error', message: `${actionName}: ${err instanceof Error ? err.message : String(err)}` });
       pushLog(`[ACTION FAILED] ${actionName}: ${err instanceof Error ? err.message : String(err)}`, category, 'error');
     });
   };
@@ -508,8 +633,8 @@ export const App: React.FC = () => {
       if (k) setEditingKeyBinding(k);
     }
     handleTriggerAction('layer-switch', fromPad
-      ? `[PAD EVENT] Layer ${nextIdx} (${targetLayer.name}) reported by device; editor followed`
-      : `[EDITOR PREVIEW] Layer ${nextIdx} (${targetLayer.name}); pad unchanged`, 'navigation');
+      ? `[PAD EVENT] Layer ${nextIdx} reported by device; editor followed`
+      : `[EDITOR PREVIEW] Layer ${nextIdx}; pad unchanged`, 'navigation');
   };
 
   // Subscribe to hardware bridge status & input reports from physical microcontroller
@@ -683,11 +808,17 @@ export const App: React.FC = () => {
     const api = window.electronAPI;
     if (!api?.onMediaState) return;
 
-    const apply = (state: NowPlayingInfo | null) => {
+    let active = true;
+    let receivedBroadcast = false;
+    const apply = (result: NowPlayingResult) => {
+      if (!active) return;
+      const state = result.ok ? result.value ?? null : null;
       setOledState(prev => ({
         ...prev,
-        nowPlayingTrack: state?.title || null,
-        nowPlayingArtist: state?.artist || null,
+        mediaStatus: result.ok ? 'ready' : 'error',
+        mediaError: result.ok ? null : result.error || 'Could not read the Windows media session.',
+        nowPlayingTrack: state?.title || state?.artist || null,
+        nowPlayingArtist: state?.title ? state.artist || null : null,
         nowPlayingApp: state?.app ?? null,
         isPlaying: Boolean(state?.isPlaying),
         trackProgress: state ? state.progress : null,
@@ -696,13 +827,12 @@ export const App: React.FC = () => {
       }));
     };
 
-    // One immediate read, so the panel is right before the first poll lands.
+    const unsubscribe = api.onMediaState(result => { receivedBroadcast = true; apply(result); });
+    // Ignore an older initial response if a newer broadcast already arrived.
     api.getNowPlaying?.()
-      .then(res => { if (res.ok) apply(res.value ?? null); })
-      .catch(() => { /* the panel simply stays at NO MEDIA */ });
-
-    const unsubscribe = api.onMediaState(apply);
-    return () => unsubscribe();
+      .then(res => { if (!receivedBroadcast) apply(res); })
+      .catch(() => { if (!receivedBroadcast) apply({ ok: false, error: 'Could not contact the media service.' }); });
+    return () => { active = false; unsubscribe(); };
   }, []);
 
   // Events from the Electron main process: tray menu, localhost webhook, launcher status.
@@ -712,14 +842,6 @@ export const App: React.FC = () => {
     const unsubscribe = window.electronAPI?.onHardwareEvent?.((event) => hardwareEventHandlerRef.current(event));
     return () => { unsubscribe?.(); };
   }, []);
-
-  // Show transient OSD helper
-  const triggerOSDFlyout = () => {
-    setOsdVisible(true);
-    setTimeout(() => {
-      setOsdVisible(false);
-    }, 2200);
-  };
 
   // Step to the next screen in the rotation. The panel has no touchscreen, so
   // this is driven by the timer below or by an OLED NEXT action bound to a key
@@ -734,59 +856,55 @@ export const App: React.FC = () => {
     handleTriggerAction('oled-cycle', `OLED Mode: ${getOLEDMode(next).label.toUpperCase()}`, 'navigation');
   };
 
+  // Discard drawer drafts so a stale editor cannot undo the history action.
+  const stepDeckHistory = (direction: 'undo' | 'redo') => {
+    dispatchDeck({ type: direction });
+    setEditingKeyBinding(null); setIsEditingKnob(false);
+  };
+
+  // Only virtual-deck gestures use this wrapper. Other tests and physical pad
+  // events keep their existing routes; switching modes cannot cancel an action
+  // already dispatched to Windows.
+  const handleVirtualAction = (id: string, name: string, category: string, payload?: ActionDefinition['payload']) => {
+    if (!safePreviewRef.current) { handleTriggerAction(id, name, category, payload); return; }
+    const detail = payload?.keys?.join(' + ') || (payload?.mediaAction ? payload.mediaAction.replace(/_/g, ' ') : '') ||
+      (payload?.macroId !== undefined ? `Macro M${payload.macroId}` : '') ||
+      (payload?.text !== undefined ? `Type text: ${payload.text.slice(0, 80)}` : '') ||
+      (payload?.appName || payload?.exePath || payload?.keycode || (payload?.targetChannel !== undefined ? `Layer ${payload.targetChannel}` : ''));
+    setVirtualFeedback({ type: 'info', message: `Preview only: ${name}${detail ? ` — ${detail}` : ''}. Nothing was sent.` });
+  };
+
   // Sidebar / palette select a layer for editing, NOT a remote pad channel.
   const handleSelectLayer = (id: string) => {
     const idx = layers.findIndex(l => l.id === id);
     if (idx < 0) return;
     setActiveLayerId(id);
-    triggerOSDFlyout();
-    pushLog(`[EDITOR PREVIEW] Layer ${idx} (${layers[idx].name}); pad unchanged`, 'navigation', 'info');
+    pushLog(`[EDITOR PREVIEW] Layer ${idx}; pad unchanged`, 'navigation', 'info');
   };
 
-  // Export deck to JSON
+  // Palette export uses the same validated format and storage guard as the rail.
   const handleExportDeck = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(deck, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `kadowaz_deck_backup_${Date.now()}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-    handleTriggerAction('export', 'Exported deck configuration to JSON', 'info');
+    try {
+      if (deckSaveBlocked) throw new Error('Saved deck data could not be read; this temporary layout is not a backup.');
+      if (oledSaveBlocked || macroStorageError || lightingStorageError || Object.keys(storageErrors).length > 0) throw new Error('Some settings could not be saved or read; resolve the storage problem before backing up.');
+      const backup = makeBackup(deck, localStorage);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
+      const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'macropad-backup.json'; anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setBackupNotice('Backup downloaded. Store it somewhere safe.');
+    } catch (error) { setBackupNotice(error instanceof Error ? error.message : 'Could not create backup.'); }
   };
 
   // Key save handler
   const handleSaveKey = (updated: KeyBinding) => {
-    if (deckIsLocked(deck)) {
-      pushLog('[DECK LOCKED] Switch edit was not saved; unlock deck first', 'deck', 'info');
-      return;
-    }
     putKey(updated.keyIndex, updated);
     handleTriggerAction('key-save', `Saved Switch #${updated.keyIndex + 1} (${updated.label})`, 'info');
   };
 
   // Dial / Rotary Encoder Save handler
   const handleSaveDial = (updatedDial: DialBinding) => {
-    if (deckIsLocked(deck)) {
-      pushLog('[DECK LOCKED] Knob edit was not saved; unlock deck first', 'deck', 'info');
-      return;
-    }
     writeActiveLayer(() => ({ dial: updatedDial, isExample: false }));
-    handleTriggerAction('dial-save', `Saved Dial Configuration (${updatedDial.activeModeName})`, 'info');
-  };
-
-  const handleToggleDeckLock = () => {
-    if (uploadBusyRef.current) {
-      pushLog('[DECK LOCK] Wait for the active upload/readback to finish', 'deck', 'info');
-      return;
-    }
-    if (!deckIsLocked(deck)) {
-      // Avoid keeping a writable draft or an Upload sheet open after locking.
-      setEditingKeyBinding(null);
-      setIsEditingKnob(false);
-      setIsUploadSheetOpen(false);
-    }
-    setDeck(prev => ({ ...prev, isLocked: !deckIsLocked(prev) }));
+    handleTriggerAction('dial-save', `Saved Dial Configuration for Layer ${activeChannelIdx}`, 'info');
   };
 
   /*
@@ -802,11 +920,6 @@ export const App: React.FC = () => {
     onProgress?: (p: UploadProgress) => void,
     options?: UploadOptions,
   ): Promise<UploadResult> => {
-    if (deckIsLocked(deck)) {
-      const message = 'Deck is locked. Unlock deck before uploading bindings.';
-      pushLog(`[UPLOAD BLOCKED] ${message}`, 'deck', 'info');
-      return { ok: false, message, mapped: 0, unsupported: [] };
-    }
     if (uploadBusyRef.current) {
       const message = 'A deck upload is already in progress; wait for its verified readback.';
       pushLog(`[UPLOAD BLOCKED] ${message}`, 'deck', 'info');
@@ -819,7 +932,6 @@ export const App: React.FC = () => {
     }
 
     uploadBusyRef.current = true;
-    setIsDeckUploadBusy(true);
     try {
       const summary = layers
         .map((layer, chIdx) => `Layer ${chIdx}: ${layer.keys.filter((k) => k.tapAction).length}/9 keys`)
@@ -848,7 +960,6 @@ export const App: React.FC = () => {
       return result;
     } finally {
       uploadBusyRef.current = false;
-      setIsDeckUploadBusy(false);
     }
   };
 
@@ -856,9 +967,14 @@ export const App: React.FC = () => {
   // authenticated and validated by the main process (electron/webhookServer.cjs).
   const handleWebhookRequest = (endpoint: string, data: Record<string, unknown>) => {
     const note = (msg: string, type: ActionHistoryEntry['type'] = 'info') => pushLog(`[WEBHOOK] ${msg}`, 'webhook', type);
-    const run = (action: ActionDefinition | null | undefined, label: string) => {
+    const run = (action: ActionDefinition | null | undefined, label: string, isSafetyIsolated = false) => {
       if (!action) {
         note(`${label}: no action assigned`);
+        return;
+      }
+      if (isSafetyIsolated) {
+        // Safety isolation exists so destructive actions need an intentional physical hold.
+        note(`Blocked: ${label} is safety-isolated and can only be run by a physical hold`, 'safety');
         return;
       }
       handleTriggerAction(action.id, `[WEBHOOK] ${action.name}`, action.category, action.payload);
@@ -872,25 +988,21 @@ export const App: React.FC = () => {
           note(`Switch #${index + 1} not found on this layer`, 'safety');
           return;
         }
-        if (key.isDestructiveSafety) {
-          // Safety isolation exists so destructive actions need an intentional physical hold.
-          note(`Blocked: Switch #${index + 1} is safety-isolated and can only be run by a physical hold`, 'safety');
-          return;
-        }
         const which = typeof data.action === 'string' ? data.action : 'tap';
         const action = which === 'hold' ? key.holdAction : which === 'double' ? key.doubleTapAction : key.tapAction;
-        run(action, `Switch #${index + 1} ${which}`);
+        run(action, `Switch #${index + 1} ${which}`, Boolean(key.isDestructiveSafety));
         return;
       }
       case '/api/v1/dial': {
-        const dial = activeLayer.dial;
+        const dial = activeLayer.dial as unknown as Record<string, unknown>;
+        const dialSafe = Boolean(dial?.isDestructiveSafety);
         if (data.direction === 'press') {
-          run(dial.pressAction, 'Knob press');
+          run(activeLayer.dial.pressAction, 'Knob press', dialSafe);
           return;
         }
         const steps = Math.min(10, Math.max(1, Math.floor(Number(data.step)) || 1));
-        const action = data.direction === 'ccw' ? dial.ccwAction : dial.cwAction;
-        for (let i = 0; i < steps; i++) run(action, `Knob ${String(data.direction)}`);
+        const action = data.direction === 'ccw' ? activeLayer.dial.ccwAction : activeLayer.dial.cwAction;
+        for (let i = 0; i < steps; i++) run(action, `Knob ${String(data.direction)}`, dialSafe);
         return;
       }
       case '/api/v1/oled': {
@@ -955,66 +1067,60 @@ export const App: React.FC = () => {
   const openFirmwarePanel = () => {
     setIsCommandPaletteOpen(false);
     setIsFirmwareExpanded(true);
-    // The sidebar persists on every tab. Move to its heading, not a separate page.
-    firmwareDisclosureRef.current?.querySelector('summary')?.focus({ preventScroll: true });
-    firmwareDisclosureRef.current?.querySelector('summary')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    setRailOpen(true);
+    // Narrow windows keep the rail collapsed until it is explicitly opened.
+    window.setTimeout(() => {
+      firmwareDisclosureRef.current?.querySelector('summary')?.focus({ preventScroll: true });
+      firmwareDisclosureRef.current?.querySelector('summary')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 0);
   };
 
-  useEffect(() => {
-    if (isFirmwareExpanded) {
-      // There is not enough room for the full flasher below the layer list at
-      // laptop heights; reveal its UF2 and Flash controls after expansion.
-      firmwareDisclosureRef.current?.querySelector('summary')?.scrollIntoView({ block: 'start' });
-    }
-  }, [isFirmwareExpanded]);
-
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#E3E2DE] text-[#141414] overflow-hidden">
+    <div className={`app-shell ${isStarting ? 'startup-entrance' : ''} flex flex-col h-screen w-screen bg-[#E3E2DE] text-[#141414] overflow-hidden`}
+      onClickCapture={() => { if (isStarting) setIsStarting(false); }}
+      onKeyDownCapture={() => { if (isStarting) setIsStarting(false); }}>
+      {pagePending && <span className="sr-only" role="status">Opening selected section.</span>}
       {/* Top Application Navbar */}
       <TopNavbar
-        deckName={deck.name}
-        onTriggerOSD={triggerOSDFlyout}
         activeTab={activeTab}
-        onChangeTab={setActiveTab}
+        onChangeTab={changeTab}
+        onTabIntent={prepareTab}
         hardwareState={hardwareState}
         deviceInfo={deviceInfo}
         onConnectSerial={() => hardwareBridge.connectSerial()}
         onDisconnectHardware={() => hardwareBridge.disconnect()}
         onOpenDiagnostics={openHardwareDiagnostics}
         onOpenFirmwarePanel={openFirmwarePanel}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenHelp={() => setShowHelp(true)}
       />
 
 
+      {backupNotice && <div role="status" className="shrink-0 border-b border-[#C7C7C7] px-4 py-2 text-xs text-[#141414]">{backupNotice} <button type="button" onClick={() => setBackupNotice('')} className="underline">Dismiss</button></div>}
+      {(deckSaveBlocked || oledSaveBlocked || macroStorageError || lightingStorageError || Object.keys(storageErrors).length > 0) && <div role="alert" className="shrink-0 border-b border-[#aa6200] bg-[#fff2db] px-4 py-2 text-xs text-[#663900]">
+        {deckSaveBlocked && <p>Saved deck data could not be read. It has not been overwritten; edits to this temporary layout will not be saved. Restore a trusted backup to replace it.</p>}
+        {oledSaveBlocked && <p>Saved screen settings could not be read. They have not been overwritten; temporary screen edits will not be saved. Restore a trusted backup that includes screen settings to replace them.</p>}
+        {macroStorageError && <p>{macroStorageError}</p>}
+        {lightingStorageError && <p>{lightingStorageError}</p>}
+        {Object.keys(storageErrors).length > 0 && <p>Some changes could not be saved on this computer. Check storage permissions or free space before closing the app.</p>}
+      </div>}
+      {showHelp && <HelpPanel onClose={() => setShowHelp(false)} onOpenWelcome={() => { setShowHelp(false); setShowWelcome(true); }} onReplayIntro={() => {
+        setShowHelp(false);
+        // Let the help dialog restore focus before the intro takes it.
+        window.setTimeout(() => window.dispatchEvent(new Event(INTRO_REPLAY_EVENT)), 0);
+      }} />}
+      {showWelcome && introFinished && <WelcomeTour onClose={dismissWelcome} />}
+
       {/* ── LABEL RAIL · cols 1–2 of the 12-col workspace ─────────────
            The system's sidebar register: metadata only, never content. */}
-      <div className="flex-1 flex overflow-hidden">
-        <aside className="w-[228px] shrink-0 border-r border-[#C7C7C7] flex flex-col overflow-y-auto bg-[#E3E2DE]">
+      <div className="workspace flex-1 flex overflow-hidden">
+        <aside id="workspace-rail" className={`workspace-rail ${railOpen ? 'workspace-rail--open' : ''} w-[228px] shrink-0 border-r border-[#C7C7C7] flex flex-col overflow-y-auto bg-[#E3E2DE]`}>
 
-          {/* deck block */}
           <div className="px-4 pt-4 pb-3 border-b border-[#C7C7C7]">
-            <div className="flex items-center justify-between">
-              <span className="eyebrow">Deck</span>
-              <span className={`mark ${deck.isLocked ? 'mark--on' : 'mark--off'}`} />
-            </div>
-            <p className="mt-2 text-[13px] font-bold leading-tight tracking-[-0.02em] text-[#141414]">
-              {deck.name}
+            <span className="eyebrow">Your macropad</span>
+            <p className="mt-2 text-[10px] leading-relaxed text-[#444343]">
+              Choose a layer, assign your keys and knob, then test on the virtual macropad. Changes are saved on this PC.
             </p>
-            <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[#646464]">
-              {deck.isLocked ? 'LOCKED' : 'EDITABLE'} · {layers.length} LAYERS · {layers[0]?.keys.length ?? 0} KEYS
-            </p>
-            <button
-              onClick={handleToggleDeckLock}
-              disabled={isDeckUploadBusy}
-              title={isDeckUploadBusy ? 'Wait for the current upload to finish before changing the lock' :
-                deck.isLocked ? 'Unlock this PC editing guard' : 'Lock assignments, PC macro edits and deck upload; closes open key/knob editors'}
-              className="mt-2 w-full border border-[#C7C7C7] px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#444343] hover:bg-[#141414] hover:text-[#E3E2DE] hover:border-[#141414] disabled:opacity-50 transition-colors"
-            >
-              {deck.isLocked ? 'Unlock deck' : 'Lock deck'}
-            </button>
-            {deck.isLocked && <p role="status" className="mt-2 text-[9px] font-mono text-[#444343] leading-relaxed">
-              Read-only deck: assignments, PC macros and deck upload are blocked. Unlock here to edit. Display and lighting settings are separate. This is not a device security lock.
-            </p>}
+            <button type="button" onClick={() => { setBackupOpen(true); document.getElementById('backup-restore')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }} className="mt-3 border border-[#999] bg-white px-2 py-1 text-[10px] font-bold text-[#1351AA] hover:border-[#1351AA]">Backup &amp; restore</button>
           </div>
 
           {/* layer register */}
@@ -1041,10 +1147,7 @@ export const App: React.FC = () => {
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline gap-1.5">
                         <span className={`text-[11px] font-bold uppercase tracking-[0.08em] ${on ? 'text-[#1351AA]' : ''}`}>
-                          {l.badge || l.name}
-                        </span>
-                        <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-[#646464] truncate">
-                          {l.name}
+                          {`Layer ${i}`}
                         </span>
                         {l.isExample && (
                           <span className="ml-auto shrink-0 border border-[#C7C7C7] px-1 py-[1px] font-mono text-[8px] font-bold uppercase tracking-[0.08em] text-[#646464]">
@@ -1053,7 +1156,7 @@ export const App: React.FC = () => {
                         )}
                       </span>
                       <span className="block font-mono text-[9px] text-[#646464] truncate">
-                        {l.keys.length} KEYS · {l.dial.label.slice(0, 16)}
+                        {l.keys.length} KEYS
                       </span>
                     </span>
                   </button>
@@ -1069,14 +1172,14 @@ export const App: React.FC = () => {
           </div>
 
           {/* Firmware tools live in the left rail, below the layer register. */}
-          <details
+          <AnimatedDetails
             ref={firmwareDisclosureRef}
             id="firmware-bootloader"
             open={isFirmwareExpanded}
-            onToggle={(event) => setIsFirmwareExpanded(event.currentTarget.open)}
-            className="border-b border-[#C7C7C7] group shrink-0"
-          >
-            <summary className="list-none cursor-pointer select-none px-4 py-3 flex items-center gap-2.5 hover:bg-[#EDECE8] [&::-webkit-details-marker]:hidden">
+            onOpenChange={setIsFirmwareExpanded}
+            className="border-b border-[#C7C7C7] shrink-0"
+            summaryClassName="list-none cursor-pointer select-none px-4 py-3 flex items-center gap-2.5 hover:bg-[#EDECE8] [&::-webkit-details-marker]:hidden"
+            summary={<>
               <span className="w-7 h-7 shrink-0 flex items-center justify-center border border-[#C7C7C7] text-[#1351AA]">
                 <Zap className="w-3.5 h-3.5" />
               </span>
@@ -1084,33 +1187,53 @@ export const App: React.FC = () => {
                 <span className="eyebrow block leading-snug">RP2040 Firmware &amp; Bootloader</span>
                 <span className="block mt-0.5 font-mono text-[9px] text-[#646464]">BOOTSEL · UF2 flasher</span>
               </span>
-              <ChevronDown className="w-3.5 h-3.5 shrink-0 text-[#646464] transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="border-t border-[#C7C7C7]">
-              <FirmwarePanel isExpanded={isFirmwareExpanded} />
-            </div>
-          </details>
+              <ChevronDown className={`w-3.5 h-3.5 shrink-0 text-[#646464] transition-transform ${isFirmwareExpanded ? 'rotate-180' : ''}`} />
+            </>}
+          >
+            {(renderedOpen) => <div className="border-t border-[#C7C7C7]">
+              <FirmwarePanel isExpanded={isFirmwareExpanded} keepVisible={renderedOpen} />
+            </div>}
+          </AnimatedDetails>
+
+          <BackupPanel open={backupOpen} onOpenChange={setBackupOpen} deck={deck} exportBlocked={deckSaveBlocked || oledSaveBlocked || !!macroStorageError || !!lightingStorageError || Object.keys(storageErrors).length > 0} onRestored={restored => {
+            setDeckSaveBlocked(false); dispatchDeck({ type: 'replace', deck: restored.deck }); setBackupRevision(n => n + 1);
+            if (restored.extras) {
+              setOledSaveBlocked(false); setMacroStorageError('');
+              reloadLightingFromStorage();
+              // Restore editor preferences without issuing an OLED mode command.
+              const fallback = { ...oledState, mode: 'kadowaz' as OLEDMode, customTitle: 'ZERO', customSubtitle: 'ONLINE', brightness: 56, inverted: false, autoCycleS: AUTO_CYCLE_DEFAULT_S, playlist: [...DEFAULT_PLAYLIST] };
+              const next = loadOledState(fallback);
+              modeFromPadRef.current = next.mode === oledState.mode ? null : next.mode;
+              setOledState(prev => ({ ...prev, ...oledPreferences(next) }));
+            }
+            setEditingKeyBinding(null); setIsEditingKnob(false); setIsEditingDisplay(false);
+          }} />
 
           {/* foot */}
           <div className="mt-auto px-4 py-3 border-t border-[#C7C7C7]">
             <p className="font-mono text-[8.5px] uppercase tracking-[0.14em] text-[#646464] leading-relaxed">
-              Kadowaz deck studio<br />
+              ZERO macropad<br />
               12-col grid · build 2.4.1
             </p>
           </div>
         </aside>
 
         {/* ── CONTENT · cols 3–12 ─────────────────────────────────────── */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="mobile-rail-toggle hidden shrink-0 border-b border-[#C7C7C7] bg-[#EDECE8] px-3 py-2">
+            <button aria-expanded={railOpen} aria-controls="workspace-rail" onClick={() => setRailOpen(open => !open)} className="text-xs font-bold text-[#1351AA]">{railOpen ? 'Close layers & tools' : 'Layers, firmware & backup'}</button>
+          </div>
+          <div className="flex-1 flex min-h-0 overflow-hidden">
 
+        <React.Suspense fallback={null}>
         {/* TAB 1: DECK STUDIO */}
         {activeTab === 'designer' && (
-          <div className="flex-1 flex overflow-hidden">
+          <div className="designer-layout flex-1 flex overflow-hidden">
             {/* A desktop studio rail needs 352px pad + 248px dock + 24px gap,
                 plus 48px padding/borders. Keep it at 676px so the controls
                 never drop below the pad on laptop-sized full-screen windows;
                 larger screens grow the inspector instead of stretching the deck. */}
-            <div className="flex-1 min-w-0 min-[1264px]:w-[676px] min-[1264px]:flex-none flex flex-col items-center justify-start p-6 border-r border-[#E3E2DE] overflow-y-auto space-y-4">
+            <div className="designer-pad flex-1 min-w-[672px] flex flex-col items-center justify-start p-6 border-r border-[#E3E2DE] overflow-y-auto space-y-4">
               <DigitalTwin
                 layer={activeLayer}
                 channelIndex={activeChannelIdx}
@@ -1118,7 +1241,6 @@ export const App: React.FC = () => {
                 layerNames={layerNames}
                 oledState={oledState}
                 deckName={deck.name}
-                isDeckLocked={deck.isLocked === true}
                 selectedKeyIndex={selectedKeyIndex}
                 isDrawerKeyOpen={Boolean(editingKeyBinding)}
                 isDrawerKnobOpen={isEditingKnob}
@@ -1126,16 +1248,13 @@ export const App: React.FC = () => {
                 onSelectKey={(idx) => {
                   setSelectedKeyIndex(idx);
                   const k = activeLayer.keys.find(item => item.keyIndex === idx);
+                  if (safePreview && k && !k.tapAction && !k.holdAction && !k.doubleTapAction) setVirtualFeedback({ type: 'info', message: `Preview only: Switch ${idx + 1} is unassigned. Nothing was sent.` });
                   // If drawer is already open, tapping any key on macropad switches drawer to edit that key!
                   if (editingKeyBinding && k) {
                     setEditingKeyBinding(k);
                   }
                 }}
                 onOpenDrawer={(idx) => {
-                  if (deckIsLocked(deck)) {
-                    pushLog('[DECK LOCKED] Unlock deck before remapping switches', 'deck', 'info');
-                    return;
-                  }
                   setIsEditingKnob(false);
                   setIsEditingDisplay(false);
                   const targetIdx = idx ?? selectedKeyIndex ?? 0;
@@ -1144,10 +1263,6 @@ export const App: React.FC = () => {
                   if (k) setEditingKeyBinding(k);
                 }}
                 onOpenKnobDrawer={() => {
-                  if (deckIsLocked(deck)) {
-                    pushLog('[DECK LOCKED] Unlock deck before editing the knob', 'deck', 'info');
-                    return;
-                  }
                   setEditingKeyBinding(null);
                   setIsEditingDisplay(false);
                   setIsEditingKnob(true);
@@ -1158,7 +1273,7 @@ export const App: React.FC = () => {
                   setIsEditingDisplay(true);
                 }}
                 onOpenUploadSheet={() => setIsUploadSheetOpen(true)}
-                onTriggerAction={handleTriggerAction}
+                onTriggerAction={handleVirtualAction}
                 onCycleDialMode={handleCycleDialMode}
                 connectionStatus={hardwareState === 'connected' ? 'usb_connected' : 'simulator'}
                 onToggleConnection={() => {
@@ -1170,22 +1285,40 @@ export const App: React.FC = () => {
                 }}
               />
 
+              <div className="w-full max-w-[624px] flex flex-wrap items-center justify-between gap-2 border border-[#C7C7C7] bg-white px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <button type="button" aria-pressed={safePreview} onClick={() => {
+                    const next = !safePreviewRef.current; safePreviewRef.current = next; setSafePreview(next); virtualActionSequence.current++; setBrightnessToast(null);
+                    setVirtualFeedback({ type: 'info', message: next ? 'Safe preview is on. Virtual keys and knob will not send actions to Windows.' : 'Live virtual actions are on. Pressing an assigned key may control this computer.' });
+                  }} className={`border px-3 py-1.5 text-xs font-bold ${safePreview ? 'border-[#1351AA] bg-[#1351AA] text-white' : 'border-[#777] text-[#141414] hover:border-[#1351AA]'}`}>Safe preview {safePreview ? 'on' : 'off'}</button>
+                  <span className="text-[10px] text-[#444343]">Virtual deck only · resets on restart</span>
+                </div>
+                <div className="flex items-center gap-1" role="group" aria-label="Layout edit history">
+                  <button type="button" disabled={!deckHistory.past.length} onClick={() => stepDeckHistory('undo')} className="border border-[#999] px-2 py-1.5 text-xs font-bold disabled:opacity-40">Undo</button>
+                  <button type="button" disabled={!deckHistory.future.length} onClick={() => stepDeckHistory('redo')} className="border border-[#999] px-2 py-1.5 text-xs font-bold disabled:opacity-40">Redo</button>
+                </div>
+                <p className="w-full text-[10px] text-[#444343]">Undo/redo covers key and knob layout edits this session, not macros or device uploads. Safe preview cannot stop actions or macros already started and does not affect other tests or a physical pad.</p>
+              </div>
+              <div role="status" aria-live="polite" aria-label="Virtual action feedback" className={`w-full max-w-[624px] min-h-[40px] shrink-0 break-words [overflow-wrap:anywhere] border px-3 py-2 text-xs leading-relaxed ${virtualFeedback.type === 'error' ? 'border-[#AA3C20] bg-[#FFF1EB] text-[#76260F]' : virtualFeedback.type === 'success' ? 'border-[#A9BCD8] bg-[#F2F6FC] text-[#17457D]' : 'border-[#C7C7C7] bg-white text-[#444343]'}`}>
+                <strong className="mr-2">Virtual test</strong>{virtualFeedback.message}
+              </div>
+
               {/* VIA quick keycode tray */}
-              <div className="w-full max-w-[600px] mt-6">
+              <div className="startup-keycode-tray w-full max-w-[624px] mt-2">
                 <ViaKeycodePicker
                   selectedKeyIndex={selectedKeyIndex}
-                  isDeckLocked={deck.isLocked === true}
                   onAssignKeycode={handleAssignViaKeycode}
                 />
               </div>
             </div>
 
-            {/* Right Column: Key Config Drawer OR Knob Config Drawer OR Display Config Drawer OR Switch Inspector + Telemetry */}
-            <div className={`w-[560px] min-w-[360px] shrink min-[1264px]:flex-1 flex flex-col bg-[#FFFFFF] border-l border-[#E3E2DE] ${
- editingKeyBinding || isEditingKnob || isEditingDisplay ? 'overflow-hidden' : 'p-4 overflow-x-hidden overflow-y-auto'
- }`}>
+            <div className={`designer-inspector ${editingKeyBinding || isEditingKnob || isEditingDisplay ? 'designer-inspector--editing w-[480px]' : 'w-[360px]'} shrink-0 flex flex-col bg-[#FFFFFF] border-l border-[#E3E2DE] ${
+              editingKeyBinding || isEditingKnob || isEditingDisplay ? 'overflow-hidden' : 'p-4 overflow-x-hidden overflow-y-auto'
+            }`}>
+              <React.Suspense fallback={<div role="status" className="p-4 text-sm text-[#444343]">Loading editor…</div>}>
               {editingKeyBinding ? (
                 <KeyConfigDrawer
+                  key={`${activeLayerId}-${editingKeyBinding.keyIndex}`}
                   keyBinding={editingKeyBinding}
                   totalKeys={activeLayer.keys.length}
                   onSelectKeyIndex={(idx) => {
@@ -1203,7 +1336,6 @@ export const App: React.FC = () => {
                   onSave={handleSaveDial}
                   onClose={() => setIsEditingKnob(false)}
                   onTriggerAction={handleTriggerAction}
-                  onSelectChannel={(idx) => handleCycleDialMode(idx)}
                 />
               ) : isEditingDisplay ? (
                 <DisplayConfigDrawer
@@ -1220,94 +1352,86 @@ export const App: React.FC = () => {
                   deviceInfo={deviceInfo}
                   onSaveToPad={(settings) => hardwareBridge.saveDisplaySettings(settings)}
                   deckName={deck.name}
-                  activeLayerName={activeLayer.name}
+                  activeLayerName={`Layer ${activeChannelIdx}`}
                   activeLayerIndex={activeChannelIdx}
                   layerCount={layers.length}
                   onTriggerAction={handleTriggerAction}
                 />
               ) : (
                 <>
-                  {/* Selected key: a spec sheet, not a card */}
-                  <div className="panel mb-4">
-                    <div className="flex items-center justify-between px-3 py-2 border-b border-[#C7C7C7]">
+                  {/* The selected switch stays separate from the deck, so tapping a key does not move it. */}
+                  <section className="panel mb-4" aria-label="Selected key">
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[#C7C7C7]">
                       <div className="flex items-baseline gap-2">
-                        <span className="eyebrow eyebrow--ink">Switch</span>
-                        <span className="idx">
-                          {selectedKeyIndex !== null ? `0${selectedKeyIndex + 1} / 09` : '—'}
-                        </span>
+                        <span className="eyebrow eyebrow--ink">Selected key</span>
+                        <span className="idx">{selectedKeyIndex !== null ? `0${selectedKeyIndex + 1} / 09` : '—'}</span>
                       </div>
-                      {selectedKeyIndex !== null && (
-                        <button
-                          onClick={() => {
-                            if (deckIsLocked(deck)) return;
-                            setIsEditingKnob(false);
-                            const k = activeLayer.keys.find(item => item.keyIndex === selectedKeyIndex);
-                            if (k) setEditingKeyBinding(k);
-                          }}
-                          disabled={deck.isLocked}
-                          title={deck.isLocked ? 'Unlock deck to remap a switch' : 'Remap and record this switch'}
-                          className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1351AA] hover:text-[#141414] disabled:opacity-40 transition-colors"
-                        >
-                          Remap &amp; record
+                      {selectedKeyIndex !== null && activeLayer.keys.some(k => k.keyIndex === selectedKeyIndex) && (
+                        <button type="button" onClick={() => {
+                          setIsEditingKnob(false); setIsEditingDisplay(false);
+                          const k = activeLayer.keys.find(item => item.keyIndex === selectedKeyIndex);
+                          if (k) setEditingKeyBinding(k);
+                        }} className="border border-[#1351AA] px-2.5 py-1.5 text-[11px] font-bold text-[#1351AA] hover:bg-[#1351AA] hover:text-white transition-colors">
+                          Edit key
                         </button>
                       )}
                     </div>
-
-                    {selectedKeyIndex !== null ? (
-                      (() => {
-                        const k = activeLayer.keys.find(item => item.keyIndex === selectedKeyIndex);
-                        if (!k) return null;
-                        const rows = [
-                          { label: 'Legend', value: k.label, mono: false },
-                          { label: 'Shortcut', value: k.tapAction?.name || 'Unassigned', mono: true },
-                          { label: 'Category', value: (k.tapAction?.category || 'none').replace(/_/g, ' '), mono: true },
+                    {selectedKeyIndex !== null && activeLayer.keys.find(item => item.keyIndex === selectedKeyIndex) ? (() => {
+                      const k = activeLayer.keys.find(item => item.keyIndex === selectedKeyIndex)!;
+                      const safety = Boolean(k.isDestructiveSafety && k.safetyConfirmAction);
+                      const rows = safety
+                        ? [{ label: 'Hold to confirm', action: k.safetyConfirmAction }]
+                        : [
+                          { label: 'Tap', action: k.tapAction },
+                          ...(k.holdAction ? [{ label: 'Hold', action: k.holdAction }] : []),
+                          ...(k.doubleTapAction ? [{ label: 'Double tap', action: k.doubleTapAction }] : []),
                         ];
-                        return (
-                          <div>
-                            {rows.map((r) => (
-                              <div
-                                key={r.label}
-                                className="flex items-center justify-between gap-4 px-3 py-[7px] border-b border-[#E3E2DE] last:border-b-0"
-                              >
-                                <span className="eyebrow shrink-0">{r.label}</span>
-                                <span
-                                  className={`text-right truncate ${
-                                    r.mono
-                                      ? 'font-mono text-[10.5px] text-[#1351AA]'
-                                      : 'text-[12px] font-semibold text-[#141414]'
-                                  }`}
-                                >
-                                  {r.value}
-                                </span>
-                              </div>
-                            ))}
-                            {k.isDestructiveSafety && (
-                              <div className="flex items-center justify-between gap-4 px-3 py-[7px] bg-[#141414]">
-                                <span className="eyebrow eyebrow--cream">Safety hold</span>
-                                <span className="font-mono text-[10.5px] text-[#E3E2DE]">
-                                  {((k.longPressThresholdMs || 1500) / 1000).toFixed(1)}s required
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()
-                    ) : (
-                      <p className="px-3 py-3 text-[11px] text-[#646464] leading-relaxed">
-                        Select a switch on the deck to inspect its binding, record a new shortcut, or set a hold-to-confirm.
-                      </p>
+                      return <div className="px-3 py-3">
+                        <p className="text-[10px] font-mono uppercase tracking-[0.08em] text-[#646464]">Layer {activeChannelIdx} · Switch {selectedKeyIndex + 1}</p>
+                        <dl className="mt-2 space-y-2">
+                          {rows.map(({ label, action }) => <div key={label} className="min-w-0">
+                            <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#444343]">{label}</dt>
+                            <dd className={`mt-0.5 break-words text-sm font-semibold ${action ? 'text-[#141414]' : 'text-[#646464]'}`}>
+                              {action?.name || 'Unassigned'}
+                            </dd>
+                            {action?.payload?.keys?.length ? <dd className="mt-0.5 break-words font-mono text-[11px] text-[#1351AA]">{action.payload.keys.join(' + ')}</dd> : null}
+                          </div>)}
+                        </dl>
+                        {safety && <p className="mt-2 text-[11px] text-[#444343]">Hold for {((k.longPressThresholdMs || 1500) / 1000).toFixed(1)} seconds. Tap is disabled for this key.</p>}
+                      </div>;
+                    })() : (
+                      <p className="px-3 py-3 text-[11px] text-[#646464] leading-relaxed">Select a key on the virtual deck to see its assignment and edit it.</p>
                     )}
-                  </div>
+                  </section>
 
-                  {/* Expanded hardware diagnostics stays in the right inspector above Audio Mixer. */}
-                  <details
+                  {activeLayer.keys.length > 0 && activeLayer.keys.every(k =>
+                    !k.tapAction && !k.holdAction && !k.doubleTapAction && !(k.isDestructiveSafety && k.safetyConfirmAction)
+                  ) && (
+                    <section className="panel mb-4 border-[#A9BCD8] bg-[#F2F6FC]" aria-label="Empty layer keys">
+                      <div className="px-3 py-3">
+                        <p className="eyebrow eyebrow--ink">Layer {activeChannelIdx} · Keys</p>
+                        <p className="mt-1 text-sm font-bold text-[#141414]">No keys assigned yet</p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-[#444343]">Start with a shortcut, text, or an app. The knob may have its own assignments.</p>
+                        <button type="button" onClick={() => {
+                          const target = activeLayer.keys.find(k => k.keyIndex === selectedKeyIndex) || activeLayer.keys[0];
+                          if (!target) return;
+                          setSelectedKeyIndex(target.keyIndex); setIsEditingKnob(false); setIsEditingDisplay(false); setEditingKeyBinding(target);
+                        }} className="mt-3 border border-[#1351AA] bg-[#1351AA] px-3 py-2 text-xs font-bold text-white hover:bg-[#0f407f]">
+                          Assign first key
+                        </button>
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Expandable inspector panels retain their native disclosure controls. */}
+                  <AnimatedDetails
                     ref={hardwareDiagnosticsRef}
                     id="hardware-diagnostics"
                     open={isHardwareDiagnosticsExpanded}
-                    onToggle={(event) => setIsHardwareDiagnosticsExpanded(event.currentTarget.open)}
+                    onOpenChange={setIsHardwareDiagnosticsExpanded}
                     className="panel mb-4 shrink-0 min-w-0"
-                  >
-                    <summary className="px-3 py-2 cursor-pointer select-none flex items-center justify-between gap-2 border-b border-[#E3E2DE]">
+                    summaryClassName="px-3 py-2 cursor-pointer select-none flex items-center justify-between gap-2 border-b border-[#E3E2DE]"
+                    summary={<>
                       <span className="eyebrow eyebrow--ink">Hardware Status &amp; Diagnostics</span>
                       <span className="min-w-0 max-w-[42%] flex items-center justify-end gap-2">
                         <span className={`mark shrink-0 ${hardwareState === 'connected' ? 'mark--on' : 'mark--off'}`} aria-hidden="true" />
@@ -1315,40 +1439,38 @@ export const App: React.FC = () => {
                           {hardwareState === 'connected' ? (deviceInfo?.name || 'DEVICE LINKED') : 'NO DEVICE · SIMULATOR'}
                         </span>
                       </span>
-                    </summary>
-                    <div className="px-3 pt-2 pb-3">
-                      <p className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[#444343] leading-relaxed break-words">
-                        {hardwareState === 'connected' ? (deviceInfo?.name || 'DEVICE LINKED') : 'NO DEVICE · SIMULATOR'}
-                      </p>
-                    </div>
-                    <HardwareDiagnosticsPanel
-                      isExpanded={isHardwareDiagnosticsExpanded}
-                      actionHistory={actionLogs}
-                      onClearHistory={() => setActionLogs([])}
-                    />
-                  </details>
+                    </>}
+                  >
+                    {(renderedOpen) => <>
+                      <div className="px-3 pt-2 pb-3">
+                        <p className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[#444343] leading-relaxed break-words">
+                          {hardwareState === 'connected' ? (deviceInfo?.name || 'DEVICE LINKED') : 'NO DEVICE · SIMULATOR'}
+                        </p>
+                      </div>
+                      <HardwareDiagnosticsPanel
+                        isExpanded={isHardwareDiagnosticsExpanded}
+                        keepVisible={renderedOpen}
+                        actionHistory={actionLogs}
+                        onClearHistory={() => setActionLogs([])}
+                      />
+                    </>}
+                  </AnimatedDetails>
 
                   {/* Real Windows WASAPI Audio Mixer */}
-                  <details className="panel mb-4">
-                    <summary className="px-3 py-2 cursor-pointer select-none flex items-center justify-between border-b border-[#E3E2DE]">
-                      <span className="eyebrow eyebrow--ink">Audio mixer</span>
-                      <span className="idx">WASAPI</span>
-                    </summary>
-                    <div className="p-2 pt-0">
-                      <AudioMixerPanel />
-                    </div>
-                  </details>
+                  <AnimatedDetails className="panel mb-4 shrink-0" summaryClassName="px-3 py-2 cursor-pointer select-none flex items-center justify-between border-b border-[#E3E2DE]"
+                    summary={<><span className="eyebrow eyebrow--ink">Audio mixer</span><span className="idx">WASAPI</span></>}>
+                    {(renderedOpen) => <div className="p-2 pt-0">
+                      <AudioMixerPanel active={renderedOpen} />
+                    </div>}
+                  </AnimatedDetails>
 
                   {/* Localhost webhook API (collapsed by default) */}
-                  <details className="panel mb-4">
-                    <summary className="px-3 py-2 cursor-pointer select-none flex items-center justify-between border-b border-[#E3E2DE]">
-                      <span className="eyebrow eyebrow--ink">Webhook API</span>
-                      <span className="idx">localhost</span>
-                    </summary>
+                  <AnimatedDetails className="panel mb-4 shrink-0" summaryClassName="px-3 py-2 cursor-pointer select-none flex items-center justify-between border-b border-[#E3E2DE]"
+                    summary={<><span className="eyebrow eyebrow--ink">Webhook API</span><span className="idx">localhost</span></>}>
                     <div className="px-2 pb-2 max-h-80 overflow-y-auto">
                       <WebhookDocPanel onRunLocally={handleWebhookRequest} />
                     </div>
-                  </details>
+                  </AnimatedDetails>
 
                   {/* Telemetry: a mono readout table, hairline rows */}
                   <div className="flex-1 panel flex flex-col overflow-hidden min-h-[160px]">
@@ -1409,16 +1531,30 @@ export const App: React.FC = () => {
                   </div>
                 </>
               )}
+              </React.Suspense>
             </div>
           </div>
         )}
 
+        {activeTab === 'presets' && (
+          <PresetsPage key={backupRevision} layers={layers} activeLayerId={activeLayerId}
+            onApply={(preset: LayerPreset, layerId: string) => {
+              setDeck(current => ({ ...current, layers: current.layers.map(layer =>
+                layer.id === layerId ? applyLayerPreset(layer, preset) : layer) }));
+              setActiveLayerId(layerId);
+              setEditingKeyBinding(null);
+              setIsEditingKnob(false);
+            }}
+            onReviewUpload={() => setIsUploadSheetOpen(true)}
+            onTestAction={(action) => handleTriggerAction(action.id, action.name, action.category, action.payload)}
+          />
+        )}
+
         {/* TAB 2: VIA KEY MATRIX TESTER */}
         {activeTab === 'tester' && (
-          <div className="flex-1 p-6 overflow-y-auto flex justify-center">
-            <div className="w-full max-w-4xl">
-              <ViaKeyTester />
-            </div>
+          <div className="tester-page flex-1 min-w-0 p-4 sm:p-6 md:p-8 overflow-y-auto bg-[#F4F3F0]">
+            <ViaKeyTester />
+            <PadInspector deck={deck} state={hardwareState} info={deviceInfo} />
           </div>
         )}
 
@@ -1427,7 +1563,12 @@ export const App: React.FC = () => {
         {/* TAB 3: PC SHORTCUTS VAULT */}
         {activeTab === 'shortcuts' && (
           <div className="flex-1 overflow-y-auto">
-            <ShortcutsPanel />
+            <ShortcutsPanel layers={layers} activeLayerId={activeLayerId} onAssign={(shortcut, layer, keyIndex) => {
+              setEditingKeyBinding(null);
+              setDeck(current => ({ ...current, layers: current.layers.map((item, index) => index !== layer ? item : {
+                ...item, isExample: false, keys: item.keys.map(key => key.keyIndex !== keyIndex ? key : assignShortcutToBinding(key, shortcut)),
+              }) }));
+            }} />
           </div>
         )}
 
@@ -1447,13 +1588,12 @@ export const App: React.FC = () => {
                 onClick={() => setActiveTab('designer')}
                 className="shrink-0 h-6 px-2 border border-[#C7C7C7] bg-[#FFFFFF] font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-[#444343] hover:border-[#141414] hover:text-[#141414] transition-colors"
               >
-                ← Studio
+                ← Keys
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
               <AppLauncherPanel
                 selectedKeyIndex={selectedKeyIndex}
-                isDeckLocked={deck.isLocked === true}
                 onAssignApp={handleAssignApp}
                 onTriggerAction={handleTriggerAction}
                 activeChannelIndex={activeChannelIdx}
@@ -1475,20 +1615,20 @@ export const App: React.FC = () => {
         {/* TAB 5: VIA MACRO STUDIO */}
         {activeTab === 'macros' && (
           <div className="flex-1 p-6 overflow-y-auto flex justify-center">
-            <ViaMacroEditor isDeckLocked={deck.isLocked === true} onTriggerAction={handleTriggerAction} />
+            <ViaMacroEditor key={backupRevision} onTriggerAction={handleTriggerAction} onStorageError={setMacroStorageError} />
           </div>
         )}
+        </React.Suspense>
 
+          </div>
         </div>
       </div>
 
-      {/* Transient OSD Overlay */}
-      <OSDFlyout
-        layer={activeLayer}
-        deckName={deck.name}
-        isVisible={osdVisible}
-        onClose={() => setOsdVisible(false)}
-      />
+      {brightnessToast && <div aria-hidden="true" data-brightness-indicator className="pointer-events-none fixed bottom-5 right-5 z-[90] w-56 max-w-[calc(100vw-2.5rem)] border border-[#A9BCD8] bg-white px-4 py-3 shadow-lg">
+        <div className="flex items-center gap-2 text-sm font-bold text-[#141414]"><Sun className="h-4 w-4 text-[#1351AA]" /> Brightness {brightnessToast.level}%</div>
+        <div className="mt-2 h-1.5 bg-[#E3E2DE]"><div className="h-full bg-[#1351AA]" style={{ width: `${brightnessToast.level}%` }} /></div>
+        <p className="mt-1 text-[10px] text-[#444343]">{brightnessToast.atLimit ? 'Already at this limit' : 'Requested display level'}</p>
+      </div>}
 
       {/* Review and upload the deck in a bottom sheet rather than a popup. */}
       <UploadSheet
@@ -1506,7 +1646,7 @@ export const App: React.FC = () => {
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         activeTab={activeTab}
-        onChangeTab={setActiveTab}
+        onChangeTab={changeTab}
         deck={deck}
         activeLayer={activeLayer}
         onSelectLayer={handleSelectLayer}
@@ -1519,18 +1659,10 @@ export const App: React.FC = () => {
         onOpenUploadSheet={() => setIsUploadSheetOpen(true)}
         onSelectKey={(idx) => {
           setSelectedKeyIndex(idx);
-          if (deckIsLocked(deck)) {
-            pushLog('[DECK LOCKED] Unlock deck before remapping switches', 'deck', 'info');
-            return;
-          }
           const k = activeLayer.keys[idx];
           if (k) setEditingKeyBinding(k);
         }}
         onSelectKnob={() => {
-          if (deckIsLocked(deck)) {
-            pushLog('[DECK LOCKED] Unlock deck before editing the knob', 'deck', 'info');
-            return;
-          }
           setIsEditingKnob(true);
         }}
         onTriggerAction={(name, detail, type) => pushLog(name, 'palette', type, detail)}

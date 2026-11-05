@@ -19,6 +19,10 @@
 static uint16_t s_hit_mask;
 static uint32_t s_last_input_ms;
 static gesture_engine_t *s_engine;
+static uint16_t s_key_mask, s_keyboard_gestures;
+static uint8_t s_keyboard_origin[CFG_KEY_COUNT], s_keyboard_type[CFG_KEY_COUNT];
+static bool s_usb_ready;
+static uint32_t s_usb_epoch;
 
 /* main.c hands the engine over at init so dispatch can retune it after a config
  * change without owning its lifetime. */
@@ -32,16 +36,59 @@ void channel_apply_boot(const cfg_blob_t *cfg);
 void dispatch_init(void) {
     s_hit_mask = 0;
     s_last_input_ms = 0;
+    s_key_mask = s_keyboard_gestures = 0;
+    memset(s_keyboard_origin, 0, sizeof(s_keyboard_origin));
+    memset(s_keyboard_type, ACTION_TYPE_KEYCODE, sizeof(s_keyboard_type));
+    s_usb_ready = false;
+    s_usb_epoch = 0;
     channel_apply_boot(config_get());
 }
 
 void gesture_apply_config_from_live(void) {
     const cfg_blob_t *cfg = config_get();
     if (!cfg) return;
+    /* A live upload/reset must not leave the old assignment held. A switch
+     * already down is not re-armed until it has been released. */
+    action_release_all();
+    s_keyboard_gestures |= s_key_mask;
     gesture_engine_t *e = dispatch_engine();
     if (e) gesture_apply_config(e, &cfg->global);
     /* boot_channel only applies at power-on; a live reload keeps you on the
      * page you are on, which is what you want when the app saves a colour. */
+}
+
+void dispatch_keyboard_sample(uint16_t down_mask, bool usb_ready, uint32_t usb_epoch) {
+    down_mask &= (uint16_t)((1u << CFG_KEY_COUNT) - 1u);
+    if (usb_ready != s_usb_ready || usb_epoch != s_usb_epoch) {
+        action_release_all();
+        /* Do not replay a held switch after disconnect or reconnect. */
+        s_keyboard_gestures |= (uint16_t)(s_key_mask | down_mask);
+        s_key_mask = down_mask;
+        s_usb_ready = usb_ready;
+        s_usb_epoch = usb_epoch;
+        return;
+    }
+    uint16_t changed = (uint16_t)(s_key_mask ^ down_mask);
+    for (uint8_t i = 0; i < CFG_KEY_COUNT; i++) {
+        const uint16_t bit = (uint16_t)(1u << i);
+        if (!(changed & bit)) continue;
+        if (!(down_mask & bit)) {
+            action_physical_keyboard(i, NULL, false);
+        } else if (usb_ready) {
+            const cfg_action_t *slot = action_for_gesture(GESTURE_TAP, i);
+            action_t a;
+            if (slot) {
+                action_from_cfg(slot, &a);
+                if (action_physical_keyboard_supported(&a)) {
+                    s_keyboard_gestures |= bit;
+                    s_keyboard_origin[i] = channel_active();
+                    s_keyboard_type[i] = a.type;
+                    action_physical_keyboard(i, &a, true);
+                }
+            }
+        }
+    }
+    s_key_mask = down_mask;
 }
 
 uint16_t dispatch_hit_mask(void) { return s_hit_mask; }
@@ -144,17 +191,27 @@ int dispatch_run(gesture_queue_t *q, uint32_t now_ms) {
             repeats = g.steps > 0 ? g.steps : 1;
         }
 
-        uint8_t action_type = a.type;
+        /* Normal keyboard actions were already handled on physical edges.
+         * Retain gesture events for diagnostics/desktop, but never fire the
+         * keyboard action a second time on TAP/HOLD/DOUBLE. */
+        bool keyboard_gesture = !is_knob && g.index < CFG_KEY_COUNT &&
+            (g.kind == GESTURE_TAP || g.kind == GESTURE_HOLD ||
+             g.kind == GESTURE_HOLD_RELEASE || g.kind == GESTURE_DOUBLE_TAP) &&
+            ((s_keyboard_gestures & (1u << g.index)) || action_physical_keyboard_supported(&a));
+        if (keyboard_gesture && (g.kind == GESTURE_TAP || g.kind == GESTURE_HOLD_RELEASE))
+            s_keyboard_gestures &= (uint16_t)~(1u << g.index);
+        uint8_t action_type = keyboard_gesture ? s_keyboard_type[g.index] : a.type;
+        uint8_t event_channel = keyboard_gesture ? s_keyboard_origin[g.index] : channel_active();
         for (int r = 0; r < repeats; r++) {
             bool press = true;
             if (g.kind == GESTURE_HOLD_RELEASE || g.kind == GESTURE_KNOB_RELEASE) press = false;
-            if (action_is_set(&a)) {
+            if (!keyboard_gesture && action_is_set(&a)) {
                 if (!handle_system_action(&a, press)) action_fire(&a, press);
             }
         }
 
         events_push(is_knob ? EV_SOURCE_KNOB : EV_SOURCE_KEY, is_knob ? 0 : g.index,
-                    gesture_to_event(g.kind), channel_active(), g.steps, action_type);
+                    gesture_to_event(g.kind), keyboard_gesture ? event_channel : channel_active(), g.steps, action_type);
     }
     return handled;
 }

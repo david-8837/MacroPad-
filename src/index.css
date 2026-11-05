@@ -177,6 +177,41 @@
 ::-webkit-scrollbar-thumb { background: var(--line); }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
+/* Keep header content out of the OS caption buttons, without adding another
+   title bar. Overlay safe-area coordinates also handle left-sided controls. */
+.app-header--native-controls .navbar-layout {
+  margin-left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, calc(100% - 138px));
+}
+
+/* Keep the desktop window movable when restored. Controls stay clickable. */
+.navbar-brand, .navbar-actions { -webkit-app-region: drag; }
+.navbar-actions button, .navbar-actions a, .navbar-actions input, .navbar-actions select { -webkit-app-region: no-drag; }
+
+/* A visible, compact horizontal scrollbar makes extra modules discoverable on
+   scaled laptop screens instead of hiding clipped navigation buttons. */
+.module-navigation { scrollbar-width: thin; }
+.module-navigation::-webkit-scrollbar { height: 4px; }
+.module-navigation::-webkit-scrollbar-track { background: transparent; border: 0; }
+.module-navigation::-webkit-scrollbar-thumb { background: #A6A5A0; }
+
+/* Full-width audio tracks with a generous drag target in the narrow inspector. */
+.audio-volume-slider {
+  display: block; width: 100%; height: 24px; margin: 0; cursor: pointer;
+  appearance: none; -webkit-appearance: none; background: transparent;
+}
+.audio-volume-slider::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, #1351AA 0%, #1351AA var(--audio-level), #DAD9D5 var(--audio-level), #DAD9D5 100%);
+}
+.audio-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px;
+  border: 2px solid #fff; border-radius: 50%; background: #1351AA; box-shadow: 0 0 0 1px #1351AA;
+}
+.audio-volume-slider::-moz-range-track { height: 6px; border-radius: 3px; background: #DAD9D5; }
+.audio-volume-slider::-moz-range-progress { height: 6px; border-radius: 3px; background: #1351AA; }
+.audio-volume-slider::-moz-range-thumb { width: 16px; height: 16px; border: 2px solid #fff; border-radius: 50%; background: #1351AA; box-shadow: 0 0 0 1px #1351AA; }
+
 /* ============================================================
    HARDWARE SIMULATION — flat, no glow, no gradient
    ============================================================ */
@@ -235,12 +270,7 @@
   border: 1px solid var(--ink);
 }
 
-/* Live tally marker: cobalt square, no pulse-softening. */
-@keyframes tally-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-.tally-live { animation: tally-pulse 1.2s linear infinite; }
+
 
 /* The system guarantees two things no matter what a component inline-styles. */
 [style*="box-shadow"] { box-shadow: none !important; }
@@ -253,3 +283,303 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ============================================================
+   PREMIUM INTERACTION LAYER
+   Soft depth and deliberate motion, without changing state or
+   suggesting that the simulator is a connected physical device.
+   ============================================================ */
+.app-shell {
+  background: linear-gradient(145deg, #e9e8e4 0%, #e3e2de 55%, #dddedb 100%);
+}
+.app-header {
+  background: linear-gradient(180deg, #f0efec 0%, #e4e3df 100%);
+  box-shadow: 0 3px 16px rgba(20, 20, 20, 0.06);
+}
+.brand-mark {
+  background-color: #141414;
+  background-image: linear-gradient(145deg, #35383c, #141414 65%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 5px rgba(20, 20, 20, 0.16);
+}
+.premium-nav-link {
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+.premium-nav-link[aria-current='true'] { background-color: rgba(19, 81, 170, 0.045); }
+@media (hover: hover) {
+  .premium-nav-link:hover { background-color: rgba(255, 255, 255, 0.45); }
+  .premium-nav-link[aria-current='true']:hover { background-color: rgba(19, 81, 170, 0.07); }
+}
+
+.panel {
+  box-shadow: 0 2px 8px rgba(20, 20, 20, 0.035), 0 1px 2px rgba(20, 20, 20, 0.035);
+}
+.chassis {
+  background: linear-gradient(145deg, #292b2e 0%, #141414 50%, #0c0d0e 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 12px 28px rgba(20, 20, 20, 0.19), 0 3px 8px rgba(20, 20, 20, 0.14);
+}
+.macropad-key {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -3px 0 rgba(20, 20, 20, 0.08), 0 2px 3px rgba(0, 0, 0, 0.18);
+  transition: transform 100ms ease, background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+@media (hover: hover) {
+  .macropad-key:hover:not(.active-down) {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -3px 0 rgba(19, 81, 170, 0.13), 0 3px 7px rgba(0, 0, 0, 0.24);
+  }
+}
+.macropad-key:active, .macropad-key.active-down {
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.32);
+}
+
+.btn, .premium-action {
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 3px 7px rgba(19, 81, 170, 0.16);
+}
+@media (hover: hover) {
+  .btn:not(:disabled):hover, .premium-action:not(:disabled):hover {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 5px 14px rgba(19, 81, 170, 0.2);
+    transform: translateY(-1px);
+  }
+  .premium-action:not(:disabled):hover { background-color: #103f84; }
+}
+.btn:not(:disabled):active, .premium-action:not(:disabled):active { transform: translateY(1px); box-shadow: none; }
+.preset-card {
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background-color 180ms ease;
+  box-shadow: 0 1px 3px rgba(20, 20, 20, 0.04);
+}
+.preset-card[aria-pressed='true'] { box-shadow: inset 3px 0 0 #1351aa, 0 4px 14px rgba(19, 81, 170, 0.09); }
+@media (hover: hover) {
+  .preset-card:hover { transform: translateY(-2px); box-shadow: 0 7px 18px rgba(20, 20, 20, 0.09); }
+  .preset-card[aria-pressed='true']:hover { box-shadow: inset 3px 0 0 #1351aa, 0 7px 18px rgba(19, 81, 170, 0.12); }
+}
+.premium-preview { box-shadow: 0 8px 24px rgba(20, 20, 20, 0.07); }
+.premium-dialog { box-shadow: 0 18px 60px rgba(20, 20, 20, 0.22); }
+.premium-sheet { box-shadow: 0 -18px 60px rgba(20, 20, 20, 0.2); }
+
+@keyframes workspace-arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-arrival { animation: workspace-arrive 280ms ease-out; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-arrival { animation: none; }
+  .preset-card:hover, .btn:hover, .premium-action:hover { transform: none; }
+}
+
+/* A single, short entrance after startup. No real choices are made on the
+   user's behalf; the class is removed as soon as they interact. */
+@keyframes startup-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .startup-entrance .workspace-arrival { animation: none; }
+  .startup-entrance .app-header,
+  .startup-entrance [aria-label="Getting started"],
+  .startup-entrance .workspace-rail > *,
+  .startup-entrance .startup-deck-heading,
+  .startup-entrance .startup-deck-chassis,
+  .startup-entrance .startup-deck-controls > *,
+  .startup-entrance .startup-keycode-tray,
+  .startup-entrance .designer-inspector:not(.designer-inspector--editing) > * {
+    animation: startup-rise 420ms cubic-bezier(.22, 1, .36, 1) backwards;
+  }
+  .startup-entrance .app-header { animation-delay: 0ms; }
+  .startup-entrance [aria-label="Getting started"] { animation-delay: 55ms; }
+  .startup-entrance .workspace-rail > * { animation-delay: 75ms; }
+  .startup-entrance .startup-deck-heading { animation-delay: 110ms; }
+  .startup-entrance .startup-deck-chassis { animation-delay: 170ms; }
+  .startup-entrance .startup-deck-controls > :nth-child(1) { animation-delay: 230ms; }
+  .startup-entrance .startup-deck-controls > :nth-child(2) { animation-delay: 280ms; }
+  .startup-entrance .startup-deck-controls > :nth-child(n+3) { animation-delay: 330ms; }
+  .startup-entrance .startup-keycode-tray { animation-delay: 340ms; }
+  .startup-entrance .designer-inspector:not(.designer-inspector--editing) > * { animation-delay: 290ms; }
+  .startup-entrance .designer-inspector:not(.designer-inspector--editing) > :nth-child(2) { animation-delay: 340ms; }
+  .startup-entrance .designer-inspector:not(.designer-inspector--editing) > :nth-child(n+3) { animation-delay: 390ms; }
+}
+
+/* Drawers slide within their clipped column; the preset dialog moves separately
+   from its fixed overlay so that the backdrop stays in place. */
+@keyframes editor-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes preset-slide-in {
+  from { opacity: 0.75; transform: translateY(64px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .editor-slide-in { animation: editor-slide-in 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .preset-slide-in { animation: preset-slide-in 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+}
+
+/* Natural-height disclosure animation; contents are clipped, not scaled. */
+.disclosure-body {
+  display: grid;
+  grid-template-rows: minmax(0, 0fr);
+  transition: grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.disclosure-body--open { grid-template-rows: minmax(0, 1fr); }
+.disclosure-body-inner { min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .disclosure-body { transition: none; }
+}
+
+/* Shortcut reference: tactile keycaps and quiet interaction feedback. */
+.shortcut-header-icon { box-shadow: 0 3px 8px rgba(20, 20, 20, 0.07); }
+.shortcut-guide { box-shadow: inset 3px 0 0 #1351aa, 0 2px 8px rgba(20, 20, 20, 0.035); }
+.shortcut-category { border-left: 2px solid transparent; transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease; }
+.shortcut-category:hover { background: #f4f3f0; color: #141414; }
+.shortcut-category--active, .shortcut-category--active:hover { background: #edf3fc; border-left-color: #1351aa; color: #1351aa; font-weight: 700; }
+.shortcut-search { transition: border-color 180ms ease, box-shadow 180ms ease; }
+.shortcut-search:focus { box-shadow: 0 0 0 2px rgba(19, 81, 170, 0.12); }
+.shortcut-search::-webkit-search-cancel-button { display: none; }
+.shortcut-card { transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.shortcut-keycap { background: linear-gradient(#fff, #f4f3f0); box-shadow: inset 0 -2px 0 rgba(20, 20, 20, 0.08); }
+.shortcut-copy { transition: color 180ms ease, border-color 180ms ease, background-color 180ms ease; }
+@media (hover: hover) {
+  .shortcut-card:hover { border-color: #b4c6e0; box-shadow: 0 7px 18px rgba(20, 20, 20, 0.08); transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shortcut-card:hover { transform: none; }
+}
+
+/* OS event tester: depth without suggesting a live hardware connection. */
+.tester-header-icon, .tester-stat, .tester-panel { box-shadow: 0 3px 12px rgba(20, 20, 20, 0.05); }
+.tester-guide { box-shadow: inset 3px 0 0 #1351aa, 0 2px 8px rgba(20, 20, 20, 0.035); }
+.tester-option, .tester-reset { transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }
+.tester-keyboard-scroll { background: linear-gradient(145deg, #2b2d30, #141414 60%); border: 1px solid #141414; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 20px rgba(20, 20, 20, 0.14); }
+.tester-keyboard { padding: 18px; min-width: max-content; }
+.tester-key { color: #444343; background: linear-gradient(#fff, #eae9e5); border-color: #c7c7c7; box-shadow: inset 0 1px 0 #fff, inset 0 -2px 0 rgba(20, 20, 20, 0.12), 0 2px 3px rgba(0, 0, 0, 0.25); transition: background 100ms ease, color 100ms ease, border-color 100ms ease, box-shadow 100ms ease; }
+.tester-key[data-state='tested'] { background: #dce9fa; border-color: #83a7d6; color: #103f84; }
+.tester-key[data-state='held'] { background: #1351aa; border-color: #a1c2ef; color: white; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25); }
+.tester-sublabel, .tester-count { color: #646464; }
+.tester-key[data-state='held'] .tester-sublabel, .tester-key[data-state='held'] .tester-count { color: #e3eefe; }
+.tester-legend { display: inline-block; width: 10px; height: 10px; border: 1px solid #c7c7c7; background: #f4f3f0; }
+.tester-legend--tested { background: #dce9fa; border-color: #83a7d6; }
+.tester-legend--held { background: #1351aa; border-color: #1351aa; }
+/* Keep event updates from changing the height or scrollbar of the page. */
+.tester-page { scrollbar-gutter: stable; }
+.tester-readout { height: 128px; overflow-y: auto; scrollbar-gutter: stable; }
+
+/* At laptop widths, overlay the editor instead of clipping its right edge when
+   the pad, sidebar and full-width drawer do not fit side by side. */
+@media (min-width: 1260px) and (max-width: 1399px) {
+  .designer-layout { position: relative; }
+  .designer-inspector--editing {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(480px, 100%);
+    box-shadow: -12px 0 28px #14141426;
+    z-index: 10;
+  }
+}
+
+/* The rail (228), pad (672) and inspector (360) need at least 1260 CSS px.
+   Stack below that so high-DPI laptop screens do not clip the inspector. */
+@media (max-width: 1259px) {
+  .workspace { position: relative; }
+  .mobile-rail-toggle { display: block; }
+  .workspace-rail { position: absolute; top: 37px; bottom: 0; left: 0; z-index: 40; box-shadow: 8px 0 20px #14141420; }
+  .workspace-rail:not(.workspace-rail--open) { display: none; }
+  .designer-layout { flex-direction: column; overflow-y: auto; }
+  .designer-pad { flex: none; width: 100%; min-width: 0; padding: 1rem; overflow: visible; }
+  .designer-inspector { flex: none; width: 100%; min-width: 0; overflow: visible; }
+  .designer-inspector--editing { position: fixed; z-index: 45; inset: 64px 0 0; width: 100%; overflow: hidden; }
+}
+/* Two 352px/248px panels plus their gap no longer fit on narrow displays. */
+@media (max-width: 680px) {
+  .digital-twin-body { width: 100%; flex-wrap: wrap; }
+  .startup-deck-chassis { max-width: 100%; }
+  .startup-deck-controls { width: min(352px, 100%); }
+}
+@media (max-width: 480px) {
+  .app-header .brand-mark { display: none; }
+  .app-header > div > div:first-child { padding-left: .5rem; padding-right: .5rem; }
+  .chassis { max-width: 100%; }
+}
+@media (max-width: 600px) {
+  .app-header { height: 80px; }
+  .navbar-layout { display: grid; grid-template-rows: 40px 40px; grid-template-columns: minmax(0, 1fr); }
+  .navbar-brand { display: none; }
+  .navbar-actions { grid-row: 1; border-left: 0; border-bottom: 1px solid #c7c7c7; }
+  .navbar-layout nav { grid-row: 2; overflow-x: auto; }
+  .designer-inspector--editing { top: 80px; }
+}
+
+/* First-run welcome and optional tour. The illustration is decorative; the
+   dialog describes the virtual pad without reporting a device connection. */
+.welcome-overlay { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 16px; background: #141414a6; backdrop-filter: blur(4px); }
+.welcome-dialog { position: relative; width: min(480px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; background: #f4f3f0; color: #141414; border: 1px solid #141414; box-shadow: 0 22px 70px #0005; }
+.welcome-close { position: absolute; right: 15px; top: 15px; z-index: 1; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #777; color: #f4f3f0; background: #212121; }
+.welcome-close:hover { background: #f4f3f0; color: #141414; }
+.welcome-art { height: 235px; background: #141414; color: #f4f3f0; padding: 20px 22px 15px; display: flex; flex-direction: column; }
+.welcome-art-label, .welcome-art-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .1em; color: #b4b4b1; }
+.welcome-art-label { padding-right: 40px; }
+.welcome-art-label span:first-child { color: #fff; font-family: 'General Sans', sans-serif; font-size: 15px; font-weight: 700; letter-spacing: .18em; }
+.welcome-illustration { width: 162px; margin: auto; padding: 10px; background: #202020; border: 1px solid #60605e; box-shadow: 5px 5px 0 #0006; }
+.welcome-pad-top { display: flex; align-items: center; justify-content: space-between; gap: 11px; margin-bottom: 8px; }
+.welcome-screen { width: 96px; height: 28px; border: 1px solid #5b5b58; background: #101010; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 5px 8px; }
+.welcome-screen i { height: 2px; width: 58%; background: #728399; }.welcome-screen i:nth-child(2) { width: 85%; background: #3976d1; }.welcome-screen i:nth-child(3) { width: 38%; }
+.welcome-dial { width: 26px; height: 26px; border: 1px solid #888; border-radius: 50%; background: linear-gradient(135deg,#626262,#202020); }
+.welcome-pad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.welcome-key { height: 28px; display: grid; place-items: center; color: #696969; background: #e3e2de; border: 1px solid #999; }
+.welcome-key--active { color: #fff; background: #1351aa; border-color: #75a9ee; }
+.welcome-content { text-align: center; padding: 29px 35px 30px; }
+.welcome-eyebrow { color: #565656; font: 700 10px 'JetBrains Mono', monospace; letter-spacing: .14em; }
+.welcome-content h2 { margin-top: 12px; font-size: 26px; line-height: 1.15; letter-spacing: -.03em; outline: none; }
+.welcome-description { max-width: 370px; margin: 13px auto 0; font-size: 14px; line-height: 1.6; color: #444343; }
+.welcome-note { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 19px auto 0; color: #1351aa; font-size: 11px; line-height: 1.5; }
+.welcome-note svg { flex: none; }
+.welcome-actions { display: flex; justify-content: center; gap: 9px; margin-top: 23px; }
+.welcome-actions button { min-height: 42px; padding: 0 17px; font-size: 12px; font-weight: 700; }
+.welcome-secondary { border: 1px solid #a5a5a5; background: transparent; }.welcome-secondary:hover { border-color: #141414; }
+.welcome-primary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #141414; color: #fff; background: #141414; }.welcome-primary:hover { background: #1351aa; border-color: #1351aa; }
+.welcome-skip { margin-top: 15px; color: #444; font-size: 11px; text-decoration: underline; }
+.welcome-dialog button:focus-visible { outline: 2px solid #3976d1; outline-offset: 3px; }
+@media (max-height: 580px) { .welcome-art { height: 155px; }.welcome-illustration { width: 120px; padding: 7px; }.welcome-pad-top { margin-bottom: 4px; }.welcome-screen { height: 20px; }.welcome-dial { width: 20px; height: 20px; }.welcome-key { height: 18px; }.welcome-key svg { width: 11px; height: 11px; }.welcome-content { padding: 18px 22px 20px; }.welcome-actions { margin-top: 15px; }.welcome-note { margin-top: 12px; } }
+@media (max-width: 360px) { .welcome-art-label span:last-child, .welcome-art-footer { font-size: 8px; }.welcome-content { padding-left: 20px; padding-right: 20px; }.welcome-content h2 { font-size: 23px; }.welcome-actions button { padding: 0 12px; } }
+
+/* Gentle one-shot choreography; it never blocks the welcome controls. */
+@media (prefers-reduced-motion: no-preference) {
+  .welcome-overlay { animation: welcome-dim-in 320ms ease-out both; }
+  .welcome-dialog { animation: welcome-card-in 480ms cubic-bezier(.2,.8,.2,1) both; }
+  .welcome-art { position: relative; overflow: hidden; }
+  .welcome-art::before { content: ''; position: absolute; inset: 0 auto 0 -35%; width: 30%; pointer-events: none; background: linear-gradient(90deg, transparent, #3976d112, transparent); transform: skewX(-16deg); animation: welcome-sheen 1.1s 180ms ease-out both; }
+  .welcome-art-label, .welcome-art-footer { animation: welcome-detail-in 480ms 120ms ease-out both; }
+  .welcome-illustration { animation: welcome-pad-in 550ms cubic-bezier(.2,.8,.2,1) both; }
+  .welcome-key { animation: welcome-key-in 360ms cubic-bezier(.2,.8,.2,1) both; }
+  .welcome-key:nth-child(1) { animation-delay: 80ms; }
+  .welcome-key:nth-child(2) { animation-delay: 120ms; }
+  .welcome-key:nth-child(3) { animation-delay: 160ms; }
+  .welcome-key:nth-child(4) { animation-delay: 140ms; }
+  .welcome-key:nth-child(5) { animation-delay: 180ms; }
+  .welcome-key:nth-child(6) { animation-delay: 220ms; }
+  .welcome-key:nth-child(7) { animation-delay: 200ms; }
+  .welcome-key:nth-child(8) { animation-delay: 240ms; }
+  .welcome-key:nth-child(9) { animation-delay: 280ms; }
+  .welcome-key--active { position: relative; }
+  .welcome-key--active::after { content: ''; position: absolute; inset: -1px; border: 1px solid #84b4f3; pointer-events: none; animation: welcome-key-accent 800ms 320ms ease-out both; }
+  .welcome-dial { animation: welcome-dial-in 700ms 80ms cubic-bezier(.2,.8,.2,1) both; }
+  .welcome-screen i { transform-origin: left; animation: welcome-screen-line 500ms 180ms ease-out both; }
+  .welcome-screen i:nth-child(2) { animation-delay: 260ms; }
+  .welcome-screen i:nth-child(3) { animation-delay: 340ms; }
+  .welcome-content > * { animation: welcome-detail-in 350ms ease-out both; }
+  .welcome-content > :nth-child(2) { animation-delay: 35ms; }
+  .welcome-content > :nth-child(3) { animation-delay: 70ms; }
+  .welcome-content > :nth-child(4) { animation-delay: 100ms; }
+  .welcome-content > :nth-child(5), .welcome-content > :nth-child(6) { animation-delay: 125ms; }
+  .welcome-primary, .welcome-secondary, .welcome-close { transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease; }
+  .welcome-primary svg { transition: transform 160ms ease; }
+  .welcome-primary:hover svg { transform: translateX(3px); }
+}
+@keyframes welcome-dim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes welcome-card-in { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes welcome-pad-in { from { opacity: 0; transform: translateY(9px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes welcome-key-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes welcome-detail-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes welcome-sheen { from { left: -35%; } to { left: 115%; } }
+@keyframes welcome-dial-in { from { transform: rotate(-40deg); } to { transform: rotate(0); } }
+@keyframes welcome-screen-line { from { transform: scaleX(.1); opacity: .3; } to { transform: scaleX(1); opacity: 1; } }
+@keyframes welcome-key-accent { from { opacity: .8; transform: scale(1); } to { opacity: 0; transform: scale(1.18); } }

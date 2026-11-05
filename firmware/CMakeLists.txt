@@ -91,7 +91,14 @@ target_compile_definitions(mpad3 PRIVATE
 
 # An unspecified LED strip and unbudgeted 5 V rail must not light on first
 # power-up. Bench-only opt-in is explicit and never stored in flash config.
+option(MPAD_KEYS_ONLY "Build for the keys-and-knob model without OLED or LEDs" OFF)
 option(MPAD_BENCH_LED_OUTPUT "Enable LED output for a current-limited bench setup only" OFF)
+if(MPAD_KEYS_ONLY AND MPAD_BENCH_LED_OUTPUT)
+    message(FATAL_ERROR "The keys-and-knob model has no LED output")
+endif()
+if(MPAD_KEYS_ONLY)
+    target_compile_definitions(mpad3 PRIVATE BOARD_KEYS_ONLY=1)
+endif()
 if(MPAD_BENCH_LED_OUTPUT)
     target_compile_definitions(mpad3 PRIVATE BOARD_LED_OUTPUT_ENABLED=1)
 endif()

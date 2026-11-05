@@ -20,7 +20,7 @@ const { logLine, ok, fail } = require('./util.cjs');
 
 const UF2_MAGIC0 = 0x0a324655; // "UF2\n"
 const UF2_MAGIC1 = 0x9e5d5157;
-const UF2_MAGIC_END = 0x0ab16958;
+const UF2_MAGIC_END = 0x0ab16f30;
 const UF2_FLAG_FAMILY = 0x00002000;
 const RP2040_FAMILY = 0xe48bff56;
 const RP2350_ARM_FAMILY = 0xe48bff59;
@@ -48,6 +48,11 @@ function inspectUf2(filePath) {
   } catch (e) {
     return fail(`That file could not be read: ${e.message}`);
   }
+  return inspectUf2Buffer(buf, filePath);
+}
+
+// Inspect the exact immutable snapshot that will be written to BOOTSEL.
+function inspectUf2Buffer(buf, filePath) {
   if (buf.length < BLOCK_SIZE) {
     return fail(`That file is only ${buf.length} bytes. A .uf2 is at least 512, so this is not one — it may be a truncated download.`);
   }
@@ -188,24 +193,36 @@ function findBootloaderDrive() {
   } else {
     for (const base of CANDIDATE_ROOTS) {
       try {
-        for (const entry of fs.readdirSync(base)) roots.push(path.join(base, entry));
+        for (const entry of fs.readdirSync(base)) {
+          const first = path.join(base, entry);
+          roots.push(first);
+          // Linux automounters commonly mount under /media/<user>/<volume>
+          // or /run/media/<user>/<volume>; macOS uses /Volumes/<volume>.
+          if (base !== '/Volumes/') {
+            try { for (const child of fs.readdirSync(first)) roots.push(path.join(first, child)); }
+            catch { /* inaccessible directory or volume */ }
+          }
+        }
       } catch { /* not present */ }
     }
   }
 
+  const matches = [];
   for (const root of roots) {
     try {
       const info = path.join(root, 'INFO_UF2.TXT');
       if (!fs.existsSync(info)) continue;
       const text = fs.readFileSync(info, 'utf8');
       if (!/UF2|RP2/i.test(text)) continue;
-      return ok({ path: root, info: text.trim().slice(0, 200) });
+      matches.push({ path: root, info: text.trim().slice(0, 200) });
     } catch {
       // A drive that cannot be read is not the bootloader; keep looking rather
       // than reporting a failure the user cannot act on.
       continue;
     }
   }
+  if (matches.length === 1) return ok(matches[0]);
+  if (matches.length > 1) return { ...fail('More than one RP2040 BOOTSEL drive was detected. Disconnect the others before flashing.'), code: 'MULTIPLE_BOOTLOADERS' };
   return fail('The pad is not in bootloader mode. Hold the BOOT button while plugging in the USB cable — on the RP2040-Zero that is the small button next to the USB connector — and Windows will mount a drive called RPI-RP2.');
 }
 
@@ -215,24 +232,33 @@ function findBootloaderDrive() {
  * Copy a .uf2 to the bootloader drive.
  *
  * The write is followed by a wait for the drive to disappear, which is how the
- * ROM signals "I accepted it and rebooted". Without that check the UI would
- * report success even when the copy silently failed.
+ * indicates that the mounted drive disappeared. This is not proof that the
+ * firmware was accepted or booted; physical verification is still required.
  */
+let flashInProgress = false;
 async function flash(uf2Path, onProgress) {
-  const inspected = inspectUf2(uf2Path);
-  if (!inspected.ok) return inspected;
+  if (flashInProgress) return fail('A firmware transfer is already in progress. Wait for it to finish.');
+  flashInProgress = true;
+  try { return await flashOnce(uf2Path, onProgress); }
+  finally { flashInProgress = false; }
+}
 
-  const drive = findBootloaderDrive();
-  if (!drive.ok) return drive;
-
-  const dest = path.join(drive.value.path, path.basename(uf2Path));
+async function flashOnce(uf2Path, onProgress) {
   let buf;
   try {
     buf = fs.readFileSync(uf2Path);
   } catch (e) {
     return fail(`That file could not be read: ${e.message}`);
   }
+  // Validate the same bytes that are sent to the bootloader. Reopening the
+  // file after validation could flash a different or partially replaced image.
+  const inspected = inspectUf2Buffer(buf, uf2Path);
+  if (!inspected.ok) return inspected;
 
+  const drive = findBootloaderDrive();
+  if (!drive.ok) return drive;
+
+  const dest = path.join(drive.value.path, path.basename(uf2Path));
   logLine('firmware', `flashing ${uf2Path}`, `${inspected.value.blockCount} blocks to ${drive.value.path}`);
   if (onProgress) onProgress({ stage: 'copying', percent: 0 });
 
@@ -245,8 +271,9 @@ async function flash(uf2Path, onProgress) {
       let written = 0;
       for (let off = 0; off < buf.length; off += BLOCK_SIZE) {
         const slice = buf.slice(off, off + BLOCK_SIZE);
-        fs.writeSync(fd, slice, 0, slice.length);
-        written += slice.length;
+        const count = fs.writeSync(fd, slice, 0, slice.length);
+        if (count !== slice.length) throw new Error('Incomplete UF2 block write');
+        written += count;
         if (onProgress) {
           onProgress({
             stage: 'copying',
@@ -259,14 +286,9 @@ async function flash(uf2Path, onProgress) {
       fs.closeSync(fd);
     }
   } catch (e) {
-    // The drive vanishing mid-write is the SUCCESS case: the board reboots the
-    // instant it has enough of the image, taking the volume with it.
-    if (/EBUSY|ENODEV|ENOENT|EPERM|EIO|EBADF/i.test(String(e.code || e.message))) {
-      logLine('firmware', 'drive vanished during copy — that is the reboot', String(e.code || e.message));
-      if (onProgress) onProgress({ stage: 'rebooting', percent: 100 });
-      return ok({ flashed: true, ...inspected.value, note: 'The pad rebooted while the file was still being copied, which is the normal way this ends.' });
-    }
-    return fail(`Copying to the pad failed: ${e.message}`);
+    // A disconnect or I/O error can also mean an incomplete transfer. Never
+    // report it as a successful flash without confirmation.
+    return fail(`Could not confirm the firmware transfer: ${e.message}. Reconnect the pad and verify it boots; retry in BOOTSEL if needed.`);
   }
 
   if (onProgress) onProgress({ stage: 'rebooting', percent: 100 });
@@ -274,10 +296,10 @@ async function flash(uf2Path, onProgress) {
   // Confirm the board left bootloader mode.
   for (let i = 0; i < 20; i++) {
     await sleep(300);
-    const still = findBootloaderDrive();
-    if (!still.ok) {
-      logLine('firmware', 'bootloader drive gone — flash complete');
-      return ok({ flashed: true, ...inspected.value });
+    // Another connected BOOTSEL drive must not hide the target disappearing.
+    if (!fs.existsSync(path.join(drive.value.path, 'INFO_UF2.TXT'))) {
+      logLine('firmware', 'BOOTSEL drive gone after transfer — verify the pad');
+      return ok({ flashed: true, ...inspected.value, note: 'UF2 transfer completed and the BOOTSEL drive disappeared. This does not confirm the firmware booted.' });
     }
   }
   return fail('The file was copied, but the pad did not reboot out of bootloader mode within 6 seconds. Unplug it and plug it back in, then check the version in Diagnostics.');
@@ -292,35 +314,47 @@ function status() {
     inBootloader: drive.ok,
     drivePath: drive.ok ? drive.value.path : null,
     driveInfo: drive.ok ? drive.value.info : null,
+    ...(drive.code === 'MULTIPLE_BOOTLOADERS' ? { error: drive.error } : {}),
   };
 }
 
-const BUILTIN_FIRMWARE_CANDIDATES = [
-  path.join(__dirname, '..', '..', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
-  path.join(__dirname, '..', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
-  path.join(process.resourcesPath || '', 'firmware', 'kadowaz_deck_rp2040_v1.0.0.uf2'),
-];
+// Fixed filenames prevent the renderer from selecting an arbitrary local file.
+// Packaged images live outside ASAR so the bootloader can be written normally.
+const FIRMWARE_VARIANTS = Object.freeze([
+  { id: 'full', name: 'Full Deck', untested: true, description: 'Supplied image · key-hold support unverified.', fileName: 'full-deck.uf2' },
+  { id: 'essential', name: 'Keys & Knob', untested: true, description: 'No display or LEDs · supports held keys.', fileName: 'keys-and-knob.uf2' },
+]);
 
-function getBuiltinFirmware() {
-  for (const candidate of BUILTIN_FIRMWARE_CANDIDATES) {
-    if (fs.existsSync(candidate)) {
-      const inspected = inspectUf2(candidate);
-      if (inspected.ok) {
-        return {
-          available: true,
-          filePath: candidate,
-          fileName: path.basename(candidate),
-          version: '1.0.0',
-          inspection: inspected,
-        };
-      }
+function firmwareDirectory() {
+  return path.join(__dirname, '..', 'firmware');
+}
+
+function listBuiltinFirmware(directory = firmwareDirectory()) {
+  return FIRMWARE_VARIANTS.map(({ fileName, ...variant }) => {
+    const filePath = path.join(directory, fileName);
+    if (!fs.existsSync(filePath)) {
+      return { ...variant, available: false, error: 'Firmware image not included yet.' };
     }
-  }
-  return { available: false, error: 'Built-in firmware binary not found' };
+    const inspected = inspectUf2(filePath);
+    if (!inspected.ok) {
+      return { ...variant, available: false, error: `Firmware image is invalid: ${inspected.error}` };
+    }
+    return { ...variant, available: true, inspection: inspected.value };
+  });
+}
+
+async function flashBuiltinFirmware(id, acknowledgedUntested, onProgress, directory = firmwareDirectory()) {
+  const variant = FIRMWARE_VARIANTS.find((item) => item.id === id);
+  if (!variant) return fail('Unknown firmware option.');
+  const item = listBuiltinFirmware(directory).find((entry) => entry.id === id);
+  if (!item.available) return fail(item.error);
+  if (item.untested && acknowledgedUntested !== true) return fail('Confirm the untested firmware warning before flashing.');
+  // flash() checks the file and detects the BOOTSEL drive again before copying.
+  return flash(path.join(directory, variant.fileName), onProgress);
 }
 
 module.exports = {
-  inspectUf2, findBootloaderDrive, flash, status, guessVersion, getBuiltinFirmware,
+  inspectUf2, findBootloaderDrive, flash, status, guessVersion,
+  listBuiltinFirmware, flashBuiltinFirmware,
   RP2040_FAMILY, BLOCK_SIZE, PAYLOAD_PER_BLOCK,
 };
-

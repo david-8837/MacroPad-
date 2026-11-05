@@ -466,7 +466,9 @@ export class Mpad3Link {
   async readConfig(chunkTimeoutMs = 1200): Promise<Cfg> {
     if (this.streamDone) await this.streamDone;
     if (this.saving) throw new LinkError('the pad is busy saving a configuration');
-    return this.readConfigCore(chunkTimeoutMs);
+    this.beginSave();
+    try { return await this.readConfigCore(chunkTimeoutMs); }
+    finally { this.saving = false; }
   }
 
   /**

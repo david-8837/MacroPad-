@@ -1,0 +1,40 @@
+name: Deploy ZERO website
+
+on:
+  push:
+    branches:
+      - main
+      - arena/d088a202-macropad
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+      - 'scripts/build-website-routes.cjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: zero-website-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out website
+        uses: actions/checkout@v4
+      - name: Prepare clean page URLs
+        run: node scripts/build-website-routes.cjs
+      - name: Upload website files
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./website
+      - name: Publish GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

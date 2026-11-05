@@ -67,6 +67,9 @@ ${src}
 }
 
 async function callAudio(method, args = '') {
+  if (process.platform !== 'win32') {
+    return { error: 'Audio control requires Windows WASAPI COM interop.' };
+  }
   const script = `${prelude()}
 [void][Reflection.Assembly]::LoadWithPartialName('System.Runtime')
 $global:LASTRESULT=''
@@ -76,6 +79,7 @@ try { $global:LASTRESULT = [KadowazAudio]::${method}(${args}) } catch { $global:
   const out = (r.stdout || '').trim();
   if (out.startsWith('ERR:')) return { error: out.slice(4) };
   if (r.timedOut) return { error: 'Windows took too long to answer the audio request. This usually settles on its own; if it keeps happening, restart the app.' };
+  if (r.code !== 0) return { error: (r.stderr || out || `PowerShell exited ${r.code}`).split('\n')[0] };
   if (!out && r.stderr) return { error: r.stderr.split('\n')[0] };
   return { value: out };
 }
@@ -243,8 +247,10 @@ async function setProcessVolume(target, percent) {
 async function adjustProcessVolume(target, delta) {
   const cur = await getProcessVolume(target);
   if (!cur.ok) return cur;
-  await setProcessVolume(target, cur.value + clamp(delta, -100, 100));
-  return ok(clamp(cur.value + delta, 0, 100));
+  const next = clamp(cur.value + clamp(delta, -100, 100), 0, 100);
+  const result = await setProcessVolume(target, next);
+  if (!result.ok) return result;
+  return ok(next);
 }
 
 async function setProcessMute(target, muted) {
@@ -279,85 +285,11 @@ async function sampleLevels() {
 
 /* ------------------------------------------------------- now playing */
 
-/**
- * The Windows media session (SMTC) — the same source the volume flyout uses, so
- * it reports whatever is playing in Spotify, YouTube in a browser, or the
- * built-in player, without any per-app integration.
- */
-const NOWPLAYING_HELPER = `
-if (-not ('WinRtHelper' -as [type])) {
-  Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue
-  [void][System.Reflection.Assembly]::LoadWithPartialName('System.Runtime.WindowsRuntime')
-  if ($true) {
-    $helper = @'
-using System;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Threading.Tasks;
-public static class WinRtHelper {
-  /// Runs a WinRT IAsyncOperation to completion and returns its Result.
-  /// Reflection is used because WinRT projections are not available at compile
-  /// time to a script this file embeds as a string.
-  public static Task<object> AwaitTask(object asyncOp) {
-    var t = asyncOp.GetType();
-    Type taskType = typeof(Task<>).MakeGenericType(typeof(object));
-    var asTask = t.GetMethod("AsTask", new Type[0]);
-    if (asTask == null) {
-      foreach (var mi in t.GetMethods()) {
-        if (mi.Name == "AsTask" && mi.GetParameters().Length == 0) { asTask = mi; break; }
-      }
-    }
-    if (asTask == null) return Task.FromResult<object>(null);
-    var task = asTask.Invoke(asyncOp, null);
-    var tcs = new TaskCompletionSource<object>();
-    ((Task)task).ContinueWith(x => {
-      if (x.IsFaulted) tcs.SetException(x.Exception);
-      else {
-        var resultProp = task.GetType().GetProperty("Result");
-        tcs.SetResult(resultProp == null ? null : resultProp.GetValue(task, null));
-      }
-    });
-    return tcs.Task;
-  }
-  public static object GetProperty(object o, string name) {
-    if (o == null) return null;
-    var p = o.GetType().GetProperty(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-    return p == null ? null : p.GetValue(o, null);
-  }
-  public static object Call(object o, string name) {
-    if (o == null) return null;
-    var m = o.GetType().GetMethod(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance, null, Type.EmptyTypes, null);
-    return m == null ? null : m.Invoke(o, null);
-  }
+/** The PowerShell probe uses the Windows Runtime AsTask extension correctly.
+ * Keep it as a packaged asset so it is readable and testable independently. */
+function mediaProbeScript() {
+  return fs.readFileSync(path.join(__dirname, 'now-playing.ps1'), 'utf8');
 }
-'@
-    Add-Type -TypeDefinition $helper -ErrorAction SilentlyContinue
-  }
-}
-`;
-
-const NOWPLAYING_SCRIPT = `${NOWPLAYING_HELPER}
-$ErrorActionPreference='SilentlyContinue'
-[Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime] | Out-Null
-$sm = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
-$m = [WinRtHelper]::AwaitTask($sm.RequestAsync()).Result
-$s = [WinRtHelper]::Call($m,'GetCurrentSession')
-if ($s -eq $null) { '' } else {
-  $props = [WinRtHelper]::AwaitTask([WinRtHelper]::Call($s,'TryGetMediaPropertiesAsync')).Result
-  $tl = [WinRtHelper]::Call($s,'GetTimelineProperties')
-  $pb = [WinRtHelper]::Call($s,'GetPlaybackInfo')
-  @{
-    title       = [WinRtHelper]::GetProperty($props,'Title');
-    artist      = [WinRtHelper]::GetProperty($props,'Artist');
-    album       = [WinRtHelper]::GetProperty($props,'AlbumTitle');
-    app         = [WinRtHelper]::GetProperty($s,'SourceAppUserModelId');
-    status      = "" + [WinRtHelper]::Call($pb,'get_PlaybackStatus');
-    position    = [WinRtHelper]::GetProperty($tl,'Position');
-    duration    = [WinRtHelper]::GetProperty($tl,'EndTime');
-    lastUpdated = [WinRtHelper]::GetProperty($tl,'LastUpdatedTime');
-  } | ConvertTo-Json -Compress
-}
-`;
 
 /**
  * WinRT TimeSpan -> seconds.
@@ -456,27 +388,47 @@ function parseNowPlaying(text, now = Date.now()) {
   };
 }
 
-/* The panel polls this every couple of seconds; a 1 s cache keeps a drawer
- * preview and the broadcast tick from each paying for an Add-Type. */
-let nowPlayingCache = null;
-
-async function getNowPlaying(opts = {}) {
-  const cacheMs = opts.cacheMs === undefined ? 900 : opts.cacheMs;
-  if (nowPlayingCache && Date.now() - nowPlayingCache.at < cacheMs) return nowPlayingCache.result;
-
-  const r = await powershell(NOWPLAYING_SCRIPT, { timeoutMs: 6000 });
-  let result;
-  if (r.timedOut) {
-    result = fail('Windows took too long to report what is playing.');
-  } else {
-    const text = String(r.stdout || '').trim();
-    // No output means no session: nothing is playing. That is a normal state.
-    result = ok(parseNowPlaying(text));
-    if (!result.ok) result = ok(null);
+/** Parse the complete probe result, keeping failure distinct from no session. */
+function parseMediaProbe(r) {
+  if (r.timedOut) return fail('Windows took too long to report what is playing.');
+  if (r.code !== 0) {
+    const detail = String(r.stderr || '').trim().split(/\r?\n/)[0].slice(0, 240);
+    return fail(`Windows media detection failed${detail ? `: ${detail}` : '.'}`);
   }
+  const parsed = parseJsonLoose(String(r.stdout || '').trim());
+  if (!parsed || !Array.isArray(parsed.sessions)) {
+    return fail('Windows media detection returned an invalid response.');
+  }
+  const sessions = parsed.sessions.map(raw => ({ raw, state: parseNowPlaying(JSON.stringify(raw)) }))
+    .filter(item => item.state);
+  // Prefer an actually playing source over a stale paused current session.
+  sessions.sort((a, b) => Number(b.state.isPlaying) - Number(a.state.isPlaying)
+    || Number(Boolean(b.raw.current)) - Number(Boolean(a.raw.current)));
+  return ok(sessions.length ? sessions[0].state : null);
+}
 
-  nowPlayingCache = { at: Date.now(), result };
-  return result;
+/* Share an in-flight read between the initial request and polling so slow
+ * WinRT calls cannot overlap or deliver older media after newer media. */
+let nowPlayingCache = null;
+let nowPlayingInFlight = null;
+async function getNowPlaying(opts = {}) {
+  if (process.platform !== 'win32') return fail('Media detection requires the Windows desktop app.');
+  const cacheMs = opts.cacheMs === undefined ? 900 : opts.cacheMs;
+  if (nowPlayingInFlight) return nowPlayingInFlight;
+  if (nowPlayingCache && Date.now() - nowPlayingCache.at < cacheMs) return nowPlayingCache.result;
+  nowPlayingInFlight = (async () => {
+    let result;
+    try {
+      const r = await powershell(mediaProbeScript(), { timeoutMs: 8000 });
+      result = parseMediaProbe(r);
+    } catch (err) {
+      result = fail(`Windows media detection failed: ${err.message}`);
+    }
+    nowPlayingCache = { at: Date.now(), result };
+    return result;
+  })();
+  try { return await nowPlayingInFlight; }
+  finally { nowPlayingInFlight = null; }
 }
 
 /* ------------------------------------------------------- self-test */
@@ -510,6 +462,6 @@ module.exports = {
   getMasterMute, setMasterMute, toggleMasterMute,
   getMic, setMic, listDevices, setActiveDevice,
   getProcessVolume, setProcessVolume, adjustProcessVolume, setProcessMute,
-  sampleLevels, getNowPlaying, parseNowPlaying, friendlyApp, isPlayingFrom, toSeconds,
+  sampleLevels, getNowPlaying, parseNowPlaying, parseMediaProbe, friendlyApp, isPlayingFrom, toSeconds,
   resolvePid, pidOfProcessName, selfTest,
 };

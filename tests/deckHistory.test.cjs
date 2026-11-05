@@ -1,0 +1,32 @@
+const assert = require('node:assert/strict');
+const { buildSync } = require('esbuild');
+const { mkdtempSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join, resolve } = require('node:path');
+const dir = mkdtempSync(join(tmpdir(), 'zero-history-'));
+try {
+  const output = join(dir, 'history.cjs');
+  buildSync({ entryPoints: [resolve('src/utils/deckHistory.ts')], outfile: output, bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent' });
+  const { createDeckHistory, deckHistoryReducer: reduce } = require(output);
+  const layer = (id, value = 0) => ({ id, keys: [{ value }] });
+  const original = { id: 'deck', activeLayerId: 'L0', layers: [layer('L0'), layer('L1')] };
+  const edit = value => ({ type: 'edit', update: d => ({ ...d, layers: d.layers.map((l, i) => i === 0 ? layer(l.id, value) : l) }) });
+  let state = createDeckHistory(original);
+  state = reduce(state, edit(1)); state = reduce(state, edit(2));
+  assert.equal(state.past.length, 2);
+  state = reduce(state, { type: 'select', id: 'L1' });
+  assert.equal(state.past.length, 2, 'changing layers is not an edit');
+  state = reduce(state, { type: 'undo' });
+  assert.equal(state.deck.layers[0].keys[0].value, 1); assert.equal(state.deck.activeLayerId, 'L1');
+  state = reduce(state, edit(1)); assert.equal(state.future.length, 1, 'a no-op must preserve redo');
+  state = reduce(state, { type: 'redo' }); assert.equal(state.deck.layers[0].keys[0].value, 2);
+  state = reduce(state, { type: 'undo' }); state = reduce(state, edit(3));
+  assert.equal(state.future.length, 0, 'new edits discard redo');
+  for (let i = 4; i < 75; i++) state = reduce(state, edit(i));
+  assert.equal(state.past.length, 50, 'history is bounded');
+  state = reduce(state, { type: 'replace', deck: original });
+  assert.equal(state.past.length, 0); assert.equal(state.future.length, 0);
+  assert.equal(reduce(state, { type: 'undo' }), state, 'backup restore cannot be partially undone');
+  assert.equal(original.layers[0].keys[0].value, 0, 'input remains untouched');
+  console.log('deckHistory: edit, navigation, undo, redo, limit and restore passed');
+} finally { rmSync(dir, { recursive: true, force: true }); }

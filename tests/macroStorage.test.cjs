@@ -175,6 +175,24 @@ async function runTests() {
     } finally { delete globalThis.window; }
   });
 
+  await check('Win and Win+R macro steps reach the desktop as chords', async () => {
+    store.clear();
+    store.set(storage.MACRO_STORAGE_KEY, JSON.stringify([{ id: 4, name: 'Win test', actions: [
+      { type: 'combo', value: 'Win', keys: ['Win'] },
+      { type: 'combo', value: 'Win+R', keys: ['Win', 'R'] },
+    ] }]));
+    const calls = [];
+    globalThis.window = { electronAPI: { execAction: async action => { calls.push(action); return { success: true }; } } };
+    try {
+      assert.strictEqual((await deck.executeMacroSlot(4)).success, true);
+      assert.deepStrictEqual(calls.map(call => call.payload.keys), [['Win'], ['Win', 'R']]);
+      const { buildChordSequence } = require('../electron/actionExecutor.cjs');
+      assert.deepStrictEqual(buildChordSequence(calls[1].payload.keys).sequence, [
+        { vk: 0x5b, up: false }, { vk: 0x52, up: false }, { vk: 0x52, up: true }, { vk: 0x5b, up: true },
+      ]);
+    } finally { delete globalThis.window; }
+  });
+
   await check('a literal text step is not sent as a program-launch script', async () => {
     store.clear();
     store.set(storage.MACRO_STORAGE_KEY, JSON.stringify([{ id: 3, name: 'Type', actions: [

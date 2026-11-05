@@ -4,11 +4,59 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#E3E2DE" />
-    <title>Kadowaz Deck Studio</title>
+    <title>ZERO Deck Studio</title>
+    <!-- This small inline screen can paint before the editor bundle loads. -->
+    <style>
+      #startup-screen { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #fff; color: #141414; font-family: system-ui, sans-serif; }
+      #startup-content { width: min(330px, calc(100% - 48px)); }
+      #startup-brand { display: flex; align-items: center; gap: 14px; }
+      #startup-mark { width: 48px; height: 48px; flex: none; }
+      #startup-name { display: block; font-size: 20px; font-weight: 750; letter-spacing: .1em; }
+      #startup-subtitle { display: block; color: #646464; font-size: 10px; letter-spacing: .16em; margin-top: 2px; }
+      #startup-status { margin: 27px 0 0; color: #646464; font-size: 13px; line-height: 1.5; }
+      #startup-error { display: none; margin-top: 22px; color: #444343; font-size: 13px; line-height: 1.5; }
+      #startup-retry { margin-top: 12px; padding: 9px 16px; border: 1px solid #141414; background: #141414; color: #fff; cursor: pointer; font: inherit; font-weight: 700; }
+      #startup-retry:focus-visible { outline: 2px solid #6fa8ff; outline-offset: 3px; }
+    </style>
+    <script>
+      // Vite moves the production entry into the head, so listen before it can fail.
+      window.addEventListener('error', (event) => {
+        const target = event.target;
+        if (target instanceof HTMLScriptElement && target.type === 'module' && target.src) {
+          window.__kadowazLoadFailed = true;
+          window.dispatchEvent(new Event('kadowaz-load-failed'));
+        }
+      }, true);
+    </script>
     <!-- Typefaces are self-hosted and declared in src/index.css: no network fonts. -->
   </head>
   <body class="bg-[#E3E2DE] text-[#141414] select-none font-sans overflow-hidden antialiased">
+    <div id="startup-screen">
+      <div id="startup-content">
+        <div id="startup-brand">
+          <svg id="startup-mark" viewBox="0 0 256 256" aria-hidden="true"><rect width="256" height="256" rx="38" fill="#303030"/><path d="M60 45h136v28l-88 108h88v30H60v-28l88-108H60z" fill="#f4f3f0"/><rect x="195" y="193" width="22" height="22" fill="#3976d1"/></svg>
+          <div><span id="startup-name">ZERO</span><span id="startup-subtitle">DECK STUDIO</span></div>
+        </div>
+        <p id="startup-status" role="status">Loading the editor…</p>
+        <div id="startup-error" role="alert">The editor could not load. Check your connection if needed, then try again.<br><button id="startup-retry" type="button">Try again</button></div>
+      </div>
+    </div>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      (() => {
+        const screen = document.getElementById('startup-screen');
+        const showFailure = () => {
+          if (!screen.isConnected) return;
+          document.getElementById('startup-status').style.display = 'none';
+          document.getElementById('startup-error').style.display = 'block';
+        };
+        const timer = setTimeout(showFailure, 20000);
+        window.addEventListener('kadowaz-editor-ready', () => { clearTimeout(timer); screen.remove(); }, { once: true });
+        window.addEventListener('kadowaz-load-failed', showFailure);
+        if (window.__kadowazLoadFailed) showFailure();
+        document.getElementById('startup-retry').addEventListener('click', () => window.location.reload());
+      })();
+    </script>
+    <script id="app-entry" type="module" src="/src/main.tsx"></script>
   </body>
 </html>

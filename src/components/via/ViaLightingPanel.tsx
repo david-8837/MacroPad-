@@ -32,6 +32,7 @@ import {
   LIGHTING_CHANNELS,
   LED_MODE_INFO,
   getChannel,
+  getLightingStorageError,
   resetChannel,
   setChannel as saveChannel,
   setPerKey,
@@ -193,6 +194,7 @@ export const ViaLightingPanel: React.FC = () => {
 
   return (
     <div className="w-full">
+      {getLightingStorageError() && <p role="alert" className="mb-3 border border-[#aa6200] bg-[#fff2db] px-3 py-2 text-xs text-[#663900]">{getLightingStorageError()}</p>}
       {/* ── header: title, device state, what this page edits ───────────── */}
       <div className="grid grid-cols-12 border border-[#C7C7C7] bg-[#FFFFFF]">
         <div className="col-span-3 border-r border-[#C7C7C7] p-3">
@@ -274,7 +276,7 @@ export const ViaLightingPanel: React.FC = () => {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-bold uppercase tracking-[0.08em]">{m.name}</span>
-                  <span className="font-mono text-[9px] opacity-60">{String(m.id).padStart(2, '0')}</span>
+                  <span className={`font-mono text-[9px] ${active ? 'text-[#C7C7C7]' : 'text-[#646464]'}`}>{String(m.id).padStart(2, '0')}</span>
                 </div>
                 <div className={`mt-0.5 text-[9px] leading-snug ${active ? 'text-[#C7C7C7]' : 'text-[#646464]'}`}>
                   {m.note}

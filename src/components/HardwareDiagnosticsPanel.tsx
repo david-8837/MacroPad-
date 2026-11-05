@@ -9,7 +9,6 @@ import {
   Cpu,
   Volume2,
   Network,
-  Download,
 } from 'lucide-react';
 import type { DiagnosticLogEntry, DiagnosticSelfTestResult } from '../types/electron';
 
@@ -26,6 +25,7 @@ export interface ActionHistoryEntry {
 
 interface HardwareDiagnosticsPanelProps {
   isExpanded: boolean;
+  keepVisible?: boolean;
   actionHistory: ActionHistoryEntry[];
   onClearHistory: () => void;
 }
@@ -33,6 +33,7 @@ interface HardwareDiagnosticsPanelProps {
 /** Inline disclosure body: the parent Hardware summary owns expand/collapse. */
 export const HardwareDiagnosticsPanel: React.FC<HardwareDiagnosticsPanelProps> = ({
   isExpanded,
+  keepVisible = false,
   actionHistory,
   onClearHistory,
 }) => {
@@ -122,36 +123,7 @@ export const HardwareDiagnosticsPanel: React.FC<HardwareDiagnosticsPanelProps> =
     }
   };
 
-  const exportFullDiagnosticReport = () => {
-    const report = [
-      '# KADOWAZ Deck Studio — Diagnostic & System Report',
-      `Generated: ${new Date().toISOString()}`,
-      `User Agent: ${navigator.userAgent}`,
-      '',
-      '## Subsystem Health Self-Tests',
-      selfTestResult
-        ? [
-            `- System Telemetry: ${selfTestResult.system.ok ? 'PASS' : 'FAIL'} (${selfTestResult.system.detail})`,
-            `- Windows CoreAudio: ${selfTestResult.audio.ok ? 'PASS' : 'FAIL'} (${selfTestResult.audio.detail})`,
-            `- Local Webhook API: ${selfTestResult.webhook.ok ? 'PASS' : 'FAIL'} (${selfTestResult.webhook.detail})`,
-          ].join('\n')
-        : 'Self-test not run yet. Click "Run Diagnostic Checks" to populate.',
-      '',
-      '## Recent Action History Timeline',
-      actionHistory.length > 0
-        ? actionHistory.slice(0, 50).map((a) => `[${a.timestamp}] [${a.type.toUpperCase()}] [${a.category}] ${a.name}${a.detail ? ` — ${a.detail}` : ''}`).join('\n')
-        : 'No actions logged during this session.',
-      '',
-      '## Native Subsystem Event Log (Last 50 Entries)',
-      nativeLogs.length > 0
-        ? nativeLogs.slice(0, 50).map((l) => `[${new Date(l.at).toLocaleTimeString()}] [${l.where}] ${l.message}${l.extra ? ` | ${l.extra}` : ''}`).join('\n')
-        : 'No native log entries recorded.',
-    ].join('\n');
-
-    copyToClipboard(report, 'Full Diagnostic Report Copied!');
-  };
-
-  if (!isExpanded) return null;
+  if (!isExpanded && !keepVisible) return null;
 
   const nativeChecksAvailable = Boolean(window.electronAPI?.runDiagnosticSelfTest);
 
@@ -176,17 +148,6 @@ export const HardwareDiagnosticsPanel: React.FC<HardwareDiagnosticsPanelProps> =
             </div>
           </div>
 
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={exportFullDiagnosticReport}
-              className="px-3 py-1.5 bg-[#F4F3F0] hover:bg-[#EDECE8] text-[#141414] text-xs font-mono border border-[#E3E2DE] flex items-center gap-1.5 transition-colors"
-              title="Copy Full Diagnostic Markdown Report"
-            >
-              <Download className="w-3.5 h-3.5 text-[#1351AA]" />
-              Export Report
-            </button>
-
-          </div>
         </div>
 
         {/* Tab Selection */}

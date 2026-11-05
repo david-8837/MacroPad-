@@ -3,9 +3,9 @@ const http = require('http');
 const { createWebhookServer, generateToken } = require('../electron/webhookServer.cjs');
 const PORT = 38499, TOKEN = generateToken();
 const received = [];
-let deliverable = true;
-const server = createWebhookServer({ port: PORT, token: TOKEN, getStatus: () => ({ deckId: 'deck-main', deckName: 'Studio Deck' }),
-  onEvent: (e) => { if (deliverable) received.push(e); return deliverable; } });
+let deliverable = true, throwDelivery = false, throwStatus = false;
+const server = createWebhookServer({ port: PORT, token: TOKEN, getStatus: () => { if (throwStatus) throw new Error('private status failure'); return { deckId: 'deck-main', deckName: 'Studio Deck' }; },
+  onEvent: (e) => { if (throwDelivery) throw new Error('private delivery failure'); if (deliverable) received.push(e); return deliverable; } });
 
 function req(method, path, { headers = {}, body, host } = {}) {
   return new Promise((resolve) => {
@@ -40,6 +40,9 @@ const cases = [
   ['retired profile endpoint is 404',     () => req('POST', '/api/v1/profile', { headers: auth, body: { profileId: 'x' } }), 404],
   ['action without layer is 400',         () => req('POST', '/api/v1/action', { headers: auth, body: {} }), 400],
   ['valid but renderer unavailable',      async () => { deliverable = false; const r = await req('POST', '/api/v1/action', { headers: auth, body: { layer: 2 } }); deliverable = true; return r; }, 503],
+  ['renderer throws during delivery',      async () => { throwDelivery = true; const r = await req('POST', '/api/v1/action', { headers: auth, body: { layer: 2 } }); throwDelivery = false; if (r.body.includes('private')) throw Error('Private error leaked'); return r; }, 503],
+  ['status callback throws',              async () => { throwStatus = true; const r = await req('GET', '/api/v1/status'); throwStatus = false; if (r.body.includes('private')) throw Error('Private error leaked'); return r; }, 503],
+  ['server recovers after errors',         () => req('GET', '/api/v1/status'), 200],
 ];
 server.listen(PORT, '127.0.0.1', async () => {
   let pass = 0;

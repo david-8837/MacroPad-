@@ -62,6 +62,11 @@
  * Shift into Caps-style Shift. */
 #define ACTION_FLAG_STICKY 0x08
 
+/* Physical keyboard slots (normal unflagged keycodes and modifiers) send a
+ * down report on switch-down and an up report on switch-up. Multiple slots are
+ * combined; non-keyboard actions and explicitly flagged legacy slots keep
+ * their gesture semantics. */
+
 /* ---- HID keyboard usages you are most likely to bind -------------------- */
 /* Values are USB HID usage IDs (Keyboard/Keypad page, 0x07). */
 #define HID_A 0x04
@@ -212,6 +217,8 @@ const action_backend_t *action_backend(void);
 void action_from_cfg(const void *cfg_action_ptr, action_t *out);
 
 bool action_is_set(const action_t *a);
+bool action_physical_keyboard_supported(const action_t *a);
+void action_physical_keyboard(uint8_t index, const action_t *a, bool down);
 
 /* Execute. `press` is true for key-down semantics, false for key-up. Actions
  * that do not care ignore it. Returns true if anything was emitted. */

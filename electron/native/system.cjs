@@ -7,11 +7,10 @@
  *  1. Every value is measured. When a source is missing the field is `null` and
  *     the panel draws `--`. Nothing here guesses, defaults or interpolates.
  *  2. `sources` names where each number came from, so the drawer can say
- *     "typeperf · NVIDIA · ACPI" instead of implying a machine is instrumented
+ *     "os.cpus · GPU Engine · ACPI" instead of implying a machine is instrumented
  *     when it is not.
- *  3. Fast paths only. CPU is sampled from typeperf.exe idle time (about 200 ms)
- *     or from an os.cpus() delta in-process; nothing here runs a 1–3 s WMI query
- *     on the 1.2 s broadcast tick.
+ *  3. CPU is measured over the interval between OS tick samples. GPU counters
+ *     use two Windows samples; slow temperature queries are cached.
  *
  * CPU and RAM are real on every platform (os.cpus() deltas, os.freemem()).
  * GPU utilisation and package temperature are Windows-only: there is no portable
@@ -44,81 +43,43 @@ function blankSources() {
  */
 let prevTimes = null;
 
+function cpuPercentFromDelta(previous, current) {
+  if (!previous || !current) return null;
+  const dIdle = current.idle - previous.idle;
+  const dBusy = current.busy - previous.busy;
+  const total = dIdle + dBusy;
+  if (dIdle < 0 || dBusy < 0 || total <= 0) return null;
+  return clamp((dBusy / total) * 100, 0, 100);
+}
+
 function cpuPercentFromTicks() {
   const cpus = os.cpus();
   if (!cpus || !cpus.length) return null;
-
   const now = cpus.reduce((acc, c) => {
     acc.idle += c.times.idle;
     acc.busy += c.times.user + c.times.nice + c.times.sys + c.times.irq;
     return acc;
   }, { idle: 0, busy: 0 });
-
-  const prev = prevTimes;
+  const value = cpuPercentFromDelta(prevTimes, now);
   prevTimes = now;
-  if (!prev) return null; // first call: no interval to measure yet
-
-  const dIdle = now.idle - prev.idle;
-  const dBusy = now.busy - prev.busy;
-  const total = dIdle + dBusy;
-  if (total <= 0) return null;
-  return clamp((dBusy / total) * 100, 0, 100);
+  return value;
 }
 
-/**
- * CPU usage from system idle time.
- * typeperf.exe samples in ~200 ms and is standard across Windows 10 & 11.
- */
-async function cpuPercentWindows() {
-  try {
-    const r = await run('typeperf.exe', ['\\Processor(_Total)\\% Processor Time', '-sc', '1', '-y'], { timeoutMs: 3000 });
-    const lines = String(r.stdout || '').split(/\r?\n/).filter(Boolean);
-    const last = lines[lines.length - 1];
-    const parts = last ? last.split(',').map((s) => s.replace(/^"|"$/g, '')) : [];
-    const value = clamp(parseFloat(parts[1] ?? ''), 0, 100);
-    if (parts.length > 1 && Number.isFinite(value)) return value;
-  } catch {
-    // fall through to the tick delta
-  }
-  return null;
-}
-
-/** CPU percent plus the source that produced it. */
+/** CPU activity over a real sampling interval, not a single typeperf sample. */
 async function readCpu() {
   const cached = lastCpu && Date.now() - lastCpu.at < 900 ? lastCpu : null;
   if (cached) return cached;
-
-  let value = null;
-  let source = null;
-
-  if (IS_WINDOWS) {
-    value = await cpuPercentWindows();
-    if (value !== null) source = 'typeperf';
-  }
-
-  if (value === null) {
-    value = cpuPercentFromTicks();
-    if (value !== null) source = 'os.cpus';
-  }
-
-  // Nothing measurable yet (first tick on a non-Windows host): reuse the previous
-  // number rather than inventing one.
-  if (value === null) {
-    if (lastCpu) return lastCpu;
-    return { value: null, source: null, at: Date.now() };
-  }
-
-  const sample = { value: Math.round(value), source, at: Date.now() };
-  lastCpu = sample;
-  return sample;
+  const value = cpuPercentFromTicks();
+  if (value === null) return { value: null, source: null, at: Date.now() };
+  lastCpu = { value: Math.round(value), source: 'os.cpus (active time)', at: Date.now() };
+  return lastCpu;
 }
 
 /**
  * GPU usage and temperature.
  *
- * Order matters: vendor tools also report temperature, so they win. The Windows
- * "GPU Engine" performance counters need no vendor tool at all and work on any
- * Windows 10 1709+ machine, but they only give utilisation.
+ * Prefer Windows engine counters for the busiest engine (similar to Task
+ * Manager). Vendor utilization is a fallback and may use a different definition.
  */
 const GPU_TOOLS = [
   { name: 'nvidia', command: 'nvidia-smi.exe', args: ['--query-gpu=utilization.gpu,temperature.gpu', '--format=csv,noheader,nounits'] },
@@ -143,8 +104,9 @@ async function gpuFromVendorTools() {
 
       const parsed = parseJsonLoose(r.stdout);
       const first = Array.isArray(parsed) ? parsed[0] : parsed;
-      const usage = first && first.metric ? clamp(first.metric.gfx_activity, 0, 100) : null;
-      if (usage === null || !Number.isFinite(usage)) continue;
+      const rawUsage = first && first.metric ? Number(first.metric.gfx_activity) : NaN;
+      if (!Number.isFinite(rawUsage)) continue;
+      const usage = clamp(rawUsage, 0, 100);
       const edge = first.metric.edge_temperature;
       return {
         gpu: usage,
@@ -158,38 +120,60 @@ async function gpuFromVendorTools() {
   return null;
 }
 
-/** Sum of the 3D engine GPU counters — present on any modern Windows GPU. */
+/** Add the per-process shares of each physical engine, then take the busiest.
+ * Do not add different engines or adapters together: that overstates usage. */
+function gpuPercentFromCounters(samples) {
+  const totals = new Map();
+  for (const sample of Array.isArray(samples) ? samples : [samples]) {
+    if (!sample || typeof sample.instance !== 'string') continue;
+    const match = /^pid_\d+_(luid_.+_phys_\d+_eng_\d+_engtype_.+)$/i.exec(sample.instance);
+    if (!match || sample.value === null || sample.value === undefined || sample.value === '') continue;
+    const value = Number(sample.value);
+    if (!Number.isFinite(value) || value < 0) continue;
+    const engine = match[1].toLowerCase();
+    totals.set(engine, (totals.get(engine) || 0) + value);
+  }
+  return totals.size ? clamp(Math.max(...totals.values()), 0, 100) : null;
+}
+
+/** Windows GPU Engine counters need two samples to yield real rates. */
 async function gpuFromPerformanceCounters() {
   try {
     const r = await powershell(`
-$ErrorActionPreference='SilentlyContinue'
-$s = (Get-Counter '\\GPU Engine(*engtype_3D)\\Utilization Percentage' -ErrorAction SilentlyContinue).CounterSamples
-if ($s) { [math]::Round((($s | Measure-Object -Property CookedValue -Sum).Sum), 0) } else { '' }
-`, { timeoutMs: 3000 });
-    const v = parseFloat(String(r.stdout || '').trim());
-    if (!Number.isFinite(v) || v < 0) return null;
-    return { gpu: clamp(v, 0, 100), temp: null, source: 'GPU Engine' };
+$ErrorActionPreference='Stop'
+$sets = @(Get-Counter -Counter '\\GPU Engine(*)\\Utilization Percentage' -SampleInterval 1 -MaxSamples 2 -ErrorAction Stop)
+$last = $sets[-1]
+@($last.CounterSamples | Where-Object { $null -eq $_.Status -or $_.Status -eq 0 -or $_.Status -eq 1 } | ForEach-Object {
+  @{ instance = $_.InstanceName; value = $_.CookedValue }
+}) | ConvertTo-Json -Compress
+`, { timeoutMs: 5000 });
+    if (r.code !== 0 || r.timedOut) return null;
+    const samples = parseJsonLoose(r.stdout);
+    const gpu = gpuPercentFromCounters(samples);
+    return gpu === null ? null : { gpu: Math.round(gpu), temp: null, source: 'Windows GPU Engine (busiest adapter)' };
   } catch {
     return null;
   }
 }
 
 async function gpuStats() {
-  const vendor = await gpuFromVendorTools();
-  if (vendor) return vendor;
-  if (IS_WINDOWS) {
-    const counters = await gpuFromPerformanceCounters();
-    if (counters) return counters;
-  }
-  return { gpu: null, temp: null, source: null };
+  if (!IS_WINDOWS) return { gpu: null, temp: null, source: null };
+  const counters = await gpuFromPerformanceCounters();
+  if (counters) return counters;
+  return await gpuFromVendorTools() || { gpu: null, temp: null, source: null };
 }
 
 /**
  * CPU temperature via ACPI thermal zone.
  * Returns null if not exposed by the motherboard — many desktops do not expose it.
  */
+let cachedTemp = null;
+let tempCheckedAt = 0;
 async function cpuTemp() {
   if (!IS_WINDOWS) return null;
+  if (Date.now() - tempCheckedAt < 30000) return cachedTemp;
+  tempCheckedAt = Date.now();
+  cachedTemp = null;
   try {
     const r = await powershell(`
 $ErrorActionPreference='SilentlyContinue'
@@ -199,6 +183,7 @@ if ($t) { [math]::Round((($t | Select-Object -First 1).CurrentTemperature / 10) 
 
     const v = parseFloat(String(r.stdout || '').trim());
     if (!Number.isFinite(v) || v < 0 || v > 120) return null;
+    cachedTemp = v;
     return v;
   } catch {
     return null;
@@ -213,7 +198,11 @@ if ($t) { [math]::Round((($t | Select-Object -First 1).CurrentTemperature / 10) 
 async function getMetrics() {
   const sources = blankSources();
   try {
-    const [cpu, gpu, temp] = await Promise.all([readCpu(), gpuStats(), cpuTemp()]);
+    // GPU counters and temperature probes can take seconds on Windows. Sample
+    // CPU after they finish so the value we broadcast is recent, rather than
+    // showing the interval from before those slow probes ran.
+    const [gpu, temp] = await Promise.all([gpuStats(), cpuTemp()]);
+    const cpu = await readCpu();
 
     const total = os.totalmem();
     const free = os.freemem();
@@ -221,8 +210,8 @@ async function getMetrics() {
 
     sources.cpu = cpu.source;
     sources.gpu = gpu.source;
-    // A package sensor is better than a GPU reading for the panel's single temp
-    // slot, and the drawer names whichever one answered.
+    // An ACPI thermal zone is not necessarily the CPU package. Name the
+    // actual source; if absent, a vendor GPU sensor may be available.
     sources.temp = temp !== null ? 'ACPI' : gpu.temp !== null ? gpu.source : null;
 
     return ok({
@@ -280,6 +269,7 @@ module.exports = {
   },
   gpuStats,
   cpuTemp,
+  cpuPercentFromDelta, gpuPercentFromCounters,
   describeSources,
   selfTest,
   IS_WINDOWS,

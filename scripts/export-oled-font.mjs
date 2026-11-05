@@ -30,7 +30,9 @@ const text = [
   '};', '#endif', '',
 ].join('\n');
 if (process.argv.includes('--check')) {
-  if (!existsSync(out) || readFileSync(out, 'utf8') !== text) {
+  // Git can check out text files with CRLF on Windows; compare their content,
+  // not the platform-specific line endings.
+  if (!existsSync(out) || readFileSync(out, 'utf8').replace(/\r\n/g, '\n') !== text) {
     console.error('OLED font generated header is stale; run node scripts/export-oled-font.mjs');
     process.exit(1);
   }

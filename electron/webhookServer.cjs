@@ -146,12 +146,16 @@ function createWebhookServer({ port, token, getStatus, onEvent }) {
     }
 
     if (url === '/api/v1/status' && req.method === 'GET') {
-      sendJson(res, 200, {
-        status: 'online',
-        app: 'KADOWAZ Deck Studio',
-        port,
-        ...(typeof getStatus === 'function' ? getStatus() : {}),
-      });
+      try {
+        sendJson(res, 200, {
+          status: 'online',
+          app: 'ZERO Deck Studio',
+          port,
+          ...(typeof getStatus === 'function' ? getStatus() : {}),
+        });
+      } catch {
+        sendJson(res, 503, { error: 'Status temporarily unavailable' });
+      }
       return;
     }
 
@@ -185,7 +189,13 @@ function createWebhookServer({ port, token, getStatus, onEvent }) {
       return;
     }
 
-    const delivered = onEvent({ source: 'webhook', endpoint: url, data: body });
+    let delivered = false;
+    try {
+      delivered = onEvent({ source: 'webhook', endpoint: url, data: body });
+    } catch {
+      // A closing or reloading renderer can reject delivery. Do not terminate
+      // the server or report that the request was queued.
+    }
     if (!delivered) {
       sendJson(res, 503, { error: 'Deck Studio window is not available to handle the request' });
       return;

@@ -44,6 +44,15 @@ else
     rm -f "$LOG"
 fi
 
+# The keys-only build has a separate object tree and no OLED/LED target I/O.
+hr "1b  keys-and-knob variant"
+LOG=$(mktemp)
+make -C firmware -f Makefile.host test-keys-only > "$LOG" 2>&1
+RC=$?
+tail -8 "$LOG"
+if [[ $RC -eq 0 ]]; then ok "keys-only protocol and peripheral-free target drivers"; else bad "keys-only variant"; fi
+rm -f "$LOG"
+
 # ── 2. host artifacts the protocol suite diffs against ──────────────────────
 hr "2/7  generate host artifacts from the compiled C"
 LOG=$(mktemp)

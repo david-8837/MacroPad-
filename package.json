@@ -1,25 +1,26 @@
 {
   "name": "kadowaz-deck-studio",
-  "version": "1.0.0",
+  "version": "1.0.1-test.4",
   "description": "Next-Gen Macropad Desktop Studio & Hardware Engine",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "website:build-button": "node scripts/build-website-button.cjs",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && node electron/run-electron.cjs\"",
     "build:electron": "node scripts/build-electron.mjs",
     "pack": "npm run build && npm run build:electron && electron-builder --dir",
     "dist:win": "npm run build && npm run build:electron && electron-builder --win",
     "electron:build": "npm run dist:win",
-    "test": "node scripts/export-oled-font.mjs --check && node scripts/host-artifacts.mjs && node tests/actionExecutor.test.cjs && node tests/textAction.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/media.test.cjs && node tests/windowTracker.test.cjs && node tests/audioControl.test.cjs && node tests/actionHistory.test.cjs && node tests/firmwareFlasher.test.cjs && node tests/mpad3Link.test.cjs && node tests/oledWire.test.cjs && node tests/lightingWire.test.cjs && node tests/commandPalette.test.cjs && node tests/deckLayers.test.cjs && node tests/layerSelection.test.cjs && node tests/deckLock.test.cjs && node tests/keyTesterModel.test.cjs && node tests/step6UiCopy.test.cjs && node tests/uploadSheetUi.test.cjs && node tests/deckToConfig.test.cjs && node tests/viaIntegration.test.cjs && node tests/keyEvents.test.cjs && node tests/physicalActionRouter.test.cjs && node tests/macroStorage.test.cjs && node tests/ledEngine.test.cjs && node tests/packagingConfig.test.cjs && node tests/oledModes.test.cjs && node tests/oledStreamer.test.cjs && node host/tests/run.mjs",
+    "test": "tsc --noEmit && node scripts/export-oled-font.mjs --check && node scripts/host-artifacts.mjs && node tests/actionExecutor.test.cjs && node tests/textAction.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/media.test.cjs && node tests/windowTracker.test.cjs && node tests/audioControl.test.cjs && node tests/actionHistory.test.cjs && node tests/firmwareFlasher.test.cjs && node tests/firmwarePanel.test.cjs && node tests/mpad3Link.test.cjs && node tests/oledWire.test.cjs && node tests/lightingWire.test.cjs && node tests/commandPalette.test.cjs && node tests/deckLayers.test.cjs && node tests/deckHistory.test.cjs && node tests/layerSelection.test.cjs && node tests/macropadConfig.test.cjs && node tests/layerPresets.test.cjs && node tests/presetLibrary.test.cjs && node tests/backup.test.cjs && node tests/presetIcons.test.cjs && node tests/keyDrawerUi.test.cjs && node tests/appIcons.test.cjs && node tests/appLibraryStorage.test.cjs && node tests/premiumEffects.test.cjs && node tests/disclosureUi.test.cjs && node tests/shortcutSearch.test.cjs && node tests/keyTesterModel.test.cjs && node tests/testerUi.test.cjs && node tests/step6UiCopy.test.cjs && node tests/uploadSheetUi.test.cjs && node tests/deckToConfig.test.cjs && node tests/viaIntegration.test.cjs && node tests/keyEvents.test.cjs && node tests/physicalActionRouter.test.cjs && node tests/macroStorage.test.cjs && node tests/macroWinKey.test.cjs && node tests/ledEngine.test.cjs && node tests/packagingConfig.test.cjs && node tests/startup.test.cjs && node tests/windowControls.test.cjs && node tests/intro.test.cjs && node tests/websiteScrollIntro.test.cjs && node tests/websiteFeedback.test.cjs && node tests/websiteCases.test.cjs && node tests/websiteSpecular.test.cjs && node tests/browserStartup.test.cjs && node tests/welcome.test.cjs && node tests/oledModes.test.cjs && node tests/oledStreamer.test.cjs && node host/tests/run.mjs",
     "oled:frames": "node scripts/export-oled-frames.mjs",
     "oled:frames:check": "node scripts/export-oled-frames.mjs --check",
     "oled:font": "node scripts/export-oled-font.mjs",
     "oled:font:check": "node scripts/export-oled-font.mjs --check",
     "oled:budget": "python3 tools/check_flash_budget.py",
     "host:artifacts": "node scripts/host-artifacts.mjs",
- "check:contrast": "python3 checks/contrastcheck.py"
+    "check:contrast": "python3 checks/contrastcheck.py"
   },
   "dependencies": {
     "lucide-react": "^0.453.0",
@@ -29,21 +30,24 @@
   "devDependencies": {
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.3",
+    "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.0.1",
     "cross-env": "^7.0.3",
-    "electron": "^33.0.2",
+    "electron": "^42.11.18",
     "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "^26.1.0",
+    "pdf-lib": "^1.17.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
-    "vite": "^5.4.9",
+    "vite": "^7.3.7",
     "wait-on": "^8.0.1"
   },
   "build": {
     "appId": "studio.kadowaz.deck",
-    "productName": "KADOWAZ Deck Studio",
+    "productName": "ZERO Deck Studio",
     "directories": {
       "output": "release"
     },
@@ -55,6 +59,18 @@
     ],
     "extraResources": [
       {
+        "from": "electron/firmware",
+        "to": "firmware"
+      },
+      {
+        "from": "src/assets/preset-icons",
+        "to": "licenses/preset-icons",
+        "filter": [
+          "README.md",
+          "LICENSE*"
+        ]
+      },
+      {
         "from": "electron/native/audio.cs",
         "to": "native/audio.cs"
       }
@@ -63,17 +79,26 @@
       "electron/native/audio.cs"
     ],
     "win": {
+      "icon": "electron/assets/zero.ico",
       "target": [
         "nsis",
         "portable"
       ],
-      "artifactName": "KADOWAZ-Deck-Studio-${version}-${arch}.${ext}"
+      "artifactName": "ZERO-Deck-Studio-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "installerIcon": "installer/setup-icon.ico",
+      "uninstallerIcon": "electron/assets/zero.ico",
+      "installerHeader": "installer/header.bmp",
+      "installerSidebar": "installer/sidebar.bmp",
+      "include": "installer/installer.nsh"
     }
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

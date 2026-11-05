@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en" data-intro-page="home">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Meet ZERO Deck Studio: a little deck for the shortcuts you use a lot. Design four layers for a nine-key RP2040 macropad.">
+  <meta name="theme-color" content="#f5f2e9">
+  <title>ZERO — Make room for the good work.</title>
+  <script>
+    // A refresh always starts Home at the top, including a refresh redirected
+    // here from Cases. Ordinary navigation and direct anchor links are untouched.
+    let returnedFromRefresh = false, lastPage = '';
+    try {
+      returnedFromRefresh = sessionStorage.getItem('zero-refresh-home-v1') === '1';
+      sessionStorage.removeItem('zero-refresh-home-v1');
+      lastPage = sessionStorage.getItem('zero-scroll-last-page-v1') || '';
+    } catch (_) { /* A direct reload can still be detected without storage. */ }
+    const nav = performance.getEntriesByType?.('navigation')?.[0]?.type;
+    window.__zeroRefreshHome = returnedFromRefresh || nav === 'reload' ||
+      (!nav && performance.navigation?.type === 1) ||
+      (window.parent !== window && nav !== 'back_forward' && lastPage === 'home');
+    if (window.__zeroRefreshHome) {
+      try { history.scrollRestoration = 'manual'; } catch (_) {}
+      if (location.hash) {
+        try { history.replaceState(history.state, '', location.pathname + location.search); } catch (_) {}
+      }
+      const top = () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      window.addEventListener('DOMContentLoaded', top, { once: true });
+      window.addEventListener('load', () => {
+        top();
+        requestAnimationFrame(top);
+      }, { once: true });
+      // Restore normal history behavior for subsequent navigation, but not
+      // until this refresh has finished restoring its own scroll position.
+      window.addEventListener('pagehide', () => {
+        try { history.scrollRestoration = 'auto'; } catch (_) {}
+      }, { once: true });
+    }
+    // Old /index.html links go to the clean Home URL; keep query and anchor.
+    // The root URL remains a usable static fallback without JavaScript.
+    if (location.pathname.endsWith('/home/index.html')) {
+      try { history.replaceState(history.state, '', './' + location.search + location.hash); } catch (_) {}
+    } else if (location.pathname.endsWith('/index.html')) {
+      const home = new URL('./home/', location.href);
+      home.search = location.search; home.hash = location.hash;
+      location.replace(home.href);
+    }
+  </script>
+  <!-- Critical loader styles are inline so it appears before site assets arrive. -->
+  <style>
+    .zero-loader{display:none}
+    .zero-loading .zero-loader{display:grid;place-items:center;position:fixed;inset:0;z-index:10000;background:#f5f2e9;color:#262622;clip-path:circle(150% at 50% 50%);transition:clip-path .32s ease-in,opacity .32s ease,visibility .32s ease}
+    .zero-loading .zero-loader.is-leaving{clip-path:circle(0% at 50% 50%);opacity:0;visibility:hidden;pointer-events:none}
+    .zero-loader-symbols{display:flex;align-items:center;justify-content:center;font:700 18px/1 monospace;letter-spacing:0;white-space:nowrap;transition:transform .42s ease-in,opacity .32s ease-in}
+    .zero-loader.is-gathering .zero-loader-symbols{transform:scaleX(.05);opacity:0}
+    .zero-loader-cursor{position:absolute;left:50%;top:50%;color:#d26139;opacity:0;transform:translate(-50%,-50%) scale(.45);transition:opacity .2s ease .16s,transform .3s ease-out .16s;pointer-events:none}
+    .zero-loader.is-gathering .zero-loader-cursor{opacity:1;transform:translate(-50%,-50%) scale(1)}
+    .zero-loader-cursor svg{display:block}
+    .zero-loader-symbols span{display:inline-block;width:.61em;text-align:center}
+    .zero-loader-symbols span::before{content:'-';display:inline-block;animation:zero-symbol 1.2s steps(1,end) infinite}
+    .zero-loader-symbols span:nth-child(1)::before{animation-delay:-.12s}
+    .zero-loader-symbols span:nth-child(2)::before{animation-delay:-.78s}
+    .zero-loader-symbols span:nth-child(3)::before{animation-delay:-.44s}
+    .zero-loader-symbols span:nth-child(4)::before{animation-delay:-.21s}
+    .zero-loader-symbols span:nth-child(5)::before{animation-delay:-.96s}
+    .zero-loader-symbols span:nth-child(6)::before{animation-delay:-.63s}
+    .zero-loader-symbols span:nth-child(7)::before{animation-delay:-.03s}
+    .zero-loader-symbols span:nth-child(8)::before{animation-delay:-.84s}
+    .zero-loader-symbols span:nth-child(9)::before{animation-delay:-.33s}
+    .zero-loader-symbols span:nth-child(10)::before{animation-delay:-.69s}
+    .zero-loader-symbols span:nth-child(11)::before{animation-delay:-.53s}
+    @keyframes zero-symbol{0%,100%{content:'=';transform:translateY(0)} 16%{content:'-';transform:translateY(0)} 33%{content:'+';transform:translate(1px,-1px)} 50%{content:'=';transform:translate(-1px,0)} 66%{content:'-';transform:translate(1px,1px)} 83%{content:'-';transform:translateY(0)}}
+    .zero-loader-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    @media(prefers-reduced-motion:reduce){.zero-loading .zero-loader{display:none}}
+  </style>
+  <script>
+    // A short, optional first-entry transition. Never gate the page on network
+    // images, and do not replay it on ordinary Home/Cases navigation.
+    (() => {
+      const root = document.documentElement;
+      try {
+        const nav = performance.getEntriesByType?.('navigation')?.[0]?.type;
+        const lastPage = sessionStorage.getItem('zero-scroll-last-page-v1');
+        const reload = window.__zeroRefreshHome || nav === 'reload' || (!nav && performance.navigation?.type === 1) ||
+          (window.parent !== window && nav !== 'back_forward' && lastPage === root.dataset.introPage);
+        const legacy = /\/(?:cases|index)\.html$/.test(location.pathname);
+        if (legacy) return;
+        const seen = sessionStorage.getItem('zero-loader-seen-v1');
+        // An anchor or reduced-motion entry still counts as a visit; clicking
+        // to another page should not introduce a loading screen afterward.
+        if (location.hash || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          sessionStorage.setItem('zero-loader-seen-v1', '1');
+          return;
+        }
+        if (seen && !reload) return;
+        sessionStorage.setItem('zero-loader-seen-v1', '1');
+        root.classList.add('zero-loading');
+        const started = Date.now();
+        let done = false, closing = false;
+        const finish = skipped => {
+          if (done) return;
+          done = true;
+          root.classList.remove('zero-loading');
+          // Retain the decision if the deferred intro script is still loading.
+          window.__zeroLoaderOutcome = { skipped };
+          window.removeEventListener('keydown', onKey, true);
+          window.dispatchEvent(new CustomEvent('zero-loader-done', { detail: { skipped } }));
+        };
+        const leave = skipped => {
+          if (done || (closing && !skipped)) return;
+          if (skipped) return finish(true);
+          closing = true;
+          document.querySelector('.zero-loader')?.classList.add('is-leaving');
+          // Start constructing underneath the opening screen. The first
+          // cursor takes over the actual SVG gathered from the symbols.
+          window.dispatchEvent(new CustomEvent('zero-loader-opening'));
+          setTimeout(() => finish(false), 320);
+        };
+        const onKey = event => { if (event.key === 'Tab' || event.key === 'Escape') leave(true); };
+        window.addEventListener('keydown', onKey, true);
+        // A tap dismisses the loading screen only; the construction still plays.
+        // Escape and Tab remain explicit ways to skip all effects.
+        document.addEventListener('click', event => { if (event.target.closest?.('.zero-loader')) finish(false); });
+        document.addEventListener('DOMContentLoaded', () => {
+          setTimeout(() => { if (!done) document.querySelector('.zero-loader')?.classList.add('is-gathering'); }, Math.max(0, 2050 - (Date.now() - started)));
+          setTimeout(() => leave(false), Math.max(0, 2680 - (Date.now() - started)));
+        }, { once: true });
+        window.addEventListener('pagehide', () => finish(true), { once: true });
+        // Even if deferred scripts or DOM parsing stall, the page is released.
+        setTimeout(() => finish(false), 4000);
+      } catch (_) { root.classList.remove('zero-loading'); }
+    })();
+  </script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='4' fill='%231b1b19'/%3E%3Ctext x='11' y='29' font-family='Arial' font-size='25' font-weight='700' fill='white'%3EZ%3C/text%3E%3Ccircle cx='30' cy='28' r='2.5' fill='%23f57646'/%3E%3C/svg%3E">
+  <script>
+    // Hide the first frame only until the real elements have been measured.
+    // If setup fails, the watchdog always reveals the site again.
+    try {
+      let alreadyPlayed = false, lastPage = '';
+      try {
+        alreadyPlayed = sessionStorage.getItem('zero-scroll-intro-v1:' + document.documentElement.dataset.introPage) === 'played';
+        lastPage = sessionStorage.getItem('zero-scroll-last-page-v1') || '';
+      } catch (_) { /* Storage can be unavailable. */ }
+      const navType = performance.getEntriesByType?.('navigation')?.[0]?.type;
+      // Refreshing an embedded preview recreates its iframe as a navigation.
+      const refreshed = window.__zeroRefreshHome || navType === 'reload' || (!navType && performance.navigation?.type === 1) ||
+        (window.parent !== window && navType !== 'back_forward' && lastPage === document.documentElement.dataset.introPage);
+      if ((!alreadyPlayed || refreshed) && !matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+        document.documentElement.classList.add('site-intro-preparing');
+        setTimeout(() => document.documentElement.classList.remove('site-intro-preparing'),
+          document.documentElement.classList.contains('zero-loading') ? 4500 : 1800);
+      }
+    } catch (_) { /* The ordinary site remains visible. */ }
+  </script>
+  <!-- Warm the next page while this one is being read; links still navigate normally. -->
+  <link rel="prefetch" href="./cases/" as="document">
+  <link rel="prefetch" href="./cases-data.js?v=1" as="script">
+  <link rel="prefetch" href="./cases.js?v=2" as="script">
+  <link rel="stylesheet" href="./styles.css?v=scroll-build-36">
+  <link rel="stylesheet" href="./intro.css?v=scroll-build-36">
+  <link rel="stylesheet" href="./assets/specular-button.css?v=1">
+  <script src="./script.js?v=scroll-build-36" defer></script>
+  <script src="./assets/specular-button.js?v=5" defer></script>
+  <script src="./intro.js?v=scroll-build-36" defer></script>
+</head>
+<body>
+  <div class="zero-loader">
+    <div class="zero-loader-symbols" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <span class="zero-loader-cursor" aria-hidden="true"><svg width="22" height="28" viewBox="0 0 22 28" fill="none"><path d="M2 1.5V22L7.7 16.8L11.7 25.7L15 24.2L11.1 15.6L19 15.3L2 1.5Z" fill="currentColor" stroke="#141414" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+    <span class="zero-loader-status" role="status">Loading ZERO. Press Escape or Tab to skip.</span>
+  </div>
+  <div id="site-content">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="announcement" role="region" aria-label="Project announcement"><span class="status-dot"></span> A LITTLE DECK FOR BIG IDEAS <span class="announcement-right">DESIGNED FOR YOUR WORKFLOW <span>↗</span></span></div>
+  <header class="site-header">
+    <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a>
+    <nav class="desktop-nav" aria-label="Main navigation"><a href="#studio">The studio</a><a href="#how-it-works">How it works</a><a href="#hardware">The hardware</a><a href="./cases/">Cases</a><a href="#faq">FAQ</a></nav>
+    <a class="nav-cta" href="#support">Buy me a coffee <span aria-hidden="true">↓</span></a>
+    <button class="intro-replay" type="button" aria-label="Replay scroll animations">↻ <span>REPLAY</span></button>
+    <details class="mobile-menu"><summary class="menu-toggle" aria-label="Navigation"><span></span><span></span></summary>
+    <nav id="mobile-menu" class="mobile-nav" aria-label="Mobile navigation"><a href="#studio">The studio</a><a href="#how-it-works">How it works</a><a href="#hardware">The hardware</a><a href="./cases/">Cases</a><a href="#faq">FAQ</a><a href="#feedback">Feedback</a><a href="#download">Get the app ↓</a><a href="#support">Buy me a coffee ↓</a><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">Explore on GitHub ↗</a></nav></details>
+  </header>
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="orange-square"></span> YOUR WORKFLOW, ON DECK <span class="eyebrow-line"></span> 01 / 04</div>
+        <h1 aria-label="Make room for the good work."><span class="intro-heading-line">Make room</span><span class="intro-heading-line">for the <em>good</em></span><span class="intro-heading-line">work<span class="orange-text">.</span></span></h1>
+        <p>A little deck for the shortcuts you use a lot. Make your everyday tools feel a little more like yours.</p>
+        <div class="hero-actions"><span class="hero-download-mount"><a class="button button-dark" href="https://github.com/david-8837/MacroPad-/releases/download/v1.0.1-test.3/ZERO-Deck-Studio-1.0.1-test.3-x64.exe" target="_top" rel="noreferrer" aria-describedby="hero-download-status">Download for Windows <span>↓</span></a></span><a class="text-link" href="#studio">Meet the studio <span>↘</span></a></div><div class="hero-download-note" id="hero-download-status">Unsigned Windows test build. Windows may show a warning; hardware and firmware are untested.</div>
+        <div class="hero-note"><span class="asterisk" aria-hidden="true"><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></span><span>LESS REACHING. MORE MAKING.<br><strong>MADE FOR YOUR EVERYDAY.</strong></span></div>
+      </div>
+      <div class="hero-visual"><div class="hero-art"><img src="./assets/macropad-hero.webp" alt="Concept render of an orange nine-key macropad with a rotary knob"><div class="art-corner art-corner-tl"></div><div class="art-corner art-corner-br"></div><div class="art-stamp" aria-hidden="true"><span>ZERO / 09</span><b><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></b><span>MADE TO MAKE</span></div><span class="art-label">FIG. 01 — THE LITTLE DECK</span><span class="art-caption">CONCEPT RENDER / HARDWARE IN DEVELOPMENT</span></div><div class="visual-footer"><span>SMALL FOOTPRINT. BIG ENERGY.</span><span>SCROLL TO EXPLORE <span class="orange-text">↓</span></span></div></div>
+    </section>
+    <div class="spec-strip" aria-label="Macropad specifications"><div><strong>09</strong><span>KEYS<br>YOUR WAY</span></div><div><strong>01</strong><span>CLICKABLE<br>ROTARY KNOB</span></div><div><strong>04</strong><span>LAYERS<br>TO MAKE YOURS</span></div><div class="strip-signature"><span>THE LITTLE DECK<br>WITH A LOT TO DO.</span><b><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></b></div></div>
+
+    <section class="studio-section section-wrap" id="studio">
+      <div class="section-heading"><div><div class="eyebrow"><span class="orange-square"></span> MEET DECK STUDIO <span class="eyebrow-line"></span> 02 / 04</div><h2>Make your tools<br>work <em>your way.</em></h2></div><p>One thoughtful place to make the little things you do every day feel a whole lot easier.</p></div>
+      <div class="studio-showcase">
+        <div class="studio-copy"><div class="small-label"><span class="orange-square"></span> THE EDITOR</div><h3>Your shortcuts.<br>Your rules.</h3><p>Bring your favorite actions together, arrange them across four layers, and give your setup a little personality.</p><a class="inline-arrow" href="#how-it-works">SEE HOW IT WORKS <span>↗</span></a><div class="studio-index"><span>01 — 04</span><span>DECK STUDIO / EDITOR</span></div></div>
+        <div class="mock-window" aria-label="Interactive illustration of the deck editor">
+          <div class="mock-top"><div class="mock-brand"><span>Z</span> ZERO <i>/</i> <b>DECK STUDIO</b></div><div class="mock-dots"><i></i><i></i><i></i></div></div>
+          <div class="mock-body"><div class="mock-sidebar"><div class="mock-label">YOUR MACROPAD</div><div class="mock-rail-line"></div><div class="mock-label">EDIT LAYERS</div><div class="layer-buttons" aria-label="Preview layers"><button class="active" data-layer="0" aria-pressed="true"><span>00</span> Layer 0</button><button data-layer="1" aria-pressed="false"><span>01</span> Layer 1</button><button data-layer="2" aria-pressed="false"><span>02</span> Layer 2</button><button data-layer="3" aria-pressed="false"><span>03</span> Layer 3</button></div><div class="mock-side-bottom">A LITTLE DECK<br>FOR THE GOOD WORK.</div></div>
+            <div class="mock-content"><div class="mock-deck-title"><span>DECK · 09</span><span>9 KEYS / 1 ENCODER</span></div><div class="mock-board"><div class="mock-board-top"><div class="mock-display"><span>ZERO IND. <b>ONLINE</b></span><strong id="display-layer">LAYER 0</strong></div><button class="mock-knob" type="button" aria-label="Cycle preview layer" title="Cycle preview layer"><span></span></button></div><div class="mock-keys" aria-label="Preview keys"><button class="selected" aria-pressed="true"><small>01</small><span>✳</span><b>Switch #1</b></button><button aria-pressed="false"><small>02</small><span>↗</span><b>Switch #2</b></button><button aria-pressed="false"><small>03</small><span>⌘</span><b>Switch #3</b></button><button aria-pressed="false"><small>04</small><span>✦</span><b>Switch #4</b></button><button aria-pressed="false"><small>05</small><span>◫</span><b>Switch #5</b></button><button aria-pressed="false"><small>06</small><span>↺</span><b>Switch #6</b></button><button aria-pressed="false"><small>07</small><span>⌁</span><b>Switch #7</b></button><button aria-pressed="false"><small>08</small><span>◉</span><b>Switch #8</b></button><button aria-pressed="false"><small>09</small><span>✂</span><b>Switch #9</b></button></div></div><div class="mock-caption"><span id="preview-status" aria-live="polite">LAYER 0 · SWITCH 1 SELECTED</span><span>INTERACTIVE ILLUSTRATION</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="features"><article><div class="feature-top"><span>01 / LAYERS</span><span>↗</span></div><h3>More room<br>to do your thing.</h3><p>Four layers give your shortcuts space to breathe, from everyday essentials to your favorite creative tools.</p></article><article><div class="feature-top"><span>02 / PRESETS</span><span>↗</span></div><h3>A head start,<br>if you want one.</h3><p>Explore app-focused presets, make them your own, and apply them to the layer that makes sense for you.</p></article><article><div class="feature-top"><span>03 / YOUR SETUP</span><span>↗</span></div><h3>Made to change<br>with you.</h3><p>Rearrange your keys, tweak your knob, and upload again whenever your workflow takes a new shape.</p></article></div>
+    </section>
+
+    <section class="how-section" id="how-it-works"><div class="section-backdrop how-backdrop" aria-hidden="true"></div><div class="section-wrap"><div class="how-heading"><div><div class="eyebrow"><span class="black-square"></span> A SIMPLER WAY TO GET THERE <span class="eyebrow-line"></span> 03 / 04</div><h2>Good things<br>come in <em>threes.</em></h2></div><p>From first idea to your fingertips.<br>Here's the short version.</p></div><div class="steps"><article><div class="step-number">01 <span>↗</span></div><h3>Make it yours.</h3><p>Start fresh or choose a preset. Assign the keys and knob to the things you reach for most.</p></article><article><div class="step-number">02 <span>↗</span></div><h3>Send it over.</h3><p>Connect a compatible pad, review your setup, and upload your layers when you're ready.</p></article><article><div class="step-number">03 <span>↗</span></div><h3>Get in the flow.</h3><p>Put the little deck to work. Change things up and upload again whenever you like.</p></article></div><div class="how-bottom"><span>YOUR WORKFLOW IS A WORK IN PROGRESS. THAT'S THE FUN PART.</span><span aria-hidden="true"><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></span></div></div></section>
+
+    <section class="hardware-section section-wrap" id="hardware"><div class="hardware-image"><img src="./assets/macropad-hero.webp" alt="Concept render of a small orange macropad"><div class="hardware-tag">A LITTLE OBJECT<br><strong>WITH BIG PLANS.</strong></div></div><div class="hardware-copy"><div class="eyebrow"><span class="orange-square"></span> THE HARDWARE <span class="eyebrow-line"></span> 04 / 04</div><h2>Small deck.<br><em>Big potential.</em></h2><p>Built around a Waveshare RP2040-Zero, nine switches and a clickable rotary encoder. Choose a keys-and-knob build or explore the planned display version.</p><div class="hardware-facts"><div><b>V1</b><span>KEYS + KNOB</span></div><div><b>V2</b><span>DISPLAY + PLANNED RGB</span></div></div><div class="safety-note"><strong>Heads up: work in progress.</strong> Physical hardware and bundled firmware are awaiting real-device testing. The V2 RGB power design is not approved; leave LED power and data disconnected, even at low brightness. The supplied guide uses the old version names (its V2 is now V1, and its V1 is now V2) and includes an unapproved RGB illustration.</div><a class="button button-dark" href="./assets/Macropad_Complete_Wiring_Guide.pdf" target="_top" rel="noreferrer">Explore the wiring guide <span>↗</span></a></div></section>
+
+    <section class="faq-section section-wrap" id="faq" aria-labelledby="faq-heading">
+      <div class="faq-border" aria-hidden="true"></div>
+      <div class="faq-heading"><div class="eyebrow"><span class="orange-square"></span> THE LITTLE DETAILS <span class="eyebrow-line"></span> FAQ</div><h2 id="faq-heading">A few things<br>worth <em>knowing.</em></h2><p>Good questions deserve simple answers.</p><span class="faq-aside" aria-hidden="true"><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></span></div>
+      <div class="faq-list">
+        <details class="faq-item"><summary><span class="faq-number">01</span><span class="faq-question">What is ZERO Deck Studio?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>It’s a desktop app for assigning actions to a nine-key macropad and clickable rotary knob. You can organize your setup across four layers and upload it to a compatible device.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">02</span><span class="faq-question">Where can I download the app?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>The Download for Windows button downloads the unsigned test installer. It has not been tested with physical hardware; Windows may show a warning.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">03</span><span class="faq-question">Which operating system is supported?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>Windows is the primary desktop target. Some actions rely on the desktop app and Windows integrations; those integrations are still awaiting real-world testing.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">04</span><span class="faq-question">Can I change my shortcuts later?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>Yes. You can edit your layers and assignments in the app, review your changes, and upload your setup again. Presets can also give you a starting point.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">05</span><span class="faq-question">Is the hardware ready to use?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>The hardware and bundled firmware are still awaiting physical testing. The V2 RGB power design is not approved; leave LED power and data disconnected until it is.</p></div></details>
+        <details class="faq-item"><summary><span class="faq-number">06</span><span class="faq-question">What’s the difference between V1 and V2?</span><span class="faq-icon" aria-hidden="true"></span></summary><div class="faq-answer"><p>V1 is the keys-and-knob build without a screen or external LEDs. V2 adds a screen and planned RGB lighting. Both use a Waveshare RP2040-Zero, nine switches, and a clickable rotary encoder.</p></div></details>
+      </div>
+    </section>
+
+    <section class="feedback-section" id="feedback" aria-labelledby="feedback-heading">
+      <div class="section-backdrop feedback-backdrop" aria-hidden="true"></div>
+      <div class="feedback-inner">
+        <div class="feedback-header">
+          <div class="eyebrow"><span class="orange-square"></span> MADE BETTER TOGETHER <span class="eyebrow-line"></span> FEEDBACK</div>
+          <h2 id="feedback-heading">Tell us what<br>you <em>think.</em></h2>
+          <p>Found a bug or have an idea? We’d love to hear what you think.</p>
+        </div>
+        <form class="feedback-form" action="#feedback" method="get" aria-describedby="feedback-note" data-web3forms-key="478e34eb-09e1-4e97-a588-258f89b73c12">
+          <div class="feedback-field"><label for="feedback-message">Your feedback or idea <span>REQUIRED</span></label><textarea id="feedback-message" placeholder="Tell us what’s on your mind..." rows="5" maxlength="4000" required></textarea></div>
+          <div class="feedback-field"><label for="feedback-contact">Email or social handle <span>OPTIONAL</span></label><input id="feedback-contact" type="text" placeholder="If you’d like a reply" maxlength="254" autocomplete="email"></div>
+          <div class="feedback-honeypot" aria-hidden="true"><label>Leave this field empty<input id="feedback-botcheck" type="checkbox" tabindex="-1" autocomplete="off"></label></div>
+          <div class="feedback-bottom"><p id="feedback-note">Feedback requires JavaScript. Nothing has been sent or saved.</p><button class="feedback-submit" type="submit"><span class="feedback-submit-label">Send feedback</span><span class="feedback-submit-icon" aria-hidden="true">↗</span></button></div>
+          <p class="feedback-status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="support-section" id="support" aria-labelledby="support-heading">
+      <div class="support-card">
+        <div class="support-topline"><span>THE ZERO PROJECT / 001</span><span>MADE BETTER TOGETHER <span aria-hidden="true">↗</span></span></div>
+        <div class="support-layout">
+          <div class="support-main">
+            <div class="eyebrow support-eyebrow"><span class="black-square"></span> A LITTLE SUPPORT GOES A LONG WAY</div>
+            <h2 id="support-heading">Keep ZERO<br><em>going.</em></h2>
+            <p class="support-copy">If ZERO makes your day a little better, you can support the project and help it grow.</p>
+            <div class="support-actions" aria-describedby="support-availability">
+              <button type="button" disabled><span class="support-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 9h13v5a6.5 6.5 0 0 1-13 0V9Zm13 1h1.5a2.5 2.5 0 0 1 0 5H17M7 4v2m4-2v2m4-2v2M3 21h15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="support-action-text"><span class="support-action-name">Buy me a coffee</span><small>COMING SOON</small></span><span class="support-action-arrow" aria-hidden="true">↗</span></button>
+              <a href="https://www.paypal.com/paypalme/ThongamDavid529" target="_top" rel="noreferrer"><span class="support-paypal-icon" aria-hidden="true">P</span><span class="support-action-text"><span class="support-action-name">PayPal</span><small>SUPPORT WITH PAYPAL</small></span><span class="support-action-arrow" aria-hidden="true">↗</span></a>
+            </div>
+            <p class="support-availability" id="support-availability">PayPal opens securely on PayPal. Buy me a coffee is coming soon. Thanks for being here.</p>
+          </div>
+          <div class="support-art" aria-hidden="true">
+            <div class="support-art-orbit"></div>
+            <div class="support-mark"><span class="brand-mark">Z</span></div>
+            <div class="support-art-caption"><span>MADE FOR THE<br>GOOD WORK.</span><span><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></span></div>
+          </div>
+        </div>
+        <div class="support-bottomline"><span>SMALL DECK. BIG IDEAS.</span><span>THANK YOU FOR BEING HERE.</span></div>
+      </div>
+    </section>
+
+    <section class="closing" id="download"><div class="closing-inner"><div class="closing-top"><span><span class="orange-square"></span> YOUR NEXT LITTLE PROJECT</span><span>MAKE SOMETHING GOOD / 001</span></div><div class="closing-main"><div><h2>Ready to make<br>it <em>yours?</em></h2><p>Get to know the project, explore the documentation, and follow along as the little deck comes to life.</p><div class="closing-actions"><a class="button button-orange" href="https://github.com/david-8837/MacroPad-/releases/download/v1.0.1-test.3/ZERO-Deck-Studio-1.0.1-test.3-x64.exe" target="_top" rel="noreferrer" aria-describedby="download-status">Download for Windows <span>↗</span></a><a class="text-link light-link" href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">Explore on GitHub <span>↗</span></a><a class="text-link light-link" href="https://github.com/david-8837/MacroPad-/blob/arena/d088a202-macropad/README.md" target="_top" rel="noreferrer">Documentation <span>↗</span></a></div><p class="download-note" id="download-status">Unsigned test build. Windows may show a warning; physical hardware and firmware are untested.</p></div><div class="closing-symbol" aria-hidden="true"><svg class="zero-spark" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 14 8.5 19.8 4.2 15.5 10 23 12 15.5 14 19.8 19.8 14 15.5 12 23 10 15.5 4.2 19.8 8.5 14 1 12 8.5 10 4.2 4.2 10 8.5Z"/></svg></div></div><div class="closing-bottom"><span>CONCEIVED FOR THE THINGS YOU MAKE.</span><a href="#top">BACK TO TOP ↑</a></div></div></section>
+  </main>
+  <footer><a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true">Z</span><span class="brand-word">ZERO<small>DECK STUDIO</small></span></a><p>A LITTLE DECK FOR THE SHORTCUTS YOU USE A LOT.</p><div><a href="https://github.com/david-8837/MacroPad-" target="_top" rel="noreferrer">GITHUB ↗</a><a href="#hardware">HARDWARE</a><a href="./cases/">CASES</a><a href="#faq">FAQ</a><a href="#feedback">FEEDBACK</a><span>MADE FOR MAKING.</span></div></footer>
+  </div>
+</body>
+</html>
