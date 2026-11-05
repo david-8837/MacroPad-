@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { App } from './App';
-import { Intro, IntroBoundary } from './intro/Intro';
+import { ResetRoot } from './components/ResetRoot';
+import { applyTheme, readThemeForStartup } from './utils/appPreferences';
 import './index.css';
 
 class StartupBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
@@ -18,8 +18,13 @@ class StartupBoundary extends React.Component<{ children: React.ReactNode }, { f
   }
 }
 
+const startupTheme = readThemeForStartup();
+// Reconcile the splash with the editor, even after settings are cleared. Never
+// replace a saved splash choice when the renderer's storage cannot be read.
+void applyTheme(startupTheme.theme, startupTheme.storageAvailable).catch(() => {});
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <StartupBoundary><App /><IntroBoundary><Intro /></IntroBoundary></StartupBoundary>
+    <StartupBoundary><ResetRoot /></StartupBoundary>
   </React.StrictMode>,
 );

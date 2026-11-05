@@ -1,9 +1,8 @@
 import React, { useRef, useState } from 'react';
 import type { Deck } from '../types';
 import { BACKUP_MAX_BYTES, makeBackup, parseBackup, restoreBackup, type ParsedBackup } from '../utils/backup';
-import { AnimatedDetails } from './AnimatedDetails';
 
-export const BackupPanel: React.FC<{ deck: Deck; onRestored: (backup: ParsedBackup) => void; exportBlocked?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }> = ({ deck, onRestored, exportBlocked = false, open, onOpenChange }) => {
+export const BackupPanel: React.FC<{ deck: Deck; onRestored: (backup: ParsedBackup) => void; exportBlocked?: boolean }> = ({ deck, onRestored, exportBlocked = false }) => {
   const [pending, setPending] = useState<ParsedBackup | null>(null);
   const [message, setMessage] = useState('');
   const input = useRef<HTMLInputElement>(null);
@@ -30,12 +29,14 @@ export const BackupPanel: React.FC<{ deck: Deck; onRestored: (backup: ParsedBack
     try { restoreBackup(localStorage, pending); onRestored(pending); setPending(null); setMessage('Restored in the app. Settings were not saved to the pad; connected previews may update. Review before uploading.'); }
     catch (e) { setMessage(e instanceof Error ? e.message : 'Restore failed.'); }
   };
-  return <AnimatedDetails id="backup-restore" open={open} onOpenChange={onOpenChange} className="border-b border-[#C7C7C7] shrink-0" summaryClassName="cursor-pointer px-4 py-3 hover:bg-[#EDECE8]" summary={<span className="eyebrow">Backup &amp; restore</span>}>
-    <div className="px-4 pb-4 text-xs space-y-3 text-[#444343]">
+  return <section id="backup-restore" aria-labelledby="backup-heading" className="border border-[#c7c7c7] bg-[#e9e8e4] p-5 sm:p-6">
+    <p className="font-mono text-[9px] font-bold uppercase tracking-[.16em] text-[#555]">04 / YOUR DATA</p>
+    <h2 id="backup-heading" className="mt-1 text-lg font-bold">Backup &amp; restore</h2>
+    <div className="mt-3 text-xs space-y-3 text-[#444343]">
       <p><strong>Save a copy:</strong> Download a backup file to keep your layers, knob settings, presets, macros, screen and lighting settings.  <strong>Restore:</strong> Choose that file, review what it replaces, then confirm. Files can contain private paths and actions that type text, open apps or run macro sequences. Only restore backups you trust; unsupported legacy scripts cannot be exported.</p>
       <button onClick={download} disabled={exportBlocked} title={exportBlocked ? 'Some settings could not be read or saved; resolve the storage problem before backing up.' : undefined} className="border border-[#777] px-2 py-1 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed">Download backup</button>{' '}
       <button onClick={() => input.current?.click()} className="border border-[#777] px-2 py-1 hover:bg-white">Choose backup</button>
-      <input ref={input} type="file" accept=".json,application/json" className="sr-only" onChange={e => void choose(e.target.files?.[0])} />
+      <input ref={input} aria-label="Choose a backup file" type="file" accept=".json,application/json" className="sr-only" onChange={e => void choose(e.target.files?.[0])} />
       {pending && <div className="border border-[#1351AA] p-2 space-y-2" role="group" aria-label="Confirm backup restore">
         <p>Replace all four editor layers{pending.presetLibrary ? ' and saved presets' : ''}{pending.extras ? ', macros, screen and lighting settings' : ''}? {pending.extras ? 'Macro sequences and assigned actions may control this computer. Only restore a backup you trust.' : 'This older backup leaves macros, screen and lighting settings unchanged.'} {!pending.presetLibrary && 'This deck-only backup also leaves presets unchanged.'} This does not save settings to the pad; connected previews may update. Back up current data first.</p>
         <button onClick={restore} className="bg-[#1351AA] text-white px-2 py-1">Confirm restore</button>{' '}
@@ -43,5 +44,5 @@ export const BackupPanel: React.FC<{ deck: Deck; onRestored: (backup: ParsedBack
       </div>}
       {message && <p role="status">{message}</p>}
     </div>
-  </AnimatedDetails>;
+  </section>;
 };

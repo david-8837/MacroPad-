@@ -4,13 +4,14 @@ import { ENABLE_INTRO, INTRO_DURATION_MS, INTRO_SESSION_KEY, INTRO_REPLAY_EVENT,
 import { frameFor, revealFor, typingFor, scriptTime, scriptDuration, type Rect, type TimedTarget } from './timeline';
 import { measureText, textClip } from './textGeometry';
 import './intro.css';
+import { readOpeningAnimation } from '../utils/appPreferences';
 
 type SavedStyle = { value: string; priority: string };
 type Target = TimedTarget & { element: HTMLElement; baseOpacity: number; opacity: SavedStyle; translate: SavedStyle; transition: SavedStyle; clipPath: SavedStyle; lastReveal: number };
 type Track = { script: RegionScript; targets: Target[] };
 
 function firstRun(): boolean {
-  if (!ENABLE_INTRO) return false;
+  if (!ENABLE_INTRO || !readOpeningAnimation()) return false;
   try {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
     return import.meta.env.DEV || sessionStorage.getItem(INTRO_SESSION_KEY) !== '1';

@@ -24,11 +24,12 @@ export {act}; export function mount(el) { const root = createRoot(el); root.rend
     const { act, mount } = require(out);
     const rootEl = document.getElementById('root'); let root;
     await act(async () => { root = mount(rootEl); });
+    assert(!rootEl.textContent.includes('functions.edit_file'), 'internal tool text must never appear in the macro editor');
+    assert(!rootEl.textContent.includes('wait tool result'), 'stray internal notes must not appear in the macro editor');
     const button = text => [...rootEl.querySelectorAll('button')].find(b => b.textContent.trim() === text);
     const click = async text => { const el = button(text); assert(el, `button ${text}`); await act(async () => el.click()); };
     const storage = () => JSON.parse(localStorage.getItem('kadowaz_macros_v2'));
-    const capture = rootEl.querySelector('[aria-label="Type the keys you want to log"]');
-    const type = async (key, extras = {}) => { capture.focus(); await act(async () => capture.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, ...extras }))); };
+    const type = async (key, extras = {}) => { const capture = rootEl.querySelector('[aria-label="Type the keys you want to log"]'); capture.focus(); await act(async () => capture.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, ...extras }))); };
 
     await click('Add Win key');
     assert.deepEqual(storage()[0].actions[0].keys, ['Win'], 'standalone Win is recorded as one tap');
@@ -89,6 +90,29 @@ export {act}; export function mount(el) { const root = createRoot(el); root.rend
     await setValue(rootEl.querySelector('#macro-edit-value'), '350');
     await click('Save step');
     assert.equal(storage()[1].actions[2].delayMs, 350);
+    await click('Type Keys');
+    const virtualKey = async key => { const el = rootEl.querySelector(`[data-macro-key="${key}"]`); assert(el, `virtual key ${key}`); await act(async () => el.click()); };
+    await virtualKey('Ctrl'); await virtualKey('C');
+    assert.deepEqual(storage()[1].actions[3].keys, ['Ctrl','C'], 'virtual modifiers form one chord');
+    await virtualKey('Win'); await virtualKey('Shift'); await virtualKey('S');
+    assert.deepEqual(storage()[1].actions[4].keys, ['Shift','Win','S']);
+    await virtualKey('Esc'); assert.deepEqual(storage()[1].actions[5].keys, ['Esc'], 'virtual Esc is recordable');
+    await virtualKey('Alt'); await click('Add modifiers as step');
+    assert.deepEqual(storage()[1].actions[6].keys, ['Alt'], 'standalone modifier can be recorded');
+    await virtualKey('Ctrl'); await type('b', { shiftKey: true });
+    assert.deepEqual(storage()[1].actions[7].keys, ['Ctrl','Shift','B'], 'virtual and physical modifiers combine');
+    const { resolveVk } = require(resolve('electron/actionExecutor.cjs'));
+    for (const el of rootEl.querySelectorAll('[data-macro-key]')) assert.notEqual(resolveVk(el.dataset.macroKey), null, `unresolvable key ${el.dataset.macroKey}`);
+    const saveButton = rootEl.querySelector('button[title^="Saves the macro library"]'); saveButton.focus();
+    await act(async () => saveButton.dispatchEvent(new window.KeyboardEvent('keydown', { key:'f', bubbles:true, cancelable:true })));
+    assert.deepEqual(storage()[1].actions[8].keys, ['F'], 'physical typing works without focusing the capture bar');
+    const space = new window.KeyboardEvent('keydown', {key:' ', bubbles:true, cancelable:true});
+    await act(async () => saveButton.dispatchEvent(space));
+    assert.equal(space.defaultPrevented, false, 'Space still activates a focused button');
+    assert.equal(storage()[1].actions.length, 9);
+    const nameField = rootEl.querySelector('input[placeholder^="Enter macro label"]'); nameField.focus();
+    await act(async () => nameField.dispatchEvent(new window.KeyboardEvent('keydown', {key:'h', bubbles:true, cancelable:true})));
+    assert.equal(storage()[1].actions.length, 9, 'text field input is not captured');
     await act(async () => root.unmount());
     console.log('macroWinKey: standalone, Win combos, slot isolation and step editing passed');
   } finally {

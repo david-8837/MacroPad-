@@ -58,6 +58,8 @@ function runTests() {
   assert.match(svg, /M60 45h136/, 'source icon has the ZERO Z mark');
   const main = fs.readFileSync(path.join(__dirname, '../electron/main.cjs'), 'utf8');
   const splash = fs.readFileSync(path.join(__dirname, '../electron/splash.html'), 'utf8');
+  assert(fs.existsSync(path.join(__dirname, '../electron/resetData.cjs')), 'native reset helper is present');
+  assert.match(fs.readFileSync(path.join(__dirname, '../scripts/build-electron.mjs'), 'utf8'), /resetData\.cjs/, 'native reset is included in asset verification');
   assert.match(main, /assets\/zero\.png/); assert.match(splash, /assets\/zero\.png/);
   assert.match(splash, /<strong>ZERO<\/strong>/);
   assert.match(main, /title: 'ZERO Deck Studio'/);

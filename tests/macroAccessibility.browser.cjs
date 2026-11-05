@@ -2,6 +2,7 @@
 const assert=require('node:assert/strict');const puppeteer=require(process.env.PUPPETEER_CORE_PATH||'puppeteer-core');
 (async()=>{const browser=await puppeteer.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
 try{const page=await browser.newPage(), errors=[];page.on('pageerror',e=>errors.push(String(e)));await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
+ await page.evaluateOnNewDocument(()=>localStorage.setItem('kadowaz_guide_seen','1'));
  await page.goto(process.env.APP_URL||'http://127.0.0.1:5173/',{waitUntil:'load'});await page.$eval('nav[aria-label="Modules"] button::-p-text(Macros)',e=>e.click());await page.waitForSelector('[aria-label="Type the keys you want to log"]');
  await page.focus('button[title^="Saves the macro library"]');await page.keyboard.press('Space');await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Saved'));
  let saved=JSON.parse(await page.evaluate(()=>localStorage.getItem('kadowaz_macros_v2')));assert.equal(saved[0].actions.length,0,'button activation does not record Space');

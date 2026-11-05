@@ -93,17 +93,17 @@ export const ViaKeyTester: React.FC = () => {
   // A visual reference, not clickable controls or evidence of a device scan.
   const renderKey = (k: KeyDef, gridArea?: string) => {
     if (k.code.startsWith('spacer-')) {
-      return <div key={k.code} style={{ width: `${(k.width || 1) * 32}px` }} className="pointer-events-none shrink-0" />;
+      return <div key={k.code} style={{ flex: `${k.width || 1} 1 0%` }} className="tester-spacer" />;
     }
     const isDown = activeKeys.has(k.code);
     const info = testedKeys[k.code];
     const state = isDown ? 'held' : info ? 'tested' : 'idle';
     const ArrowIcon = ({ ArrowUp, ArrowDown, ArrowLeft, ArrowRight } as Record<string, React.ElementType>)[k.code];
     return <div key={k.code} data-code={k.code} data-state={state} title={k.code}
-      style={gridArea ? { gridArea } : { width: `${(k.width || 1) * 32}px`, height: '32px' }}
-      className="tester-key shrink-0 flex flex-col justify-between p-1 font-mono text-[10px] font-bold border relative select-none">
-      <div className="flex items-center justify-between gap-0.5 w-full leading-none px-0.5 min-w-0">
-        <span className="truncate">{ArrowIcon ? <ArrowIcon className="w-3 h-3" /> : k.label}</span>
+      style={gridArea ? { gridArea } : { flex: `${k.width || 1} 1 0%` }}
+      className="tester-key">
+      <div className="tester-key-legend">
+        <span className="tester-key-label">{ArrowIcon ? <ArrowIcon className="w-3 h-3" /> : k.label}</span>
         {k.subLabel && <span className="tester-sublabel text-[8px]">{k.subLabel}</span>}
       </div>
       {info && <span className="tester-count text-[7px] font-mono leading-none font-normal">{info.pressCount}x</span>}
@@ -155,32 +155,35 @@ export const ViaKeyTester: React.FC = () => {
         </div>
         <div className="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-[#646464]">
           <div className="flex flex-wrap items-center gap-4" aria-label="Key status legend"><span className="flex items-center gap-1.5"><span className="tester-legend tester-legend--idle" />Not observed</span><span className="flex items-center gap-1.5"><span className="tester-legend tester-legend--tested" />Observed</span><span className="flex items-center gap-1.5"><span className="tester-legend tester-legend--held" />Held</span></div>
-          <span>Scroll sideways to see the full layout</span>
+          <span>On very narrow windows, the main keys scroll sideways</span>
         </div>
         <div className="px-4 sm:px-5 pb-5">
           <div className="tester-keyboard-scroll overflow-x-auto" role="region" tabIndex={0} data-tester-scroll aria-label="Illustrative keyboard layout">
-            <div className="tester-keyboard flex gap-4 w-max mx-auto" aria-hidden="true">
-              <div className="space-y-[3px]">
-                <div className="flex gap-[3px] mb-2">{MAIN_ROW_0.map(k => renderKey(k))}</div>
-                <div className="flex gap-[3px]">{MAIN_ROW_1.map(k => renderKey(k))}</div>
-                <div className="flex gap-[3px]">{MAIN_ROW_2.map(k => renderKey(k))}</div>
-                <div className="flex gap-[3px]">{MAIN_ROW_3.map(k => renderKey(k))}</div>
-                <div className="flex gap-[3px]">{MAIN_ROW_4.map(k => renderKey(k))}</div>
-                <div className="flex gap-[3px]">{MAIN_ROW_5.map(k => renderKey(k))}</div>
-              </div>
-              {layoutMode !== '60' && <div className="space-y-[3px] flex flex-col justify-between">
-                <div className="flex gap-[3px] mb-2">{NAV_ROW_0.map(k => renderKey(k))}</div>
-                <div className="flex gap-[3px]">{NAV_ROW_1.map(k => renderKey(k))}</div>
-                <div className="flex gap-[3px]">{NAV_ROW_2.map(k => renderKey(k))}</div>
-                <div className="h-[32px]" />
-                <div className="flex gap-[3px]">{ARROW_ROW_4.map(k => renderKey(k))}</div>
-                <div className="flex gap-[3px]">{ARROW_ROW_5.map(k => renderKey(k))}</div>
-              </div>}
-              {layoutMode === 'full' && <div className="space-y-[3px]">
-                <div className="flex gap-[3px] mb-2">{NUMPAD_ROW_0.map(k => renderKey(k))}</div>
-                <div className="grid gap-[3px]" style={{ gridTemplateColumns: 'repeat(4, 32px)', gridTemplateRows: 'repeat(5, 32px)' }}>
-                  {NUMPAD_GRID_KEYS.map(k => renderKey(k, k.gridArea))}
+            <div className="tester-keyboard">
+              <div className="tester-main-scroll" role="region" aria-label="Main key rows; scroll sideways if needed" tabIndex={0} data-tester-scroll>
+                <div className="tester-main" aria-hidden="true">
+                  <div className="tester-key-row tester-function-row">{MAIN_ROW_0.map(k => renderKey(k))}</div>
+                  <div className="tester-key-row">{MAIN_ROW_1.map(k => renderKey(k))}</div>
+                  <div className="tester-key-row">{MAIN_ROW_2.map(k => renderKey(k))}</div>
+                  <div className="tester-key-row">{MAIN_ROW_3.map(k => renderKey(k))}</div>
+                  <div className="tester-key-row">{MAIN_ROW_4.map(k => renderKey(k))}</div>
+                  <div className="tester-key-row">{MAIN_ROW_5.map(k => renderKey(k))}</div>
                 </div>
+              </div>
+              {layoutMode !== '60' && <div className="tester-keyboard-extras" aria-hidden="true">
+                <div className="tester-key-cluster">
+                  <p className="tester-cluster-title">Navigation</p>
+                  <div className="tester-key-row">{NAV_ROW_0.map(k => renderKey(k))}</div>
+                  <div className="tester-key-row">{NAV_ROW_1.map(k => renderKey(k))}</div>
+                  <div className="tester-key-row">{NAV_ROW_2.map(k => renderKey(k))}</div>
+                  <div className="tester-key-row tester-arrow-row">{ARROW_ROW_4.map(k => renderKey(k))}</div>
+                  <div className="tester-key-row">{ARROW_ROW_5.map(k => renderKey(k))}</div>
+                </div>
+                {layoutMode === 'full' && <div className="tester-key-cluster">
+                  <p className="tester-cluster-title">Number pad</p>
+                  <div className="tester-key-row">{NUMPAD_ROW_0.map(k => renderKey(k))}</div>
+                  <div className="tester-numpad">{NUMPAD_GRID_KEYS.map(k => renderKey(k, k.gridArea))}</div>
+                </div>}
               </div>}
             </div>
           </div>

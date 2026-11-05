@@ -46,6 +46,7 @@ assert.ok((sheet.match(/disabled=\{isFlashing\}/g) || []).length >= 2,
 assert.match(sheet, /phase === 'sending' && progress && progress.total > 0/, 'only actual chunk transfers get a progress bar');
 assert.match(sheet, /aria-valuenow=\{progress.sent\}/);
 assert.doesNotMatch(sheet, /phase !== 'sending' \|\| i </, 'other stages must not look fully complete');
+assert.match(sheet, /sets the pad’s knob hold to \{KNOB_HOLD_MS \/ 1000\} seconds/, 'review explains the fixed timing before upload');
 assert.match(sheet, /await onSyncEEPROM\(/, 'upload only starts after explicit confirmation');
 assert.match(sheet, /tabIndex=\{-1\}/);
 assert.match(sheet, /handleDetachedFocus/, 'Escape and Tab must still work after clicking non-focusable content');

@@ -212,6 +212,18 @@ function frame(proto, { index = 0, event = 3, channel = 0, action = 0, value = 0
   link.feed(frame(proto, { index: 0, event: 3, channel: 0 }));
   assert.equal((await completed.pop()).success, false, 'M8 was never defined in PC storage');
   assert.equal(native.length, before);
+  // A PC-owned multi-key knob action must survive mapping and travel from the
+  // firmware event frame to the native executor as one complete chord.
+  deck.layers[1].dial.cwAction = { id: 'knob-combo', category: 'hotkey', name: 'Ctrl+A+B', payload: { keys: ['Ctrl','A','B'] } };
+  const knobUpload = deckToConfig(deck, defaultConfig());
+  assert.equal(knobUpload.config.channels[1].knobCw.type, ACTION_TYPE.NONE);
+  assert.equal(knobUpload.unsupported.find(x => x.name === 'Ctrl+A+B').route, 'desktop');
+  link.feed(frame(proto, { source: 1, event: 7, channel: 1, value: 1, action: ACTION_TYPE.NONE }));
+  assert.equal((await completed.pop()).success, true);
+  assert.deepEqual(native.at(-1).payload.keys, ['Ctrl','A','B']);
+  assert.equal(deliveries.at(-1).gesture, 'dial_cw');
+  link.feed(frame(proto, { source: 1, event: 7, channel: 1, value: 1, action: ACTION_TYPE.KEYCODE }));
+  assert.equal(completed.length, 0, 'a firmware-owned action must not be replayed on the PC');
   onFrame(); onEvent();
-  console.log('viaIntegration: physical 0xC0 frame routed to saved PC macro exactly once');
+  console.log('viaIntegration: real event frames route PC macros and knob combinations exactly once');
 })().catch(e => { console.error(e); process.exitCode = 1; });

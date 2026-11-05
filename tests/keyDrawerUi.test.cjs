@@ -33,7 +33,7 @@ import { renderToStaticMarkup } from ${JSON.stringify(resolve('node_modules/reac
 import { createRoot } from ${JSON.stringify(resolve('node_modules/react-dom/client.js'))};
 import { KeyConfigDrawer } from ${JSON.stringify(resolve('src/components/KeyConfigDrawer.tsx'))};
 import { KnobConfigDrawer } from ${JSON.stringify(resolve('src/components/KnobConfigDrawer.tsx'))};
-export function createKnob(container, dial, save) { const root = createRoot(container); return { render: () => root.render(<KnobConfigDrawer dial={dial} onSave={save} onClose={() => {}} onTriggerAction={() => {}} />), unmount: () => root.unmount() }; }
+export function createKnob(container, dial, save) { const root = createRoot(container); return { render: () => root.render(<KnobConfigDrawer dial={dial} onSave={save} onClose={() => {}} />), unmount: () => root.unmount() }; }
 export function render(binding, preset) { return renderToStaticMarkup(<KeyConfigDrawer keyBinding={binding} onSave={() => {}} onClose={() => {}} onTestAction={() => {}} captureOnlyWhenFocused={preset} hideCloseButton={preset} />); }
 export { act };
 export function create(container) { const root = createRoot(container); return { render: (binding, callbacks, preset = false) => root.render(<KeyConfigDrawer key={binding.keyIndex} keyBinding={binding} totalKeys={9} onSelectKeyIndex={callbacks.select} onSave={callbacks.save} onClose={callbacks.close} onTestAction={callbacks.test} captureOnlyWhenFocused={preset} hideCloseButton={preset} />), unmount: () => root.unmount() }; }`);
@@ -43,7 +43,7 @@ export function create(container) { const root = createRoot(container); return {
     const key = { keyIndex: 0, label: 'Empty', sublabel: 'Unassigned', iconName: '', tapAction: null, holdAction: null, doubleTapAction: null };
     const assertDrawer = html => {
       for (const text of ['Keyboard &amp; Combos', 'Text Macro', 'Open App', 'Assign', 'Virtual Keyboard']) assert(html.includes(text), `missing ${text}`);
-      for (const text of ['Save Changes', 'Recorder', 'Safety Hold', 'Media Hotkeys', '6. Media', 'Long-Press Safety Isolation']) assert(!html.includes(text), `unexpected ${text}`);
+      for (const text of ['Save Changes', 'Recorder', 'Safety Hold', 'Media Hotkeys', '6. Media', 'Long-Press Safety Isolation', '+ Append Keys', '⚡ Chord']) assert(!html.includes(text), `unexpected ${text}`);
     };
     const appSource = readFileSync(resolve('src/App.tsx'), 'utf8');
     assert(!appSource.includes("label: 'Legend'"));
@@ -223,14 +223,52 @@ export function create(container) { const root = createRoot(container); return {
     const knobSaved = [];
     const knob = createKnob(container, { label: 'Knob', activeModeName: 'Layer 0', availableModes: ['Layer 0'],
       cwAction: { id: 'old', category: 'hotkey', name: 'old', payload: { keycode: 'MO(1)' } },
-      ccwAction: null, pressAction: null, holdAction: null }, value => knobSaved.push(value));
+      ccwAction: null, pressAction: null, holdAction: { id: 'legacy', name: 'Legacy hold', category: 'hotkey', payload: { keys: ['A'] } }, channelHoldThresholdMs: 1800 }, value => knobSaved.push(value));
     await act(async () => knob.render());
+    assert(container.querySelector('[aria-label="Fixed knob hold"]').textContent.includes('0.7 seconds'));
+    assert(!container.textContent.includes('Test Hold') && !container.textContent.includes('Hold Threshold'), 'hold customization and test rig are gone');
     await act(async () => window.dispatchEvent(new window.KeyboardEvent('keydown', {
       key: 'ArrowRight', code: 'ArrowRight', metaKey: true, bubbles: true,
     })));
     await click(button('Save Knob Bindings'));
     assert.deepEqual(knobSaved.at(-1).cwAction.payload.keys, ['Win', 'ArrowRight']);
+    assert.equal(knobSaved.at(-1).channelHoldThresholdMs, 1800, 'legacy setting is preserved but ignored');
+    assert.equal(knobSaved.at(-1).holdAction.id, 'legacy', 'legacy action survives editing for backups');
     assert.equal(knobSaved.at(-1).cwAction.payload.keycode, undefined, 'editing a legacy knob clears its stale raw code');
+    assert(container.querySelector('[aria-label="Virtual Keyboard"]'), 'knob exposes a keyboard');
+    assert(!container.textContent.includes('1 shortcut per rotary key'), 'old limit badge is removed');
+    await click(container.querySelector('button[title="Clear All Keys"]'));
+    await click(container.querySelector('[data-key-code="ControlLeft"]'));
+    await click(container.querySelector('[data-key-code="KeyC"]'));
+    await click(container.querySelector('[data-key-code="KeyV"]'));
+    assert(container.textContent.includes('needs ZERO running on the connected PC'), 'desktop-only combinations are explained');
+    await click(button('Save Knob Bindings'));
+    assert.deepEqual(knobSaved.at(-1).cwAction.payload.keys, ['Ctrl','C','V'], 'virtual keyboard adds multiple ordinary keys to one chord');
+    assert.equal(knobSaved.at(-1).cwAction.name, 'Shortcut: Ctrl + C + V', 'old assignment name is not misreported after editing');
+    await click(container.querySelector('[data-key-code="KeyV"]'));
+    await click(button('Save Knob Bindings'));
+    assert.deepEqual(knobSaved.at(-1).cwAction.payload.keys, ['Ctrl','C'], 'clicking a selected key removes it');
+    const left = [...container.querySelectorAll('button')].find(b => b.textContent.includes('LEFT (CCW)') && b.textContent.includes('#L'));
+    await click(left);
+    const clearLeft = container.querySelector('button[title="Clear All Keys"]'); if (clearLeft) await click(clearLeft);
+    await click(container.querySelector('[data-key-code="KeyV"]'));
+    await click(button('Save Knob Bindings'));
+    assert.deepEqual(knobSaved.at(-1).ccwAction.payload.keys, ['V'], 'left turn is edited independently');
+    assert.deepEqual(knobSaved.at(-1).cwAction.payload.keys, ['Ctrl','C'], 'left turn does not change right turn');
+    const press = [...container.querySelectorAll('button')].find(b => b.textContent.includes('TAP (PRESS)') && b.textContent.includes('#T'));
+    await click(press);
+    await click(container.querySelector('[data-key-code="Numpad1"]'));
+    await click(button('Save Knob Bindings'));
+    assert.deepEqual(knobSaved.at(-1).pressAction.payload.keys, ['Numpad1'], 'knob press supports the number pad');
+    await click(container.querySelector('button[title="Clear All Keys"]'));
+    await act(async () => {
+      window.dispatchEvent(new window.KeyboardEvent('keydown', {key:'a',code:'KeyA',bubbles:true}));
+      window.dispatchEvent(new window.KeyboardEvent('keydown', {key:'b',code:'KeyB',bubbles:true}));
+    });
+    await click(button('Save Knob Bindings'));
+    assert.deepEqual(knobSaved.at(-1).pressAction.payload.keys, ['A','B'], 'successive physical keyboard events build one chord without losing keys');
+
+    assert.deepEqual(knobSaved.at(-1).ccwAction.payload.keys, ['V'], 'knob press leaves left turn unchanged');
     await act(async () => knob.unmount());
     console.log('keyDrawerUi: app, text, key and knob assignments, selection gating and key resets passed');
   } finally {

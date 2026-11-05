@@ -34,14 +34,13 @@ export interface PaletteItem {
 export interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
-  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets';
-  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets') => void;
+  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets' | 'settings';
+  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets' | 'settings') => void;
   deck: Deck;
   activeLayer: Layer;
   onSelectLayer: (layerId: string) => void;
   onOpenDiagnostics: () => void;
   onOpenFirmwarePanel: () => void;
-  onExportDeck: () => void;
   hardwareState: HardwareConnectionState;
   onConnectSerial: () => void;
   onDisconnectHardware: () => void;
@@ -92,7 +91,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenDiagnostics,
   onOpenFirmwarePanel,
   deck,
-  onExportDeck,
   hardwareState,
   onConnectSerial,
   onDisconnectHardware,
@@ -120,6 +118,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         also: 'home editor keymap pad simulator twin buttons',
         icon: <Sliders className="w-4 h-4 text-[#1351AA]" />,
         run: () => onChangeTab('designer'),
+      },
+      {
+        id: 'tab-settings', group: 'Page', label: 'Settings',
+        where: 'App appearance, preview and data', also: 'settings preferences zoom view size backup',
+        icon: <Sliders className="w-4 h-4 text-[#1351AA]" />,
+        run: () => onChangeTab('settings'),
       },
       {
         id: 'tab-tester',
@@ -189,13 +193,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         run: onOpenFirmwarePanel,
       },
       {
-        id: 'action-export-deck',
+        id: 'action-backup-settings',
         group: 'Action',
-        label: 'Export Backup to JSON',
+        label: 'Backup & restore in Settings',
         where: 'Back up layers, presets, macros, screen and lighting',
         also: 'export backup json save share deck layout',
         icon: <Download className="w-4 h-4 text-[#1351AA]" />,
-        run: onExportDeck,
+        run: () => onChangeTab('settings'),
       }
     );
 
@@ -376,7 +380,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     onSelectLayer,
     onOpenDiagnostics,
     onOpenFirmwarePanel,
-    onExportDeck,
     onConnectSerial,
     onDisconnectHardware,
     onOpenUploadSheet,

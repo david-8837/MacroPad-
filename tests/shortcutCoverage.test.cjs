@@ -5,12 +5,12 @@ const { resolve } = require('node:path');
 const { resolveVk, buildChordSequence } = require('../electron/actionExecutor.cjs');
 const result = buildSync({ stdin: { contents: `
   export * from './src/data/keyboardLayouts';
-  export { chordToAction } from './src/utils/deviceKeymap';
+  export { chordToAction, isDesktopOnlyChord } from './src/utils/deviceKeymap';
   export { PC_SHORTCUTS } from './src/data/pcShortcuts';
 `, resolveDir: resolve(__dirname, '..') }, bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent' });
 const mod = { exports: {} };
 new Function('module', 'exports', result.outputFiles[0].text)(mod, mod.exports);
-const { chordToAction, drawerKeyName, PC_SHORTCUTS } = mod.exports;
+const { chordToAction, isDesktopOnlyChord, drawerKeyName, PC_SHORTCUTS } = mod.exports;
 const codes = new Set();
 for (const [group, keys] of Object.entries(mod.exports)) {
   if (group.startsWith('DRAWER_') || !Array.isArray(keys) || group === 'PC_SHORTCUTS') continue;
@@ -18,6 +18,7 @@ for (const [group, keys] of Object.entries(mod.exports)) {
     if (key.code.startsWith('spacer') || key.code === 'Calc' || codes.has(key.code)) continue;
     codes.add(key.code);
     const name = drawerKeyName(key);
+    if (isDesktopOnlyChord(['A', name])) assert.ok(buildChordSequence(['A', name]).sequence, `${name} classified PC-only must execute`);
     assert.notEqual(resolveVk(name), null, `${key.code}: ${name} cannot execute on Windows`);
     assert.notEqual(chordToAction([name]).kind, 'unsupported', `${key.code}: ${name} cannot upload`);
   }

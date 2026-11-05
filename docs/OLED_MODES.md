@@ -1,6 +1,6 @@
 # OLED modes — design, frames and firmware
 
-> **Physical target:** required SSD1306 128×32 at 0x3C on RP2040-Zero GP28/GP29. Firmware initializes and flushes the panel; fake-I²C and fake-CDC tests pass, but no actual module/UF2 has been tested. Seven baked modes play locally. Protocol-v3 source streams live PC-rendered runtime frames and syncs physical mode changes; if USB frames stop, the pad draws truthful offline fallbacks. Format-v3 **Save Display to Pad** persists boot mode, contrast, inversion and rotation only after a verified flash transaction with a responding panel. Custom text/measurements are *stored* on the PC, never in pad flash, but appear in volatile runtime pixels while connected.
+> **Physical target:** required SSD1306 128×32 at 0x3C on RP2040-Zero GP28/GP29. Firmware initializes and flushes the panel; fake-I²C and fake-CDC tests pass, but no actual module/UF2 has been tested. Seven baked modes play locally. Protocol-v3 source streams live PC-rendered runtime frames and syncs physical mode changes; if USB frames stop, the pad draws truthful offline fallbacks. Format-v3 **Save Display to Pad** persists boot mode, contrast, inversion and rotation only after a verified flash transaction with a responding panel. Custom text and artwork are *stored* on the PC, never in pad flash, but appear in volatile runtime pixels while connected. The Create Screen editor accepts drawings, images, and short videos; custom media uses the System runtime slot and does not upload frames to flash.
 
 The target panel is a 0.91″ 128×32 monochrome SSD1306. It has **two** colours and **4096**
 pixels, so every screen in this document is designed to those limits rather than
@@ -22,8 +22,9 @@ firmware/src/core/oled_stream.c → bounded two-chunk CRC-checked volatile canva
 firmware/src/drivers/oled_runtime.c → on-board runtime fallbacks (no PC values)
 ```
 
-The seven baked loops are byte-for-byte the desktop's exported frames, played
-on-device even if the app is open. The five runtime modes use the **same PC
+The seven baked loops in the generated firmware **source** are byte-for-byte the desktop's exported frames and, if installed, play on-device even if the app is open. An
+already-installed firmware image can contain older designs; merely updating the
+app or saving display settings does not replace its baked loops. The five runtime modes use the **same PC
 renderer as the preview** when a verified OLED stream is active (clock from the
 PC wall clock; measured telemetry/media, or truthful unavailable placeholders;
 Deck Status labels). A separate timer sends whole page-order canvases, not the
@@ -57,15 +58,15 @@ build and hardware validation. The Keys & Knob image has no OLED support.
 | id | Title | Kind | Loop | Notes |
 | --- | --- | --- | --- | --- |
 | `kadowaz` | Deck Status | runtime | — | custom title and badge, large zero-based layer number and four layer marks |
-| `system` | System Telemetry | runtime | — | three meters on a common baseline; `--` for anything the machine does not measure |
+| `system` | System Telemetry | runtime | — | three segmented meters; `--` for anything the machine does not measure |
 | `media` | Now Playing | runtime | — | marquee title, artist, progress meter; `NO MEDIA` when the session is empty |
 | `channel` | Layer Indicator | runtime | — | keycap silhouettes + rounded badge on the active stop |
-| `loader` | Progress Loader | baked | 12 @ 8 fps | decorative loading animation over ten blocks |
+| `loader` | Progress Loader | baked | 12 @ 8 fps | decorative segmented loading animation |
 | `creature` | Pixel Buddy | baked | 16 @ 6 fps | 16×16 character: blink, look, bob |
 | `wave` | Signal Wave | baked | 15 @ 15 fps | decorative sine trace with a dotted axis; not measured voltage |
-| `starfield` | Starfield | baked | 24 @ 12 fps | three depth bands, deterministic star table |
-| `rain` | Digital Rain | baked | 24 @ 12 fps | 16 wrapping columns with bright heads and dotted tails |
-| `clock` | Clock | runtime | — | `HH:MM` at 2×, seconds sweep, day and date |
+| `starfield` | Starfield | baked | 24 @ 12 fps | three depth bands, deterministic stars and a title plate |
+| `rain` | Digital Rain | baked | 24 @ 12 fps | 16 wrapping columns with bright heads, dotted tails and a title plate |
+| `clock` | Clock | runtime | — | `HH:MM` at 2× beside day and date; seconds sweep |
 | `radar` | Radar Sweep | baked | 24 @ 12 fps | dotted scope, rotating sweep, blips |
 | `pulse` | Heartbeat | baked | 12 @ 12 fps | decorative scrolling trace and heart; no heart-rate measurement |
 

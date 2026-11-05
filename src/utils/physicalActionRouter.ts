@@ -63,7 +63,7 @@ export function routePhysicalAction(
   const action = gesture === 'dial_cw' ? dial.cwAction
     : gesture === 'dial_ccw' ? dial.ccwAction
     : gesture === 'dial_tap' ? dial.pressAction
-    : gesture === 'dial_hold' ? dial.holdAction
+    // Hold is reserved for layer switching, not a legacy PC action.
     : null;
   if (!action) return none();
   const detents = gesture === 'dial_cw' || gesture === 'dial_ccw'

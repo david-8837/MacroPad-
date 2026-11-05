@@ -3,6 +3,7 @@ import { DialBinding, ActionDefinition } from '../types';
 import { playDetentClick, playKeyClick } from '../utils/soundEffects';
 import { RotateCw, RotateCcw } from 'lucide-react';
 import { DIAL_MODES } from '../utils/channelLayers';
+import { KNOB_HOLD_MS } from '../utils/knobHold';
 import { watchPointerGesture } from '../utils/watchPointerGesture';
 
 interface RotaryEncoderProps {
@@ -23,9 +24,11 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
   const lastDetentAngle = useRef(0);
   const dragStartY = useRef(0);
   const startAngle = useRef(0);
+  const wheelTargetRef = useRef<HTMLDivElement>(null);
+  const wheelHandlerRef = useRef<(event: WheelEvent) => void>(() => {});
 
   // Hold Mechanics State
-  const holdThresholdMs = dial.channelHoldThresholdMs || 800;
+  const holdThresholdMs = KNOB_HOLD_MS;
   const [isHolding, setIsHolding] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
   const [holdSuccess, setHoldSuccess] = useState(false);
@@ -61,14 +64,21 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
     }
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    if (e.deltaY < 0) {
-      stepDetent('cw');
-    } else {
-      stepDetent('ccw');
-    }
+  // React delegates wheel events as passive in Chromium, so preventDefault in
+  // an onWheel handler may be ignored. A native non-passive listener prevents
+  // Ctrl+wheel from also zooming the app while the virtual knob is turning.
+  wheelHandlerRef.current = (event: WheelEvent) => {
+    if (!event.deltaY) return;
+    if (event.cancelable) event.preventDefault();
+    stepDetent(event.deltaY < 0 ? 'cw' : 'ccw');
   };
+  useEffect(() => {
+    const target = wheelTargetRef.current;
+    if (!target) return;
+    const handle = (event: WheelEvent) => wheelHandlerRef.current(event);
+    target.addEventListener('wheel', handle, { passive: false });
+    return () => target.removeEventListener('wheel', handle);
+  }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -181,7 +191,7 @@ export const RotaryEncoder: React.FC<RotaryEncoderProps> = ({
 
         {/* Outer Knurled Bezel */}
         <div
-          onWheel={handleWheel}
+          ref={wheelTargetRef}
           onMouseDown={handleMouseDown}
           title={`Scroll or Drag to rotate.\n• Tap switch: ${dial.pressAction.name}\n• Simulator hold (${holdThresholdMs}ms): preview next layer; physical knob hold switches pad`}
           className="w-[58px] h-[58px] p-0 bg-[#E3E2DE] border border-[#E3E2DE] cursor-grab active:cursor-grabbing transition-transform duration-300"

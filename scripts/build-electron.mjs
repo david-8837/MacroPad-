@@ -59,11 +59,11 @@ if (missing.length) {
 }
 
 // 5. Verify startup and branding assets needed by the packaged app.
-for (const asset of ['splash.html', 'splash.js', 'splash-preload.cjs', 'assets/zero.png', 'assets/zero.ico']) {
+for (const asset of ['splash.html', 'splash.js', 'splash-theme.js', 'splash-preload.cjs', 'assets/zero.png', 'assets/zero.ico']) {
   try { await stat(join(to, asset)); }
   catch { fail(`${asset} is missing from dist-electron.`); }
 }
-for (const asset of ['main.cjs', 'preload.cjs', 'splash-preload.cjs', 'splash.js']) {
+for (const asset of ['main.cjs', 'windowTheme.cjs', 'resetData.cjs', 'preload.cjs', 'splash-preload.cjs', 'splash-theme.js', 'splash.js']) {
   try { new Function('require', 'module', 'exports', '__dirname', await readFile(join(to, asset), 'utf8')); }
   catch (e) { fail(`${asset} does not parse: ${e.message}`); }
 }

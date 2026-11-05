@@ -302,18 +302,63 @@ async function run() {
     assert.strictEqual(config.channels[0].keys[0].code, 2);
   });
 
+  await check('knob combinations with several keys use a PC-owned event route', () => {
+    const deck = deckWith(null);
+    deck.layers[0].dial.cwAction = hotkey(['Ctrl','C','V']);
+    deck.layers[0].dial.ccwAction = hotkey(['Alt','Shift','C']);
+    deck.layers[0].dial.pressAction = hotkey(['A','B']);
+    const { config, unsupported } = deckToConfig(deck, base);
+    assert.strictEqual(config.channels[0].knobCw.type, ACTION_TYPE.NONE);
+    assert.strictEqual(config.channels[0].knobTap.type, ACTION_TYPE.NONE);
+    assert.strictEqual(config.channels[0].knobCcw.type, ACTION_TYPE.KEYCODE, 'single regular key and modifiers still run on the pad');
+    assert.deepStrictEqual(unsupported.map(u => [u.where,u.route]), [['Knob CW','desktop'],['Knob press','desktop']]);
+    assert(unsupported.every(u => /connected PC and USB key events/.test(u.reason)));
+  });
+
+  await check('invalid or oversized knob combinations are never presented as executable', () => {
+    const deck = deckWith(null);
+    deck.layers[0].dial.cwAction = hotkey(['A', 'NotAKey']);
+    deck.layers[0].dial.ccwAction = hotkey(['A', 'BrightnessUp']);
+    deck.layers[0].dial.pressAction = hotkey(Array.from({ length: 33 }, (_, i) => String.fromCharCode(65 + i % 26)));
+    const { config, unsupported } = deckToConfig(deck, base);
+    assert.deepStrictEqual(unsupported.map(u => u.route), ['unavailable','unavailable','unavailable']);
+    assert(unsupported[2].reason.includes('32 keys'));
+    assert.strictEqual(config.channels[0].knobCw.type, ACTION_TYPE.NONE);
+    deck.layers[0].dial.cwAction = { ...hotkey(['A', 'B']), payload: { keys: ['A','B'], keycode: 'MO(1)' } };
+    const stale = deckToConfig(deck, base);
+    assert.strictEqual(stale.unsupported.find(u => u.where === 'Knob CW').route, 'unavailable', 'invalid raw codes cannot bypass desktop validation');
+  });
+
   await check('knob hold defaults to the reserved layer switcher', () => {
     const { config } = deckToConfig(deckWith(hotkey(['Ctrl', 'C'])), base);
     assert.strictEqual(config.channels[0].knobHold.type, ACTION_TYPE.CHANNEL_NEXT);
   });
 
+  await check('legacy knob hold actions cannot override the fixed layer switch', () => {
+    const deck = deckWith(hotkey(['Ctrl', 'C']));
+    for (let i = 1; i < 4; i++) deck.layers.push(structuredClone(deck.layers[0]));
+    const old = { id: 'old', category: 'hotkey', name: 'Old custom hold', payload: { keys: ['Ctrl', 'V'] } };
+    deck.layers[0].dial.holdAction = old;
+    deck.layers[1].dial.holdAction = { id: 'next', category: 'navigation', name: 'Next layer', payload: {} };
+    deck.layers[2].dial.holdAction = { id: 'hold-def', category: 'navigation', name: 'Cycle Layers (Layer 1 → 2 → 3)', payload: {} };
+    deck.layers[3].dial.holdAction = { id: 'select', category: 'navigation', name: 'Layer 2', payload: { targetChannel: 2 } };
+    const { config, unsupported } = deckToConfig(deck, base);
+    assert(config.channels.every(c => c.knobHold.type === ACTION_TYPE.CHANNEL_NEXT));
+    assert.deepStrictEqual(unsupported.filter(u => u.where === 'Knob hold').map(u => u.layer), [0, 3]);
+    assert(unsupported.find(u => u.name === old.name).reason.includes('will not run'));
+    assert.strictEqual(deck.layers[0].dial.holdAction, old, 'legacy data is retained');
+  });
+
   await check('the pad keeps its own settings and lighting', () => {
     const mine = defaultConfig();
     mine.global.holdMs = 222;
+    mine.global.knobHoldMs = 1250;
     mine.global.oledPlaylist = 0b101;
     mine.channels[1].lighting = { ...mine.channels[1].lighting, r: 1, g: 2, b: 3, mode: 7 };
     const { config } = deckToConfig(deckWith(hotkey(['Ctrl', 'C'])), mine);
     assert.strictEqual(config.global.holdMs, 222);
+    assert.strictEqual(config.global.knobHoldMs, 700, 'upload fixes knob hold to 700ms');
+    assert.strictEqual(mine.global.knobHoldMs, 1250, 'does not mutate the original device config');
     assert.strictEqual(config.global.oledPlaylist, 0b101);
     assert.deepStrictEqual(
       [config.channels[1].lighting.r, config.channels[1].lighting.g, config.channels[1].lighting.b],

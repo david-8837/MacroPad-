@@ -22,7 +22,7 @@ const puppeteer=require(process.env.PUPPETEER_CORE_PATH || 'puppeteer-core');
   const ch={mode:1,brightness:100,speed:80,r:1,g:2,b:3,perKey:Array.from({length:9},()=>[0,0,0]),perKeyMask:0};
   const lighting={version:1,channels:Array.from({length:4},()=>structuredClone(ch))};
   fs.writeFileSync(file,JSON.stringify({format:'kadowaz-macropad-backup',version:2,deck,presetLibrary:{version:1,overrides:{},custom:[]},extras:{macros:[],oled,lighting}}));
-  await page.$eval('summary::-p-text(Backup & restore)',e=>e.click()); await (await page.$('input[type=file][accept*=json]')).uploadFile(file);
+  await page.click('button[aria-label="Settings"]'); await page.waitForSelector('#backup-restore'); await (await page.$('input[type=file][accept*=json]')).uploadFile(file);
   await page.waitForSelector('[aria-label="Confirm backup restore"]'); await page.$eval('button::-p-text(Confirm restore)',e=>e.click());
   await page.waitForFunction(()=>![...document.querySelectorAll('[role=alert]')].some(e=>e.textContent.includes('Saved screen settings could not be read')));
   assert.equal(JSON.parse(await page.evaluate(()=>localStorage.getItem('kadowaz_oled'))).customTitle,'RECOVERED');

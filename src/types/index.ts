@@ -103,7 +103,7 @@ export interface DialBinding {
   holdAction?: ActionDefinition; // custom action on hold, or channel switch!
   
   // Hold-to-Switch Channel mechanics
-  channelHoldThresholdMs?: number; // Duration in ms to hold knob before switching channel (default: 800ms)
+  channelHoldThresholdMs?: number; // Legacy backup field; the editor uses a fixed knob hold time.
   
   // Velocity Acceleration Settings
   accelerationCurve: 'linear' | 'exponential' | 'precision_nudge';
@@ -146,6 +146,9 @@ export type OLEDMode = OLEDModeId;
  * subsystem that answered, so the screen cannot claim a reading it does not have.
  */
 export interface OLEDState {
+  /** Custom art is stored on the PC; it uses the System runtime stream. */
+  customScreen?: import('../oled/customScreen').CustomScreen;
+  customScreenEnabled?: boolean;
   mode: OLEDMode;
   cpuLoad: number | null;
   gpuLoad: number | null;

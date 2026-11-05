@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DialBinding, ActionDefinition } from '../types';
-import { playDetentClick, playKeyClick } from '../utils/soundEffects';
+import { playKeyClick } from '../utils/soundEffects';
 import { DIAL_MODES } from '../utils/channelLayers';
-import { chordToAction } from '../utils/deviceKeymap';
+import { KNOB_HOLD_MS } from '../utils/knobHold';
+import { chordToAction, isDesktopOnlyChord } from '../utils/deviceKeymap';
 import { capturedSystemKey } from '../utils/capturedSystemKey';
+import { DrawerVirtualKeyboard } from './DrawerVirtualKeyboard';
+import { ShortcutSuggestions } from './ShortcutSuggestions';
 import {
   X,
   Check,
   RotateCw,
   RotateCcw,
-  Sparkles,
   Zap,
   Trash2,
 } from 'lucide-react';
@@ -22,14 +24,12 @@ interface KnobConfigDrawerProps {
   dial: DialBinding;
   onSave: (updatedDial: DialBinding) => void;
   onClose: () => void;
-  onTriggerAction: (actionId: string, actionName: string, category: string, payload?: ActionDefinition['payload']) => void;
 }
 
 export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   dial,
   onSave,
   onClose,
-  onTriggerAction,
 }) => {
   /* Four modes, one per layer, straight from the deck. */
   const channelList = dial?.availableModes?.length ? [...dial.availableModes] : [...DIAL_MODES];
@@ -42,7 +42,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   const [activeChannel, setActiveChannel] = useState<number>(initialChannelIdx);
   const [channelNames, setChannelNames] = useState<string[]>([...channelList]);
 
-  // 4 Rotary Actions
+  // Three assignable actions; hold is reserved for switching layers.
   const [cwAction, setCwAction] = useState<ActionDefinition>({
     id: dial?.cwAction?.id || 'cw-def',
     category: dial?.cwAction?.category || 'hotkey',
@@ -61,41 +61,15 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     name: dial?.pressAction?.name || 'Toggle Mute',
     payload: { ...(dial?.pressAction?.payload || { keys: ['AudioVolumeMute'] }) },
   });
-  const [holdAction, setHoldAction] = useState<ActionDefinition>({
-    id: dial?.holdAction?.id || 'hold-def',
-    category: dial?.holdAction?.category || 'navigation',
-    name: dial?.holdAction?.name || 'Cycle Layers (Layer 1 → 2 → 3)',
-    payload: { ...(dial?.holdAction?.payload || {}) },
-  });
-
   // Selected rotary key: 'cw', 'ccw', or 'press' (Hold is strictly for layer switching)
   const [selectedRotaryKey, setSelectedRotaryKey] = useState<'cw' | 'ccw' | 'press'>('cw');
 
   // Settings & Dynamics
-  const [channelHoldThresholdMs, setChannelHoldThresholdMs] = useState<number>(
-    dial?.channelHoldThresholdMs || 800
-  );
   const [accelerationCurve, setAccelerationCurve] = useState<'linear' | 'exponential' | 'precision_nudge'>(
     dial?.accelerationCurve || 'exponential'
   );
   const [sensitivity, setSensitivity] = useState<number>(dial?.sensitivity || 5);
   const [hasChanges, setHasChanges] = useState(false);
-
-  // Live Test Rig States for Tap vs Hold
-  const [testHolding, setTestHolding] = useState(false);
-  const [testHoldProgress, setTestHoldProgress] = useState(0);
-  const [testLog, setTestLog] = useState<{ message: string; type: 'tap' | 'hold' } | null>(null);
-  const testHoldStartRef = useRef(0);
-  const testAnimRef = useRef<number | null>(null);
-  const testDidHoldRef = useRef(false);
-
-  useEffect(() => {
-    return () => {
-      if (testAnimRef.current) {
-        cancelAnimationFrame(testAnimRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const list = dial.availableModes?.length ? [...dial.availableModes] : [...DIAL_MODES];
@@ -105,13 +79,6 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     setCwAction({ ...dial.cwAction });
     setCcwAction({ ...dial.ccwAction });
     setPressAction({ ...dial.pressAction });
-    setHoldAction(dial.holdAction || {
-      id: 'hold-def',
-      category: 'navigation',
-      name: 'Cycle Layers (Layer 0 → 1 → 2 → 3)',
-      payload: {},
-    });
-    setChannelHoldThresholdMs(dial.channelHoldThresholdMs || 800);
     setAccelerationCurve(dial.accelerationCurve || 'exponential');
     setSensitivity(dial.sensitivity || 5);
   }, [dial]);
@@ -126,9 +93,13 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   const activeAction = getActiveAction();
   const recordedKeys = activeAction?.payload?.keys || [];
   const padMapping = chordToAction(recordedKeys);
+  const pcOnlyChord = !activeAction?.payload?.keycode && isDesktopOnlyChord(recordedKeys);
+  const recordedKeysRef = useRef(recordedKeys);
+  recordedKeysRef.current = recordedKeys;
 
-  // Helper to commit updated key sequence to active rotary action (Strictly 1 shortcut)
+  // Save the selected keys as a single simultaneous combination.
   const commitUpdatedKeys = (newKeys: string[], customName?: string) => {
+    recordedKeysRef.current = newKeys;
     const defaultName = newKeys.length > 0
       ? `Shortcut: ${newKeys.join(' + ')}`
       : 'Unassigned';
@@ -136,11 +107,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     const updater = (prev: ActionDefinition): ActionDefinition => ({
       ...prev,
       category: 'hotkey',
-      name: customName || (
-        (!prev.name || prev.name.startsWith('Shortcut:') || prev.name === 'Turn Right (CW)' || prev.name === 'Turn Left (CCW)' || prev.name === 'Action name')
-          ? defaultName
-          : prev.name
-      ),
+      name: customName || defaultName,
       payload: {
         ...(prev.payload || {}),
         keycode: undefined,
@@ -156,11 +123,15 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     setHasChanges(true);
   };
 
-  // Handle clicking on shortcut key / media hotkey (Strictly 1 shortcut: replaces previous)
-  const handleVirtualKeyClick = (keyName: string) => {
-    if (!keyName) return;
+  // Clicking a selected key removes it; every other click adds it to the chord.
+  const handleKeyboardKeyClick = (keyName: string) => {
+    if (['Ctrl', 'Shift', 'Alt', 'Win'].includes(keyName)) {
+      toggleModifier(keyName as 'Ctrl' | 'Shift' | 'Alt' | 'Win');
+      return;
+    }
     playKeyClick('down');
-    commitUpdatedKeys([keyName]);
+    const previous = recordedKeysRef.current;
+    commitUpdatedKeys(previous.includes(keyName) ? previous.filter(k => k !== keyName) : [...previous, keyName]);
   };
 
   // Remove individual key badge from combo
@@ -176,7 +147,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     commitUpdatedKeys([]);
   };
 
-  // Toggle quick modifier (Ctrl, Shift, Alt, Win) on the single shortcut
+  // Toggle quick modifier (Ctrl, Shift, Alt, Win) in the combination
   const toggleModifier = (mod: 'Ctrl' | 'Shift' | 'Alt' | 'Win') => {
     playKeyClick('down');
     const nonModKeys = recordedKeys.filter(k => !['Ctrl', 'Shift', 'Alt', 'Win'].includes(k));
@@ -192,22 +163,23 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
     commitUpdatedKeys([...nextMods, ...nonModKeys]);
   };
 
-  // Apply preset (Strictly 1 shortcut)
+  // Applying a preset replaces the current combination.
   const applyPreset = (presetKeys: string[], defaultLabel: string, defaultName: string) => {
     playKeyClick('down');
     commitUpdatedKeys(presetKeys, `${defaultName} (${defaultLabel})`);
   };
 
-  // Live Physical Keyboard Typing Listener (Captures 1 single shortcut)
+  // Laptop key presses add keys to the same simultaneous combination.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
-        return;
-      }
+      if (target?.closest?.('input, textarea, select, [contenteditable]')) return;
+      if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) return;
+      if ((e.key === 'Enter' || e.key === ' ') && !e.ctrlKey && !e.altKey && !e.metaKey && target?.closest?.('button, a, summary')) return;
 
       e.preventDefault();
       e.stopPropagation();
+      if (e.repeat) return;
       playKeyClick('down');
 
       // Backspace or Escape: clear the shortcut
@@ -260,8 +232,9 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
 
       if (detectedKeys.length === 0) return;
 
-      // Only 1 shortcut for the knob: replace with detectedKeys
-      commitUpdatedKeys(detectedKeys);
+      const next = [...recordedKeysRef.current];
+      for (const key of detectedKeys) if (!next.includes(key)) next.push(key);
+      commitUpdatedKeys(next);
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
@@ -271,73 +244,12 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
   }, [selectedRotaryKey, recordedKeys]);
 
 
-
-  // Test Hold Handlers
-  const handleTestHoldStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    setTestHolding(true);
-    setTestHoldProgress(0);
-    setTestLog(null);
-    testDidHoldRef.current = false;
-    testHoldStartRef.current = Date.now();
-    playKeyClick('down');
-
-    const update = () => {
-      const elapsed = Date.now() - testHoldStartRef.current;
-      const progress = Math.min(100, (elapsed / channelHoldThresholdMs) * 100);
-      setTestHoldProgress(progress);
-
-      if (elapsed >= channelHoldThresholdMs) {
-        testDidHoldRef.current = true;
-        setTestHolding(false);
-        setTestHoldProgress(100);
-        playDetentClick('cw');
-        setTestLog({
-          message: `★ SIMULATED HOLD (${elapsed}ms) -> Pad unchanged; physical hold switches layer`,
-          type: 'hold'
-        });
-        onTriggerAction('test-hold', `[TEST RIG HOLD] Pad not switched (${elapsed}ms)`, 'navigation');
-        return;
-      }
-
-      testAnimRef.current = requestAnimationFrame(update);
-    };
-
-    testAnimRef.current = requestAnimationFrame(update);
-  };
-
-  const handleTestHoldEnd = (e?: React.MouseEvent | React.TouchEvent) => {
-    if (e) e.stopPropagation();
-    if (testAnimRef.current) {
-      cancelAnimationFrame(testAnimRef.current);
-      testAnimRef.current = null;
-    }
-
-    const wasHolding = testHolding;
-    setTestHolding(false);
-    setTestHoldProgress(0);
-
-    if (wasHolding && !testDidHoldRef.current) {
-      const elapsed = Date.now() - testHoldStartRef.current;
-      playKeyClick('up');
-      setTestLog({
-        message: `✓ TAP FIRED (${elapsed}ms) -> Triggered "${pressAction.name}"`,
-        type: 'tap'
-      });
-      onTriggerAction(pressAction.id, `[TEST RIG TAP] ${pressAction.name} (${elapsed}ms)`, pressAction.category, pressAction.payload);
-    }
-
-    testDidHoldRef.current = false;
-  };
-
   const handleSave = () => {
     const updatedDial: DialBinding = {
       ...dial,
       cwAction,
       ccwAction,
       pressAction,
-      holdAction,
-      channelHoldThresholdMs,
       accelerationCurve,
       sensitivity,
       availableModes: channelNames,
@@ -558,71 +470,9 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
       {/* DRAWER BODY */}
       <div className="flex-1 p-3.5 overflow-y-auto space-y-3">
 
-        {/* DEDICATED HOLD LAYER SWITCH CARD (Hold is only for Layer Switch) */}
-        <div className="p-3  /40 border border-[#C7C7C7]/30 space-y-2">
-          <div className="flex items-center justify-between font-mono text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 bg-[#1351AA] animate-pulse" />
-              <span className="text-[#141414] font-bold tracking-wide">HOLD KNOB TO SWITCH LAYERS:</span>
-              <span className="text-[10px] text-[#646464] hidden sm:inline">
-                (Hold knob down to cycle Layer 0 → Layer 1 → Layer 2 → Layer 3)
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-[#444343]/70 font-mono">Hold Threshold:</span>
-              <span className="font-bold text-[#444343] text-xs bg-[#EDECE8] px-2 py-0.5 border border-[#444343]">
-                {channelHoldThresholdMs} ms
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <input
-              type="range"
-              min={300}
-              max={2500}
-              step={50}
-              value={channelHoldThresholdMs}
-              onChange={(e) => {
-                setChannelHoldThresholdMs(Number(e.target.value));
-                setHasChanges(true);
-              }}
-              className="flex-1 accent-[#444343] cursor-pointer"
-            />
-            {/* Live Hold Test Button */}
-            <button
-              type="button"
-              onMouseDown={handleTestHoldStart}
-              onMouseUp={handleTestHoldEnd}
-              onMouseLeave={handleTestHoldEnd}
-              onTouchStart={handleTestHoldStart}
-              onTouchEnd={handleTestHoldEnd}
-              className={`px-3 py-1 font-mono text-xs font-bold border transition-all cursor-pointer shrink-0 select-none ${
- testHolding
- ? 'bg-[#EDECE8] text-[#141414] border-[#C7C7C7] scale-95'
- : 'bg-[#FFFFFF] hover:bg-[#FFFFFF] text-[#444343] border-[#C7C7C7]/30'
- }`}
-            >
-              {testHolding ? `Holding (${Math.round(testHoldProgress)}%)...` : 'Test Hold'}
-            </button>
-          </div>
-
-          <div className="flex justify-between items-center text-[9px] font-mono text-[#646464]">
-            <span>300ms (Fast)</span>
-            <span>800ms (Default)</span>
-            <span>1500ms</span>
-            <span>2500ms (Long)</span>
-          </div>
-
-          {testLog && (
-            <div className={`text-[10px] font-mono px-2 py-1 border ${
- testLog.type === 'hold'
- ? 'bg-[#EDECE8]/60 text-[#444343] border-[#C7C7C7]/40'
- : 'bg-[#EDECE8]/60 text-[#1351AA] border-[#C7C7C7]/40'
- }`}>
-              {testLog.message}
-            </div>
-          )}
+        <div className="border border-[#C7C7C7] bg-[#F4F7FC] px-3 py-2.5" role="note" aria-label="Fixed knob hold">
+          <p className="text-xs font-bold text-[#141414]">Hold to switch layers</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[#444343]">Hold the knob for {KNOB_HOLD_MS / 1000} seconds to go to the next layer. Upload the layout to apply this timing to the pad; the virtual knob previews the change only.</p>
         </div>
 
         <div className="space-y-3">
@@ -633,16 +483,13 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-[#1351AA] animate-ping shrink-0" />
                   <span className="text-[11px] font-mono text-[#1351AA] font-bold tracking-wider">
-                    ASSIGNED SHORTCUT (1 ACTION):
+                    KEY COMBINATION:
                   </span>
                   <span className="text-[10px] text-[#646464] hidden sm:inline">
-                    Click any shortcut below or type on your keyboard
+                    Choose keys to press together
                   </span>
                 </div>
 
-                <div className="text-[10px] font-mono text-[#646464] bg-[#EDECE8] px-2 py-0.5 border border-[#E3E2DE]">
-                  1 shortcut per rotary key
-                </div>
               </div>
 
               {/* Active Recorded Keys Interactive Pills */}
@@ -685,8 +532,12 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
                 )}
               </div>
 
-              {recordedKeys.length > 0 && padMapping.kind === 'unsupported' && (
-                <p role="status" className="text-xs text-[#8A4B00]">Cannot upload this combination to the pad: {padMapping.reason}. The desktop test may behave differently.</p>
+              {pcOnlyChord ? (
+                <p role="status" className="text-xs text-[#8A4B00]">This combination needs ZERO running on the connected PC and USB key events enabled on the pad. The pad cannot send it by itself.</p>
+              ) : recordedKeys.length > 32 ? (
+                <p role="status" className="text-xs text-[#8A4B00]">A combination can contain at most 32 keys. Remove some keys before using it.</p>
+              ) : recordedKeys.length > 0 && padMapping.kind === 'unsupported' && (
+                <p role="status" className="text-xs text-[#8A4B00]">This combination cannot run on the pad: {padMapping.reason}. Some keys, such as brightness, cannot be combined.</p>
               )}
 
               {/* Quick Modifier Toggle Badges */}
@@ -714,43 +565,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
               </div>
             </div>
 
-            {/* Quick Presets Toolbar */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[10px] font-mono text-[#646464]">
-                <span className="uppercase tracking-wider text-[9px] flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-[#1351AA]" />
-                  Popular Rotary Shortcuts:
-                </span>
-                <span className="text-[9px] text-[#646464]">1-click assign</span>
-              </div>
-              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                {contextualPresets.map((p) => (
-                  <button
-                    key={p.name}
-                    type="button"
-                    onClick={() => applyPreset(p.keys, p.label, p.name)}
-                    className="px-2 py-1 bg-[#FFFFFF] hover:bg-[#FFFFFF] border border-[#E3E2DE] hover:border-[#141414] text-[#444343] hover:text-[#141414] text-[10px] font-mono whitespace-nowrap transition-all shrink-0 cursor-pointer active:scale-95"
-                  >
-                    <span className="font-bold text-[#1351AA]">{p.name}</span>
-                    <span className="text-[#646464] ml-1 text-[9px]">({p.label})</span>
-                  </button>
-                ))}
-                {SHORTCUT_PRESETS.map((p) => (
-                  <button
-                    key={p.name}
-                    type="button"
-                    onClick={() => applyPreset(p.keys, p.label, p.name)}
-                    className="px-2 py-1 bg-[#FFFFFF] hover:bg-[#FFFFFF] border border-[#E3E2DE] hover:border-[#C7C7C7] text-[#444343] hover:text-[#141414] text-[10px] font-mono whitespace-nowrap transition-all shrink-0 cursor-pointer active:scale-95"
-                  >
-                    <span>{p.name}</span>
-                    <span className="text-[#646464] ml-1 text-[9px]">({p.label})</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-
-
+            <DrawerVirtualKeyboard recordedKeys={recordedKeys} onKey={handleKeyboardKeyClick} />
             {/* Quick Media Keys */}
             <div>
               <label className="text-[10px] font-mono text-[#646464] uppercase block mb-1">
@@ -763,7 +578,7 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
                     <button
                       key={m.key}
                       type="button"
-                      onClick={() => handleVirtualKeyClick(m.key)}
+                      onClick={() => handleKeyboardKeyClick(m.key)}
                       className={`py-1.5 px-1 border text-center font-mono text-[10px] transition-all truncate cursor-pointer ${
  isSelected
  ? 'bg-[#1351AA] text-[#E3E2DE] border-[#1351AA] font-bold '
@@ -777,7 +592,10 @@ export const KnobConfigDrawer: React.FC<KnobConfigDrawerProps> = ({
               </div>
             </div>
 
-
+            <ShortcutSuggestions title="Popular rotary shortcuts" shortcuts={[
+              ...contextualPresets,
+              ...SHORTCUT_PRESETS.filter(item => !contextualPresets.some(context => context.name === item.name)),
+            ]} onSelect={applyPreset} />
           </div>
 
       </div>

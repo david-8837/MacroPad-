@@ -1,3 +1,4 @@
+import { KNOB_HOLD_MS } from '../utils/knobHold';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Deck } from '../types';
 import {
@@ -130,7 +131,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
   const canUpload = hardwareState === 'connected' && deviceInfo?.protocolReady === true && deviceInfo.hasFlash === true;
   const currentLayer = deck.layers[selectedLayerIdx] || deck.layers[0];
   // Show the selected layer's actual knob slots, including PC-only/unavailable
-  // bindings. A rejected custom hold falls back to the pad's next-layer action.
+  // bindings. A legacy custom hold is replaced by the fixed next-layer action.
   const knobBindings = ([
     { slot: 'CW', where: 'Knob CW', action: currentLayer.dial?.cwAction, fallback: 'Unassigned' },
     { slot: 'CCW', where: 'Knob CCW', action: currentLayer.dial?.ccwAction, fallback: 'Unassigned' },
@@ -142,7 +143,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
       slot,
       where,
       issue,
-      name: slot === 'HOLD' && issue ? 'Next layer (pad fallback)' : action?.name ?? fallback,
+      name: slot === 'HOLD' ? `Next layer · ${KNOB_HOLD_MS / 1000} s hold` : action?.name ?? fallback,
     };
   });
 
@@ -276,6 +277,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
                 {deck.layers.length} layers · 9 keys · 1 knob
               </div>
               <p className="text-xs text-[#646464] mt-1">Upload replaces key and knob assignments on all four pad layers with this PC’s saved configuration. Connecting does not load existing pad bindings into the editor.</p>
+              <p className="text-xs text-[#646464] mt-1">Uploading also sets the pad’s knob hold to {KNOB_HOLD_MS / 1000} seconds and reserves hold for the next layer. Other gesture timings are preserved.</p>
             </div>
 
             {/* The real mapping, not a category heuristic that counts macros as hotkeys. */}
@@ -382,7 +384,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
                           <span className="min-w-0 flex-1 truncate text-[#141414]">{name}</span>
                           {issue && (
                             <span className="shrink-0 text-[8px] font-bold text-[#646464]">
-                              {slot === 'HOLD' ? 'DEFAULT' : issue.route === 'desktop' ? 'PC' : '—'}
+                              {slot === 'HOLD' ? 'FIXED' : issue.route === 'desktop' ? 'PC' : '—'}
                             </span>
                           )}
                         </div>
@@ -447,8 +449,8 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
           {pcOnly.length > 0 && (
             <div className="p-3.5 bg-[#EDECE8] border border-[#C7C7C7] space-y-2 font-mono text-[10.5px] text-[#444343]">
               <strong className="text-[#141414]">{pcOnly.length} PC-owned binding{pcOnly.length === 1 ? '' : 's'}:</strong>{' '}
-              M0–M15 and other desktop actions do not run in firmware. Keep the desktop app connected,
-              save the macro steps in Macro Studio, and allow the pad to report USB key events.
+              Desktop actions do not run in firmware. Keep ZERO connected and allow the pad to report USB key events.
+              Macro slots also need saved steps in Macro Studio.
               {!deviceInfo?.hasEvents && hardwareState === 'connected' && (
                 <p className="font-bold text-[#1351AA]">This firmware cannot report key events. This deck cannot be uploaded with PC-owned actions.</p>
               )}
@@ -473,7 +475,7 @@ export const UploadSheet: React.FC<UploadSheetProps> = ({
           {unavailable.length > 0 && (
             <div className="p-3.5 bg-[#FFFFFF] border border-[#C7C7C7] space-y-1 font-mono text-[10.5px] text-[#444343]">
               <strong className="text-[#1351AA]">{unavailable.length} binding{unavailable.length === 1 ? '' : 's'} cannot run on the pad OR PC:</strong>
-              <p>{unavailable.slice(0, 3).map(u => `Layer ${u.layer} ${u.where}: ${u.name}`).join(' · ')}{unavailable.length > 3 ? ` · +${unavailable.length - 3} more` : ''}. Reassign or remove these legacy/unsupported actions.</p>
+              <p>{unavailable.slice(0, 3).map(u => `Layer ${u.layer} ${u.where}: ${u.name}`).join(' · ')}{unavailable.length > 3 ? ` · +${unavailable.length - 3} more` : ''}. Other unsupported assignments can be reassigned. Old knob-hold assignments are kept in the app but will not run.</p>
             </div>
           )}
 

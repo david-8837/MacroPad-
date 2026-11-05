@@ -111,6 +111,23 @@ async function main() {
   assert.equal(layerFrames.length, 3, 'unrelated live data does not need a layer report');
   stopLayer();
 
+  const customClock = fakeClock();
+  const first = Uint8Array.from({ length: 512 }, (_, i) => i === 0 ? 1 : 0);
+  const second = Uint8Array.from({ length: 512 }, (_, i) => i === 511 ? 128 : 0);
+  const encode = bytes => btoa(String.fromCharCode(...bytes));
+  const artState = { ...state, mode: 'system', customScreenEnabled: true,
+    customScreen: { kind: 'video', name: 'Clip', fps: 5, frames: [encode(first), encode(second)] } };
+  const artFrames = [];
+  const stopArt = startOledStreaming(() => ({state:artState, deckName:'', layerName:'', layerIndex:null, layerCount:4}), async (_mode, pages) => {
+    artFrames.push(Uint8Array.from(pages)); return true;
+  }, () => assert.fail('custom stream failed'), customClock.scheduler);
+  await customClock.flush(); assert.deepEqual(artFrames[0], first);
+  await customClock.advance(200); assert.deepEqual(artFrames[1], second, 'video frames advance at 5 fps');
+  await customClock.advance(200); assert.deepEqual(artFrames[2], first, 'video loops');
+  artState.customScreenEnabled = false; await customClock.advance(200);
+  assert.notDeepEqual(artFrames[3], second, 'disabling custom art restores the system screen');
+  stopArt();
+
   const retryClock = fakeClock();
   let calls = 0;
   const errors = [];

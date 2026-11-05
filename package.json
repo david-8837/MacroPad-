@@ -1,6 +1,6 @@
 {
   "name": "kadowaz-deck-studio",
-  "version": "1.0.1-test.4",
+  "version": "1.0.1-test.22",
   "description": "Next-Gen Macropad Desktop Studio & Hardware Engine",
   "main": "electron/main.cjs",
   "scripts": {
@@ -13,14 +13,15 @@
     "pack": "npm run build && npm run build:electron && electron-builder --dir",
     "dist:win": "npm run build && npm run build:electron && electron-builder --win",
     "electron:build": "npm run dist:win",
-    "test": "tsc --noEmit && node scripts/export-oled-font.mjs --check && node scripts/host-artifacts.mjs && node tests/actionExecutor.test.cjs && node tests/textAction.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/media.test.cjs && node tests/windowTracker.test.cjs && node tests/audioControl.test.cjs && node tests/actionHistory.test.cjs && node tests/firmwareFlasher.test.cjs && node tests/firmwarePanel.test.cjs && node tests/mpad3Link.test.cjs && node tests/oledWire.test.cjs && node tests/lightingWire.test.cjs && node tests/commandPalette.test.cjs && node tests/deckLayers.test.cjs && node tests/deckHistory.test.cjs && node tests/layerSelection.test.cjs && node tests/macropadConfig.test.cjs && node tests/layerPresets.test.cjs && node tests/presetLibrary.test.cjs && node tests/backup.test.cjs && node tests/presetIcons.test.cjs && node tests/keyDrawerUi.test.cjs && node tests/appIcons.test.cjs && node tests/appLibraryStorage.test.cjs && node tests/premiumEffects.test.cjs && node tests/disclosureUi.test.cjs && node tests/shortcutSearch.test.cjs && node tests/keyTesterModel.test.cjs && node tests/testerUi.test.cjs && node tests/step6UiCopy.test.cjs && node tests/uploadSheetUi.test.cjs && node tests/deckToConfig.test.cjs && node tests/viaIntegration.test.cjs && node tests/keyEvents.test.cjs && node tests/physicalActionRouter.test.cjs && node tests/macroStorage.test.cjs && node tests/macroWinKey.test.cjs && node tests/ledEngine.test.cjs && node tests/packagingConfig.test.cjs && node tests/startup.test.cjs && node tests/windowControls.test.cjs && node tests/intro.test.cjs && node tests/websiteScrollIntro.test.cjs && node tests/websiteFeedback.test.cjs && node tests/websiteCases.test.cjs && node tests/websiteSpecular.test.cjs && node tests/browserStartup.test.cjs && node tests/welcome.test.cjs && node tests/oledModes.test.cjs && node tests/oledStreamer.test.cjs && node host/tests/run.mjs",
+    "test": "tsc --noEmit && node scripts/export-oled-font.mjs --check && node scripts/export-oled-frames.mjs --check && node scripts/host-artifacts.mjs && node tests/actionExecutor.test.cjs && node tests/textAction.test.cjs && node tests/hardwareBridge.test.cjs && node tests/webhookServer.test.cjs && node tests/systemMetrics.test.cjs && node tests/media.test.cjs && node tests/windowTracker.test.cjs && node tests/audioControl.test.cjs && node tests/actionHistory.test.cjs && node tests/firmwareFlasher.test.cjs && node tests/firmwarePanel.test.cjs && node tests/mpad3Link.test.cjs && node tests/oledWire.test.cjs && node tests/lightingWire.test.cjs && node tests/commandPalette.test.cjs && node tests/deckLayers.test.cjs && node tests/deckHistory.test.cjs && node tests/layerSelection.test.cjs && node tests/macropadConfig.test.cjs && node tests/layerPresets.test.cjs && node tests/presetLibrary.test.cjs && node tests/backup.test.cjs && node tests/resetData.test.cjs && node tests/resetStorage.test.cjs && node tests/presetIcons.test.cjs && node tests/keyDrawerUi.test.cjs && node tests/appIcons.test.cjs && node tests/appLibraryStorage.test.cjs && node tests/premiumEffects.test.cjs && node tests/disclosureUi.test.cjs && node tests/shortcutSearch.test.cjs && node tests/keyTesterModel.test.cjs && node tests/testerUi.test.cjs && node tests/step6UiCopy.test.cjs && node tests/uploadSheetUi.test.cjs && node tests/deckToConfig.test.cjs && node tests/viaIntegration.test.cjs && node tests/keyEvents.test.cjs && node tests/rotaryGestures.test.cjs && node tests/physicalActionRouter.test.cjs && node tests/macroStorage.test.cjs && node tests/macroWinKey.test.cjs && node tests/ledEngine.test.cjs && node tests/packagingConfig.test.cjs && node tests/releaseVersion.test.cjs && node tests/startup.test.cjs && node tests/windowTheme.test.cjs && node tests/appPreferences.test.cjs && node tests/settingsUi.test.cjs && node tests/windowControls.test.cjs && node tests/intro.test.cjs && node tests/websiteScrollIntro.test.cjs && node tests/websiteFeedback.test.cjs && node tests/websiteCases.test.cjs && node tests/websiteSpecular.test.cjs && node tests/browserStartup.test.cjs && node tests/welcome.test.cjs && node tests/oledModes.test.cjs && node tests/customScreen.test.cjs && node tests/oledStreamer.test.cjs && node host/tests/run.mjs",
     "oled:frames": "node scripts/export-oled-frames.mjs",
     "oled:frames:check": "node scripts/export-oled-frames.mjs --check",
     "oled:font": "node scripts/export-oled-font.mjs",
     "oled:font:check": "node scripts/export-oled-font.mjs --check",
     "oled:budget": "python3 tools/check_flash_budget.py",
     "host:artifacts": "node scripts/host-artifacts.mjs",
-    "check:contrast": "python3 checks/contrastcheck.py"
+    "check:contrast": "python3 checks/contrastcheck.py",
+    "version:next-test": "npm version prerelease --preid=test --no-git-tag-version"
   },
   "dependencies": {
     "lucide-react": "^0.453.0",
@@ -40,6 +41,7 @@
     "jsdom": "^26.1.0",
     "pdf-lib": "^1.17.1",
     "postcss": "^8.4.47",
+    "semver": "^7.8.6",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
     "vite": "^7.3.7",

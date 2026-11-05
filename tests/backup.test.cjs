@@ -20,6 +20,10 @@ const { pathToFileURL } = require('node:url');
     const custom = m.createPreset('custom-abc'); custom.name = 'Mine';
     storage.setItem(m.PRESET_LIBRARY_KEY, JSON.stringify(m.savePreset(m.readPresetLibrary(storage).library, custom)));
     const originalLibrary = storage.getItem(m.PRESET_LIBRARY_KEY);
+    const chordDeck = structuredClone(deck);
+    chordDeck.layers[0].dial.cwAction = { id:'multi', name:'Ctrl + A + B', category:'hotkey', payload:{ keys:['Ctrl','A','B'] } };
+    const chordRoundtrip = m.parseBackup(JSON.stringify(m.makeBackup(chordDeck, storage)));
+    assert.deepEqual(chordRoundtrip.deck.layers[0].dial.cwAction.payload.keys, ['Ctrl','A','B'], 'multi-key knob combination survives backup and restore');
     const exported = m.makeBackup(deck, storage);
     const parsed = m.parseBackup(JSON.stringify(exported));
     assert.deepEqual(parsed.deck, deck); assert.equal(parsed.presetLibrary.custom[0].name, 'Mine');
@@ -41,6 +45,15 @@ const { pathToFileURL } = require('node:url');
     ]) { const broken = structuredClone(exported); mutate(broken); assert.throws(() => m.parseBackup(JSON.stringify(broken))); }
     const macros = [{ id: 0, name: 'Example', actions: [{id:'one',type:'text',value:'hello'}, {id:'two',type:'combo',value:'Enter',keys:['Enter']}] }];
     const oled = {mode:'kadowaz',customTitle:'Hello',customSubtitle:'World',brightness:42,inverted:true,autoCycleS:30,playlist:['kadowaz']};
+    const frame = Buffer.alloc(512, 0xaa).toString('base64');
+    const artOled = { ...oled, customScreenEnabled: true, customScreen: {kind:'video',name:'My clip',fps:5,frames:[frame,frame]} };
+    storage.setItem('kadowaz_oled', JSON.stringify(artOled));
+    const artBackup = m.parseBackup(JSON.stringify(m.makeBackup(deck, storage)));
+    assert.deepEqual(artBackup.extras.oled, artOled, 'saved artwork survives a backup round trip');
+    for (const bad of [ {...artOled, customScreenEnabled:'yes'}, {...artOled, customScreen:{...artOled.customScreen, frames:['bad']}}, {...artOled, customScreen:{...artOled.customScreen, frames:Array(51).fill(frame)}} ]) {
+      const invalid = structuredClone(m.makeBackup(deck, storage)); invalid.extras.oled=bad;
+      assert.throws(() => m.parseBackup(JSON.stringify(invalid)), /oled|screen/i, 'invalid artwork rejected');
+    }
     const lightChannel = {mode:1,brightness:100,speed:80,r:1,g:2,b:3,perKey:Array.from({length:9}, () => [0,0,0]),perKeyMask:0};
     const lighting = {version:1,channels:Array.from({length:4}, () => structuredClone(lightChannel))};
     storage.setItem('kadowaz_macros_v2', JSON.stringify(macros)); storage.setItem('kadowaz_oled', JSON.stringify(oled)); storage.setItem('kadowaz_lighting', JSON.stringify(lighting));

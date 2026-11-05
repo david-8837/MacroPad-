@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import zeroIcon from '../../electron/assets/zero.png';
 import { ConnectedDeviceInfo, HardwareConnectionState } from '../utils/hardwareBridge';
 import {
   Minus,
@@ -11,12 +12,13 @@ import {
   Activity,
   Zap,
   CircleHelp,
+  Settings,
 } from 'lucide-react';
 
 interface TopNavbarProps {
-  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets';
-  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets') => void;
-  onTabIntent?: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets') => void;
+  activeTab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets' | 'settings';
+  onChangeTab: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets' | 'settings') => void;
+  onTabIntent?: (tab: 'designer' | 'tester' | 'shortcuts' | 'apps' | 'lighting' | 'macros' | 'presets' | 'settings') => void;
   hardwareState: HardwareConnectionState;
   deviceInfo: ConnectedDeviceInfo | null;
   onConnectSerial: () => void;
@@ -63,9 +65,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         {/* ── identity · brand + deck ───────────────────────────── */}
         <div className="navbar-brand flex items-center gap-3 pl-4 pr-4 border-r border-[#C7C7C7] shrink-0 min-w-0">
           <div className="flex items-center gap-2 shrink-0">
-            <span className="brand-mark w-6 h-6 bg-[#141414] text-[#E3E2DE] font-mono text-[11px] font-bold flex items-center justify-center">
-              Z
-            </span>
+            <img src={zeroIcon} alt="" aria-hidden="true" width={24} height={24} className="brand-mark w-6 h-6 shrink-0" />
             <span className="text-[13px] font-bold uppercase tracking-[-0.02em] text-[#141414] leading-none">
               ZERO<span className="text-[#646464]"> / Macropad</span>
             </span>
@@ -169,6 +169,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           </div>
 
           {/* tool squares */}
+          <button type="button" onClick={() => onChangeTab('settings')} title="Settings" aria-label="Settings" aria-current={activeTab === 'settings' ? 'page' : undefined}
+            className={`w-8 h-8 flex items-center justify-center border transition-colors ${activeTab === 'settings' ? 'border-[#1351AA] bg-[#1351AA] text-white' : 'border-[#C7C7C7] text-[#444343] hover:border-[#141414] hover:bg-[#141414] hover:text-[#E3E2DE]'}`}>
+            <Settings className="w-3.5 h-3.5" />
+          </button>
           {[
             { icon: <CircleHelp className="w-3.5 h-3.5" />, title: 'Help & About', fn: onOpenHelp },
             { icon: <Activity className="w-3.5 h-3.5" />, title: 'Expand Hardware Status & Diagnostics', fn: onOpenDiagnostics },

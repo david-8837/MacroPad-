@@ -10,6 +10,7 @@ const os = require('os');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const esbuild = require('esbuild');
+const { createHash } = require('node:crypto');
 
 const FRAME_BYTES = 512;
 
@@ -131,6 +132,33 @@ async function runTests() {
       assert.ok(fb.inkCount() > 0, `${spec.id} frame ${f} must not be blank`);
     }
   }
+
+  // Refreshed preset pixel snapshots; updating a design should be deliberate.
+  // The exporter check also compares every baked frame with the firmware source.
+  const snapshots = {
+    kadowaz: '96b2dfa805aa36a27b3cb9fd47c58de5b03365eed726b8cc7f28d4f1c8a2d683',
+    system: '1889ba30d32b7f5d0517932003fa7e84157a22ac8180ff51c1cffbbc4a1be6bc',
+    media: 'd338dffd244205576222b43ea84b22e5744bac1f75f02061f40c877ffd14a3ff',
+    channel: '9a3d93d7dc2368c1b3bff1666ec73fb34457514fd77c48e32594902efb10e90b',
+    loader: '6fae69236f07d68c12b2493e2e65740e434dad57672fda1048cfee0d7587392a',
+    creature: 'cd06300e308fc110dcb593197b9c824250034cc488691bfe2cc7ffbb99667a72',
+    wave: '0cb5518c3f8b1eeda6f7d6229af63eebfd60bb43ab65ce9f2c0c611bed48016f',
+    starfield: '6f48fa633b8b06eccb36a957f98da51307b7561158700e33bdf6ce493345ede4',
+    rain: '84a943bb6a53cb0cf1b0d245f74ed8950483aa0c7cfe8fe1e5c868e845dfb61e',
+    clock: '2e80e7be46c57af0a448a9a96515fe8f1710fbb6861f0f4dc42bc5c0c165cec3',
+    radar: 'e20e1634180b29467f5690447bc73af58e59970746c2836cf3fe849aa79ffd4a',
+    pulse: '53f203816792014cc13851c1ab12812ce91f8d0137fc9990ae59c641c207fa32',
+  };
+  const RealDate = Date;
+  try {
+    global.Date = class extends RealDate {
+      constructor(...args) { super(...(args.length ? args : [2024, 0, 2, 13, 45, 30])); }
+    };
+    for (const spec of OLED_MODES) {
+      const digest = createHash('sha256').update(render(engine, spec, 0).toPages()).digest('hex');
+      assert.equal(digest, snapshots[spec.id], `${spec.id}: refreshed preset changed`);
+    }
+  } finally { global.Date = RealDate; }
 
   // 4. Baked loops actually move — a static "animation" would still pass step 3.
   //    Runtime screens (clock, telemetry, media, tracking) follow live values, so

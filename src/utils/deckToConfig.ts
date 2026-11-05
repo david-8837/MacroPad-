@@ -10,15 +10,16 @@
  *   1. Nothing is invented. A binding the pad cannot express returns a reason,
  *      is counted, and is named in the result; it is never replaced by a guess.
  *   2. The device's own settings are kept. The caller passes the config it read
- *      off the pad, and only the key and knob slots are replaced, so an upload
- *      does not quietly reset gesture timings or the OLED playlist.
+ *      off the pad, and only the key/knob slots plus the explicitly reviewed
+ *      fixed knob-hold timing are replaced; other settings are preserved.
  *
  * The four layers are the four channels, in order. Layer 0 is channel 0.
  */
 import { ACTION_TYPE, CHANNEL_COUNT, KEY_COUNT } from '../../host/protocol/mpad3-protocol.mjs';
 import type { Cfg, CfgAction, CfgChannel } from '../../host/protocol/mpad3-protocol.mjs';
 import type { ActionDefinition, Deck, DialBinding } from '../types';
-import { MEDIA_CODE, chordToAction, mediaCodeForKey } from './deviceKeymap';
+import { MEDIA_CODE, chordToAction, isDesktopOnlyChord, mediaCodeForKey } from './deviceKeymap';
+import { KNOB_HOLD_MS } from './knobHold';
 import { isPcMacroBinding, pcMacroId } from './macroStorage';
 
 /** A binding that stays on the PC and cannot be pushed to the pad. */
@@ -182,9 +183,20 @@ function mapDial(
   knobHold: CfgAction;
 } {
   const at = (where: string, action: ActionDefinition | null | undefined, fallback: CfgAction) => {
-    /* Nothing bound at all: use the fallback (an empty slot, or the reserved
-     * layer switcher on the hold gesture) rather than reporting a problem. */
+    /* Nothing bound at all: use an empty slot without reporting a problem. */
     if (!action) return fallback;
+    const keys = action.category === 'hotkey' ? action.payload?.keys : undefined;
+    // Firmware stores only one non-modifier per action. Route supported larger
+    // knob combinations to the connected desktop instead of dropping keys.
+    if (Array.isArray(keys) && keys.length > 32) {
+      unsupported.push({ layer, where, name: action.name, reason: 'combination exceeds the desktop limit of 32 keys', route: 'unavailable' });
+      return fallback;
+    }
+    if (!action.payload?.keycode && Array.isArray(keys) && isDesktopOnlyChord(keys)) {
+      unsupported.push({ layer, where, name: action.name,
+        reason: 'this combination needs ZERO running on the connected PC and USB key events; the pad slot stays empty', route: 'desktop' });
+      return fallback;
+    }
     const r = mapAction(action);
     if ('ok' in r) {
       count.n++;
@@ -192,29 +204,35 @@ function mapDial(
     }
     unsupported.push({
       layer, where, name: action.name,
-      reason: where === 'Knob hold'
-        ? 'Knob hold is reserved for the pad’s layer switch; a PC action cannot also run from it'
-        : r.reason,
-      route: where === 'Knob hold' ? 'unavailable' : r.route,
+      reason: r.reason, route: r.route,
     });
     return fallback;
   };
 
-  /* Knob hold stays the reserved layer switcher: the firmware's own default is
-   * CHANNEL_NEXT, and the app never writes anything else into that slot. */
+  /* Hold is always reserved for the next layer. Keep old custom data in the
+   * editor/backup, but report that it will not run instead of uploading it. */
   const holdDefault: CfgAction = { type: ACTION_TYPE.CHANNEL_NEXT, flags: 0, code: 0, text: '' };
+  const oldHold = dial?.holdAction;
+  if (oldHold) {
+    const mapped = mapAction(oldHold);
+    const legacyCycle = oldHold.category === 'navigation' && oldHold.name === 'Cycle Layers (Layer 1 → 2 → 3)' && Object.keys(oldHold.payload ?? {}).length === 0;
+    if (!legacyCycle && (!('ok' in mapped) || mapped.ok.type !== ACTION_TYPE.CHANNEL_NEXT)) {
+      unsupported.push({ layer, where: 'Knob hold', name: oldHold.name,
+        reason: 'Knob hold is fixed to the next layer; this older assignment is kept in the app but will not run', route: 'unavailable' });
+    }
+  }
 
   return {
     knobCw: at('Knob CW', dial?.cwAction, empty()),
     knobCcw: at('Knob CCW', dial?.ccwAction, empty()),
     knobTap: at('Knob press', dial?.pressAction, empty()),
-    knobHold: at('Knob hold', dial?.holdAction, holdDefault),
+    knobHold: holdDefault,
   };
 }
 
 /**
  * Build the config to upload. `base` is what the pad reported, so its global
- * settings and lighting survive; only key and knob slots are rewritten.
+ * settings and lighting survive; the reviewed fixed knob-hold time and key/knob slots are rewritten.
  */
 export function deckToConfig(deck: Deck, base: Cfg): DeckUpload {
   const unsupported: UnsupportedBinding[] = [];
@@ -283,5 +301,5 @@ export function deckToConfig(deck: Deck, base: Cfg): DeckUpload {
     };
   });
 
-  return { config: { global: { ...base.global }, channels }, mapped: count.n, unsupported };
+  return { config: { global: { ...base.global, knobHoldMs: KNOB_HOLD_MS }, channels }, mapped: count.n, unsupported };
 }

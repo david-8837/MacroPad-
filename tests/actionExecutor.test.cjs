@@ -31,6 +31,12 @@ assert.deepStrictEqual(buildChordSequence(['▶', 'Win']).sequence, [
   { vk: 0x27, up: true }, { vk: 0x5b, up: true },
 ], 'a modifier selected after the arrow is pressed first');
 
+assert.deepStrictEqual(buildChordSequence(['C', 'Ctrl', 'V']).sequence, [
+  { vk: 0x11, up: false }, { vk: 0x43, up: false }, { vk: 0x56, up: false },
+  { vk: 0x56, up: true }, { vk: 0x43, up: true }, { vk: 0x11, up: true },
+], 'multiple ordinary keys are held together, not run as a sequence');
+assert.ok(buildChordSequence(Array(33).fill('A')).error, 'desktop key limit is enforced');
+
 // Every key in the bundled shortcut vault must be executable.
 const src = fs.readFileSync(path.join(__dirname, '../src/data/pcShortcuts.ts'), 'utf8');
 const bad = [];

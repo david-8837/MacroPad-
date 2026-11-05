@@ -20,4 +20,14 @@ const dom = () => new JSDOM(html, { runScripts: 'dangerously', url: 'http://loca
   assert.equal(window.document.querySelector('#startup-screen'), null, 'late readiness still recovers');
   window.close();
 }
+{
+  const dark = new JSDOM(html, { runScripts: 'dangerously', url: 'http://localhost/', beforeParse: w => w.localStorage.setItem('kadowaz_app_theme', 'dark') });
+  assert.equal(dark.window.document.documentElement.dataset.theme, 'dark', 'saved theme is read before the entry bundle');
+  assert.equal(dark.window.getComputedStyle(dark.window.document.querySelector('#startup-screen')).backgroundColor, 'rgb(23, 27, 34)');
+  dark.window.close();
+  const light = dom();
+  assert.equal(light.window.document.documentElement.dataset.theme, 'light');
+  assert.equal(light.window.getComputedStyle(light.window.document.querySelector('#startup-screen')).backgroundColor, 'rgb(255, 255, 255)');
+  light.window.close();
+}
 console.log('browser startup: immediate loading, readiness and failure recovery passed');

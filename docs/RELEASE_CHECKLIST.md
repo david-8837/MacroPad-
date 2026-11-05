@@ -2,6 +2,12 @@
 
 This is a checklist, not a claim that a release has been validated. Record the app version, commit, Windows version, hardware revision, firmware name and UF2 hash alongside results. The project owner must decide the project license before publication. Signing and an automatic update service are not configured.
 
+## Version each app release
+
+- Every new app installer must have a higher version than the previous app release. For the next test build, run `npm run version:next-test` (for example, `1.0.1-test.4` becomes `1.0.1-test.5`). This updates both `package.json` and `package-lock.json` without creating a Git tag or commit. For a stable release or different numbering scheme, choose a higher valid semantic version and keep both files in sync.
+- The Windows publication workflow checks all existing release tags and rejects a reused, older, invalid or mismatched version. Ordinary CI builds, documentation and website-only changes do not require a version bump. It cannot prevent someone from bypassing the workflow or creating a release manually.
+- Publish and verify the new installer first, then update the website download links and rebuild the website button and routes. The version shown in Help & About comes from `package.json`. Record real-machine test results separately.
+
 ## Automated checks (development machine)
 
 - Run `npm ci`, `npm test`, `npm run build`, and `npm run build:electron`. Run `git diff --check`.

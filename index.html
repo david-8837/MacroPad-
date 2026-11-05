@@ -17,8 +17,15 @@
       #startup-error { display: none; margin-top: 22px; color: #444343; font-size: 13px; line-height: 1.5; }
       #startup-retry { margin-top: 12px; padding: 9px 16px; border: 1px solid #141414; background: #141414; color: #fff; cursor: pointer; font: inherit; font-weight: 700; }
       #startup-retry:focus-visible { outline: 2px solid #6fa8ff; outline-offset: 3px; }
+      html[data-theme="dark"] { background: #171b22; color-scheme: dark; }
+      html[data-theme="dark"] #startup-screen { background: #171b22; color: #edf1f7; }
+      html[data-theme="dark"] #startup-subtitle, html[data-theme="dark"] #startup-status, html[data-theme="dark"] #startup-error { color: #b5becb; }
+      html[data-theme="dark"] #startup-retry { background: #1351aa; border-color: #1351aa; }
     </style>
     <script>
+      // Paint the saved appearance before the editor bundle or loading screen.
+      try { document.documentElement.dataset.theme = localStorage.getItem('kadowaz_app_theme') === 'dark' ? 'dark' : 'light'; }
+      catch { document.documentElement.dataset.theme = 'light'; }
       // Vite moves the production entry into the head, so listen before it can fail.
       window.addEventListener('error', (event) => {
         const target = event.target;

@@ -29,6 +29,11 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Verify requested release has a new version
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-test-installer]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-release-version.cjs
       - name: Verify packaging configuration
         run: node tests/packagingConfig.test.cjs
       - name: Build the app and verify Electron assets

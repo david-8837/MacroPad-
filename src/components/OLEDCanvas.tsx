@@ -80,7 +80,7 @@ export const OLEDCanvas: React.FC<OLEDCanvasProps> = ({
       }
       const elapsed = now - epoch;
       const spec = getOLEDMode(current.mode);
-      const fps = current.track ? TRACK_FPS : spec.fps;
+      const fps = current.track ? TRACK_FPS : current.mode === 'system' && current.state.customScreenEnabled ? 5 : spec.fps;
       const frame = frameAt(elapsed, fps);
       if (frame === lastDrawn) return;
       lastDrawn = frame;

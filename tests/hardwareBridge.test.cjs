@@ -114,6 +114,18 @@ async function run() {
     },
   };
   hardwareBridge.protocolInfo = { hasFlash: true, hasEvents: true };
+  const comboDeck = { layers: [{ keys: [], dial: { cwAction: {
+    id: 'combo', category: 'hotkey', name: 'A+B', payload: { keys: ['A','B'] },
+  } } }] };
+  assert.strictEqual((await hardwareBridge.uploadDeck(comboDeck)).ok, false, 'multi-key knob combo cannot upload without enabled USB events');
+  assert.strictEqual(writes, 0);
+  global.window = { electronAPI: { execAction: async () => ({ success: true }) } };
+  const comboUploaded = await hardwareBridge.uploadDeck(comboDeck, undefined, { enablePcEvents: true });
+  assert.strictEqual(comboUploaded.ok, true);
+  assert.strictEqual(lastConfig.channels[0].knobCw.type, ACTION_TYPE.NONE);
+  assert.strictEqual(lastConfig.global.usbReportEvents, 1);
+  assert.strictEqual(comboUploaded.unsupported[0].route, 'desktop');
+  writes = 0; delete global.window;
   const refused = await hardwareBridge.uploadDeck(macroDeck);
   assert.strictEqual(refused.ok, false, 'no silent upload of PC macros with pad key events off');
   assert.match(refused.message, /key events|usbReportEvents/i);

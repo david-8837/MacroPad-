@@ -15,6 +15,7 @@ import {
 import { executeMacroSlot } from '../../utils/executeDeckAction';
 import { isMacroReady, MACRO_STORAGE_KEY, validMacroLibrary } from '../../utils/macroStorage';
 import { playKeyClick } from '../../utils/soundEffects';
+import { MacroKeyboard, type MacroModifier } from './MacroKeyboard';
 
 export interface MacroAction {
   id: string;
@@ -182,11 +183,13 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   // What the last press looked like, echoed back to the user
   const [lastCaptured, setLastCaptured] = useState<string | null>(null);
   const [winForNextKey, setWinForNextKey] = useState(false);
+  const [stagedModifiers, setStagedModifiers] = useState<MacroModifier[]>([]);
   const [editingStep, setEditingStep] = useState<{ id: string; index: number; type: 'combo' | 'text' | 'delay'; draft: string } | null>(null);
   const [editError, setEditError] = useState('');
   // Never carry a staged modifier into a different macro slot.
-  useEffect(() => { setWinForNextKey(false); setEditingStep(null); setEditError(''); setLastCaptured(null); setTestNotice(null); }, [selectedSlot]);
+  useEffect(() => { setWinForNextKey(false); setStagedModifiers([]); setEditingStep(null); setEditError(''); setLastCaptured(null); setTestNotice(null); }, [selectedSlot]);
   const captureRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const [presetQuery, setPresetQuery] = useState('');
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'all'>('all');
   const [testNotice, setTestNotice] = useState<string | null>(null);
@@ -241,21 +244,33 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
     return key;
   };
 
-  /* Capture only while the dedicated box has focus. Window-wide capture steals
-   * Enter/Space from buttons and records shortcuts typed elsewhere in the app. */
+  // Entering Type Keys makes laptop input ready without an extra click.
+  // Do not steal focus from text fields when other tabs are open.
+  useEffect(() => {
+    if (activeBuilderTab === 'combo') captureRef.current?.focus({ preventScroll: true });
+  }, [activeBuilderTab]);
+
+  // Capture only within the macro editor (or its unfocused page background).
+  // Text fields, dialogs, navigation and button activation keep their keys.
   useEffect(() => {
     if (activeBuilderTab !== 'combo') return;
 
     const handleCaptureKeyDown = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
-      if (!el || !captureRef.current?.contains(el)) return;
+      const editor = editorRef.current;
+      if (!el || !editor || editor.closest('[inert]') || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (el !== document.body && !editor.contains(el)) return;
+      if (el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+      if (e.isComposing || e.defaultPrevented) return;
       if (e.key === 'Tab') return;            // keep keyboard navigation
+      if ((e.key === 'Enter' || e.key === ' ') && el.closest('button, a[href], [role="button"]') && !e.ctrlKey && !e.altKey && !e.metaKey) return;
       if ((e.ctrlKey || e.metaKey) && ['r', 'k'].includes(e.key.toLowerCase())) return; // browser refresh / command palette
       e.preventDefault();
       if (e.repeat) return;
 
       if (e.key === 'Escape') {
         setWinForNextKey(false);
+        setStagedModifiers([]);
         setLastCaptured(null);
         return;
       }
@@ -263,18 +278,19 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
 
       // Read the modifiers off the event itself: no held-key bookkeeping to desync.
       const mods: string[] = [];
-      if (e.ctrlKey) mods.push('Ctrl');
-      if (e.shiftKey) mods.push('Shift');
-      if (e.altKey) mods.push('Alt');
+      if (e.ctrlKey || stagedModifiers.includes('Ctrl')) mods.push('Ctrl');
+      if (e.shiftKey || stagedModifiers.includes('Shift')) mods.push('Shift');
+      if (e.altKey || stagedModifiers.includes('Alt')) mods.push('Alt');
       if (e.metaKey || winForNextKey) mods.push('Win');
 
       commitCombo(mods, normalizeKeyName(e.key));
       setWinForNextKey(false);
+      setStagedModifiers([]);
     };
 
     window.addEventListener('keydown', handleCaptureKeyDown);
     return () => window.removeEventListener('keydown', handleCaptureKeyDown);
-  }, [activeBuilderTab, selectedSlot, winForNextKey, editingStep]);
+  }, [activeBuilderTab, selectedSlot, winForNextKey, stagedModifiers, editingStep]);
 
   const handleUpdateName = (name: string) => {
     changeMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, name } : m));
@@ -311,6 +327,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   const beginEditStep = (action: MacroAction, index: number) => {
     if (action.type !== 'combo' && action.type !== 'text' && action.type !== 'delay') return;
     setWinForNextKey(false);
+    setStagedModifiers([]);
     setEditError('');
     setEditingStep({ id: action.id, index, type: action.type, draft: action.type === 'delay' ? String(action.delayMs ?? '') : action.value });
     if (action.type === 'combo') setActiveBuilderTab('combo');
@@ -378,7 +395,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const applyPreset = (preset: MacroPreset) => {
-    setEditingStep(null); setEditError(''); setWinForNextKey(false);
+    setEditingStep(null); setEditError(''); setWinForNextKey(false); setStagedModifiers([]);
     changeMacros(prev => prev.map(m => {
       if (m.id !== selectedSlot) return m;
       return {
@@ -392,7 +409,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const removeAction = (idx: number) => {
-    if (editingStep) { setEditingStep(null); setEditError(''); setWinForNextKey(false); }
+    if (editingStep) { setEditingStep(null); setEditError(''); setWinForNextKey(false); setStagedModifiers([]); }
     changeMacros(prev => prev.map(m => {
       if (m.id !== selectedSlot) return m;
       return {
@@ -404,7 +421,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const moveAction = (idx: number, direction: 'up' | 'down') => {
-    if (editingStep) { setEditingStep(null); setEditError(''); setWinForNextKey(false); }
+    if (editingStep) { setEditingStep(null); setEditError(''); setWinForNextKey(false); setStagedModifiers([]); }
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (targetIdx < 0 || targetIdx >= currentMacro.actions.length) return;
 
@@ -419,7 +436,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
   };
 
   const clearCurrentMacro = () => {
-    setEditingStep(null); setEditError(''); setWinForNextKey(false);
+    setEditingStep(null); setEditError(''); setWinForNextKey(false); setStagedModifiers([]);
     changeMacros(prev => prev.map(m => m.id === selectedSlot ? { ...m, actions: [] } : m));
     playKeyClick('up');
   };
@@ -470,9 +487,16 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
 
 
   return (
-    <div className="w-full max-w-5xl space-y-5 animate-in fade-in duration-150 select-none">
+    <div ref={editorRef} className="w-full max-w-5xl space-y-5 animate-in fade-in duration-150 select-none"
+      onClick={event => {
+        // After a mouse/touch selection, keep laptop typing ready. Keyboard
+        // activation must leave focus on the control for accessible navigation.
+        const el = event.target as HTMLElement;
+        if (event.detail === 0 || activeBuilderTab !== 'combo' || el.closest('input, textarea, select, [contenteditable], a[href], [data-other-builder-tab]')) return;
+        captureRef.current?.focus({ preventScroll: true });
+      }}>
       <div className="w-full min-w-0 space-y-5">
-      {/* Top Banner & Header */} الاشت=functions.edit_file? wait tool result? no end marker? It ended sent json? I need verify. It shows tool call content but no result? Let's see. get? maybe I didn't close? The tool action seems called; UI result not yet displayed? Actually transcript shows `to=functions.edit_file...` but no returned, maybe tool time? Hmm message ends? Let's continue from we can check. Need send tool? in this environment tool result should return, maybe call again? We'll inspect `sed` before next. Need not duplicate if succeeded. Use bash. experiment. A lone commentary tool call didn't show result because couldn't parse? Wait in above assistant tool call text ended with `
+      {/* Top Banner & Header */}
       <div className="panel p-5 border border-[#E3E2DE] flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 flex items-center justify-center text-[#141414] ">
@@ -639,7 +663,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                 {currentMacro.actions.length > 0 && (
                   <button
                     onClick={clearCurrentMacro}
-                    className="text-[#141414]/80 hover:text-[#141414] flex items-center gap-1 hover:underline cursor-pointer"
+                    className="text-[#a23333] hover:text-[#76260f] flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <Trash2 className="w-3 h-3" />
                     <span>Clear All Steps</span>
@@ -718,12 +742,12 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
               </div>
               {editingStep && <div className="border border-[#1351AA] bg-[#F4F7FC] p-3 space-y-2" role="group" aria-label="Edit macro step">
                 <p className="text-xs font-bold text-[#141414]">Edit {editingStep.type === 'combo' ? 'key combination' : editingStep.type === 'text' ? 'text' : 'delay'}</p>
-                {editingStep.type === 'combo' ? <p className="text-xs text-[#444343]">Use the key capture box below or Add Win key to replace this step. The old step remains until you choose a replacement.</p> : <>
+                {editingStep.type === 'combo' ? <p className="text-xs text-[#444343]">Use the keyboard below or type in the capture area to replace this step. The old step remains until you choose a replacement.</p> : <>
                   <label className="block text-xs text-[#444343]" htmlFor="macro-edit-value">{editingStep.type === 'delay' ? 'Milliseconds (10–5000)' : 'Text to type'}</label>
                   {editingStep.type === 'text' ? <textarea id="macro-edit-value" value={editingStep.draft} onChange={e => setEditingStep({ ...editingStep, draft: e.target.value })} className="w-full border border-[#777] bg-white p-2 text-sm" /> : <input id="macro-edit-value" type="number" min="10" max="5000" step="1" value={editingStep.draft} onChange={e => setEditingStep({ ...editingStep, draft: e.target.value })} className="w-full border border-[#777] bg-white p-2 text-sm" />}
                   <button type="button" onClick={saveEditedStep} className="bg-[#1351AA] text-white px-3 py-1 text-xs font-bold">Save step</button>
                 </>}
-                {' '}<button type="button" onClick={() => { setEditingStep(null); setEditError(''); setWinForNextKey(false); }} className="border border-[#777] px-3 py-1 text-xs font-bold">Cancel edit</button>
+                {' '}<button type="button" onClick={() => { setEditingStep(null); setEditError(''); setWinForNextKey(false); setStagedModifiers([]); }} className="border border-[#777] px-3 py-1 text-xs font-bold">Cancel edit</button>
                 {editError && <p role="alert" className="text-xs text-[#8A2A00]">{editError}</p>}
               </div>}
             </div>
@@ -746,7 +770,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
               </button>
 
               <button
-                onClick={() => setActiveBuilderTab('text')}
+                data-other-builder-tab onClick={() => { setActiveBuilderTab('text'); setStagedModifiers([]); setWinForNextKey(false); }}
                 className={`flex-1 py-1.5 text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
  activeBuilderTab === 'text'
  ? 'bg-[#1351AA] text-[#E3E2DE] font-bold'
@@ -758,7 +782,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
               </button>
 
               <button
-                onClick={() => setActiveBuilderTab('delay')}
+                data-other-builder-tab onClick={() => { setActiveBuilderTab('delay'); setStagedModifiers([]); setWinForNextKey(false); }}
                 className={`flex-1 py-1.5 text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
  activeBuilderTab === 'delay'
  ? 'bg-[#1351AA] text-[#E3E2DE] font-bold'
@@ -770,7 +794,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
               </button>
 
               <button
-                onClick={() => setActiveBuilderTab('templates')}
+                data-other-builder-tab onClick={() => { setActiveBuilderTab('templates'); setStagedModifiers([]); setWinForNextKey(false); }}
                 className={`flex-1 py-1.5 text-xs font-mono font-semibold transition-all flex items-center justify-center gap-1.5 ${
  activeBuilderTab === 'templates'
  ? 'bg-[#1351AA] text-[#E3E2DE] font-bold'
@@ -786,7 +810,7 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
             {activeBuilderTab === 'combo' && (
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2 items-center" aria-label="Windows key options">
-                  <button type="button" onClick={() => { setWinForNextKey(false); commitCombo([], 'Win'); }}
+                  <button type="button" onClick={() => { setWinForNextKey(false); setStagedModifiers([]); commitCombo([], 'Win'); }}
                     className="px-3 py-1.5 border border-[#C7C7C7] bg-white text-xs font-bold text-[#141414] hover:border-[#1351AA]">
                     Add Win key
                   </button>
@@ -794,23 +818,31 @@ export const ViaMacroEditor: React.FC<ViaMacroEditorProps> = ({
                     className={`px-3 py-1.5 border text-xs font-bold ${winForNextKey ? 'bg-[#1351AA] border-[#1351AA] text-white' : 'border-[#C7C7C7] bg-white text-[#141414] hover:border-[#1351AA]'}`}>
                     Win + next key
                   </button>
-                  <span className="text-[10px] text-[#444343]">Choose Win + next key, then focus the box and type the other key. Windows may intercept physical Win shortcuts.</span>
+                  <span className="text-[10px] text-[#444343]">Tap a key below to add a step. Select Ctrl, Shift, Alt or Win first for a combination.</span>
                 </div>
-                <div
-                  ref={captureRef}
-                  role="region"
-                  tabIndex={0}
-                  aria-label="Type the keys you want to log"
-                  className="w-full px-4 py-7 bg-[#FFFFFF] border border-[#C7C7C7] flex flex-col items-center justify-center gap-2 focus:outline-hidden focus:border-[#1351AA]"
-                >
-                  <KeyboardIcon className="w-5 h-5 text-[#646464]" />
-                  <span className="text-xs font-mono text-[#444343] text-center">
-                    Click or focus this box, then press the keys you want — each press is logged as a step.
-                  </span>
-                  <span className="text-[10px] font-mono text-[#646464] text-center">
-                    Modifiers count · held with a key it logs as one step · Escape clears the readout
-                  </span>
+                <div ref={captureRef} role="region" tabIndex={0} aria-label="Type the keys you want to log"
+                  className="macro-physical-capture">
+                  <KeyboardIcon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  <span>Keyboard ready: type to add a step. Text fields work normally. Tab navigates; Escape clears the readout.</span>
                 </div>
+                <MacroKeyboard modifiers={[...stagedModifiers, ...(winForNextKey ? ['Win' as const] : [])]}
+                  onModifier={modifier => {
+                    if (modifier === 'Win') setWinForNextKey(value => !value);
+                    else setStagedModifiers(current => current.includes(modifier) ? current.filter(item => item !== modifier) : [...current, modifier]);
+                  }}
+                  onKey={key => {
+                    const mods = (['Ctrl', 'Shift', 'Alt'] as const).filter(item => stagedModifiers.includes(item));
+                    commitCombo([...mods, ...(winForNextKey ? ['Win'] : [])], key);
+                    setStagedModifiers([]); setWinForNextKey(false);
+                  }} />
+                {(stagedModifiers.length > 0 || winForNextKey) && <div className="flex flex-wrap items-center gap-2 text-xs text-[#444343]">
+                  <span>Next key: {[...(['Ctrl', 'Shift', 'Alt'] as const).filter(item => stagedModifiers.includes(item)), ...(winForNextKey ? ['Win'] : [])].join(' + ')}</span>
+                  <button type="button" className="border border-[#777] bg-white px-2 py-1 font-bold text-[#141414]" onClick={() => {
+                    commitCombo([...(['Ctrl', 'Shift', 'Alt'] as const).filter(item => stagedModifiers.includes(item)), ...(winForNextKey ? ['Win'] : [])], '');
+                    setStagedModifiers([]); setWinForNextKey(false);
+                  }}>Add modifiers as step</button>
+                  <button type="button" className="underline" onClick={() => { setStagedModifiers([]); setWinForNextKey(false); }}>Clear modifiers</button>
+                </div>}
 
                 <div className="flex items-center justify-between px-1 font-mono text-[11px]">
                   <span className="text-[#646464]">LAST LOGGED</span>

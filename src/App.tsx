@@ -1,4 +1,6 @@
-import { makeBackup, validDeck, validOled } from './utils/backup';
+import { KNOB_HOLD_MS } from './utils/knobHold';
+import { validDeck, validOled, type ParsedBackup } from './utils/backup';
+import { version as appVersion } from '../package.json';
 import { getLightingStorageError, reloadLightingFromStorage, subscribe as subscribeLighting } from './lighting/store';
 import React, { useState, useEffect, useRef, useReducer } from 'react';
 import { createDeckHistory, deckHistoryReducer } from './utils/deckHistory';
@@ -6,9 +8,11 @@ import { Deck, Layer, KeyBinding, DialBinding, OLEDState, ActionDefinition, Disc
 import { defaultDeck } from './data/defaultDeck';
 import { TopNavbar } from './components/TopNavbar';
 import { HelpPanel } from './components/HelpPanel';
+import { SettingsPage } from './components/SettingsPage';
 import { WelcomeTour } from './components/WelcomeTour';
 import { INTRO_REPLAY_EVENT } from './intro/config';
 import { shouldShowWelcome } from './utils/welcome';
+import { applyTheme, readTheme, saveTheme, readOpeningAnimation, saveOpeningAnimation, type AppTheme } from './utils/appPreferences';
 import { DigitalTwin } from './components/DigitalTwin';
 
 
@@ -109,7 +113,7 @@ function loadSession(): { activeLayerId?: string } {
  * panel would show yesterday's CPU load as if it were now.
  */
 const OLED_PREF_KEYS = [
-  'mode', 'customTitle', 'customSubtitle', 'brightness', 'inverted', 'autoCycleS', 'playlist',
+  'mode', 'customTitle', 'customSubtitle', 'brightness', 'inverted', 'autoCycleS', 'playlist', 'customScreen', 'customScreenEnabled',
 ] as const;
 
 function oledPreferences(state: OLEDState): Partial<OLEDState> {
@@ -144,7 +148,7 @@ function loadOledState(fallback: OLEDState): OLEDState {
   }
 }
 
-export const App: React.FC = () => {
+export const App: React.FC<{ onReset: () => void }> = ({ onReset }) => {
   // The deck's activeLayerId is the ONE selected layer for display and edits.
   // Adopt the older separate session preference once when loading a deck, then
   // keep it in sync with the deck so changing layers cannot edit another page.
@@ -172,9 +176,26 @@ export const App: React.FC = () => {
   const setDeck = (update: Deck | ((current: Deck) => Deck)) => dispatchDeck({ type: 'edit', update: typeof update === 'function' ? update : () => update });
   const [deckSaveBlocked, setDeckSaveBlocked] = useState(initialDeck.blocked);
   const [storageErrors, setStorageErrors] = useState<Record<string, boolean>>({});
-  const [backupNotice, setBackupNotice] = useState('');
-  const [backupOpen, setBackupOpen] = useState(false);
   // Opt-in and session-only: never affect physical pad events or unrelated tests.
+  const [theme, setTheme] = useState<AppTheme>(readTheme);
+  const [openingAnimation, setOpeningAnimation] = useState(readOpeningAnimation);
+  const [preferenceNotice, setPreferenceNotice] = useState('');
+  const themeChangeSequence = useRef(0);
+  const changeTheme = (next: AppTheme) => {
+    const sequence = ++themeChangeSequence.current;
+    setTheme(next);
+    const saved = saveTheme(next);
+    setPreferenceNotice(saved ? '' : 'Theme could not be saved; it will reset when ZERO restarts.');
+    void applyTheme(next, saved).then(splashSaved => {
+      if (saved && !splashSaved && sequence === themeChangeSequence.current) setPreferenceNotice('Theme saved, but the loading-screen color could not be saved.');
+    }).catch(() => {
+      if (saved && sequence === themeChangeSequence.current) setPreferenceNotice('Theme saved, but the loading-screen color could not be saved.');
+    });
+  };
+  const changeOpeningAnimation = (enabled: boolean) => {
+    setOpeningAnimation(enabled);
+    setPreferenceNotice(saveOpeningAnimation(enabled) ? '' : 'Animation preference could not be saved; it will reset when ZERO restarts.');
+  };
   const [safePreview, setSafePreview] = useState(false);
   const safePreviewRef = useRef(false);
   const [brightnessToast, setBrightnessToast] = useState<{ level: number; atLimit: boolean } | null>(null);
@@ -257,6 +278,7 @@ export const App: React.FC = () => {
     } catch { /* storage may be unavailable */ }
   };
   // The entrance is visual only, runs once, and yields immediately to input.
+  const [startupAnimationEnabled] = useState(readOpeningAnimation);
   const [isStarting, setIsStarting] = useState(true);
   useEffect(() => {
     const timer = window.setTimeout(() => setIsStarting(false), 900);
@@ -720,7 +742,7 @@ export const App: React.FC = () => {
           // Hardware switch pressed down -> Start hold detection timer
           hwDialHoldTriggered = false;
           if (hwDialTimer) clearTimeout(hwDialTimer);
-          const threshold = activeLayer.dial.channelHoldThresholdMs || 800;
+          const threshold = KNOB_HOLD_MS;
           if (!deviceReportsHold) {
             hwDialTimer = setTimeout(() => {
               hwDialHoldTriggered = true;
@@ -856,10 +878,29 @@ export const App: React.FC = () => {
     handleTriggerAction('oled-cycle', `OLED Mode: ${getOLEDMode(next).label.toUpperCase()}`, 'navigation');
   };
 
+  const handleBackupRestored = (restored: ParsedBackup) => {
+    setDeckSaveBlocked(false); dispatchDeck({ type: 'replace', deck: restored.deck }); setBackupRevision(n => n + 1);
+    if (restored.extras) {
+      setOledSaveBlocked(false); setMacroStorageError('');
+      reloadLightingFromStorage();
+      // Restore editor preferences without issuing an OLED mode command.
+      const fallback = { ...oledState, mode: 'kadowaz' as OLEDMode, customTitle: 'ZERO', customSubtitle: 'ONLINE', brightness: 56, inverted: false, autoCycleS: AUTO_CYCLE_DEFAULT_S, playlist: [...DEFAULT_PLAYLIST], customScreen: undefined, customScreenEnabled: undefined };
+      const next = loadOledState(fallback);
+      modeFromPadRef.current = next.mode === oledState.mode ? null : next.mode;
+      setOledState(prev => ({ ...prev, ...oledPreferences(next) }));
+    }
+    setEditingKeyBinding(null); setIsEditingKnob(false); setIsEditingDisplay(false);
+  };
+
   // Discard drawer drafts so a stale editor cannot undo the history action.
   const stepDeckHistory = (direction: 'undo' | 'redo') => {
     dispatchDeck({ type: direction });
     setEditingKeyBinding(null); setIsEditingKnob(false);
+  };
+
+  const changeSafePreview = (next: boolean) => {
+    safePreviewRef.current = next; setSafePreview(next); virtualActionSequence.current++; setBrightnessToast(null);
+    setVirtualFeedback({ type: 'info', message: next ? 'Safe preview is on. Virtual keys and knob will not send actions to Windows.' : 'Live virtual actions are on. Pressing an assigned key may control this computer.' });
   };
 
   // Only virtual-deck gestures use this wrapper. Other tests and physical pad
@@ -882,19 +923,6 @@ export const App: React.FC = () => {
     pushLog(`[EDITOR PREVIEW] Layer ${idx}; pad unchanged`, 'navigation', 'info');
   };
 
-  // Palette export uses the same validated format and storage guard as the rail.
-  const handleExportDeck = () => {
-    try {
-      if (deckSaveBlocked) throw new Error('Saved deck data could not be read; this temporary layout is not a backup.');
-      if (oledSaveBlocked || macroStorageError || lightingStorageError || Object.keys(storageErrors).length > 0) throw new Error('Some settings could not be saved or read; resolve the storage problem before backing up.');
-      const backup = makeBackup(deck, localStorage);
-      const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
-      const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'macropad-backup.json'; anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setBackupNotice('Backup downloaded. Store it somewhere safe.');
-    } catch (error) { setBackupNotice(error instanceof Error ? error.message : 'Could not create backup.'); }
-  };
-
   // Key save handler
   const handleSaveKey = (updated: KeyBinding) => {
     putKey(updated.keyIndex, updated);
@@ -911,8 +939,9 @@ export const App: React.FC = () => {
    * Upload to the pad.
    *
    * This is now a real config upload: read the pad's current config (so its
-   * gesture timings, OLED playlist and lighting survive), replace the nine keys
-   * and four knob slots on each of the four layers, stream the 2272-byte blob as
+   * other gesture timings, OLED playlist and lighting survive), replace the nine keys
+   * and four knob slots on each of the four layers, set the reviewed fixed
+   * knob-hold timing, stream the 2272-byte blob as
    * SET_CONFIG chunks, then COMMIT. It reports what the pad acknowledged, and
    * names the bindings that stayed on the PC instead of pretending they went.
    */
@@ -1076,7 +1105,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className={`app-shell ${isStarting ? 'startup-entrance' : ''} flex flex-col h-screen w-screen bg-[#E3E2DE] text-[#141414] overflow-hidden`}
+    <div className={`app-shell ${isStarting ? (startupAnimationEnabled ? 'startup-entrance' : 'startup-quiet') : ''} flex flex-col h-screen w-screen bg-[#E3E2DE] text-[#141414] overflow-hidden`}
       onClickCapture={() => { if (isStarting) setIsStarting(false); }}
       onKeyDownCapture={() => { if (isStarting) setIsStarting(false); }}>
       {pagePending && <span className="sr-only" role="status">Opening selected section.</span>}
@@ -1095,7 +1124,6 @@ export const App: React.FC = () => {
       />
 
 
-      {backupNotice && <div role="status" className="shrink-0 border-b border-[#C7C7C7] px-4 py-2 text-xs text-[#141414]">{backupNotice} <button type="button" onClick={() => setBackupNotice('')} className="underline">Dismiss</button></div>}
       {(deckSaveBlocked || oledSaveBlocked || macroStorageError || lightingStorageError || Object.keys(storageErrors).length > 0) && <div role="alert" className="shrink-0 border-b border-[#aa6200] bg-[#fff2db] px-4 py-2 text-xs text-[#663900]">
         {deckSaveBlocked && <p>Saved deck data could not be read. It has not been overwritten; edits to this temporary layout will not be saved. Restore a trusted backup to replace it.</p>}
         {oledSaveBlocked && <p>Saved screen settings could not be read. They have not been overwritten; temporary screen edits will not be saved. Restore a trusted backup that includes screen settings to replace them.</p>}
@@ -1116,11 +1144,10 @@ export const App: React.FC = () => {
         <aside id="workspace-rail" className={`workspace-rail ${railOpen ? 'workspace-rail--open' : ''} w-[228px] shrink-0 border-r border-[#C7C7C7] flex flex-col overflow-y-auto bg-[#E3E2DE]`}>
 
           <div className="px-4 pt-4 pb-3 border-b border-[#C7C7C7]">
-            <span className="eyebrow">Your macropad</span>
+            <span className="eyebrow">Your setup</span>
             <p className="mt-2 text-[10px] leading-relaxed text-[#444343]">
-              Choose a layer, assign your keys and knob, then test on the virtual macropad. Changes are saved on this PC.
+              Choose a layer, assign actions to your keys and knob, then try them on the virtual pad. Saved on this PC. Upload to apply to your macropad.
             </p>
-            <button type="button" onClick={() => { setBackupOpen(true); document.getElementById('backup-restore')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }} className="mt-3 border border-[#999] bg-white px-2 py-1 text-[10px] font-bold text-[#1351AA] hover:border-[#1351AA]">Backup &amp; restore</button>
           </div>
 
           {/* layer register */}
@@ -1195,25 +1222,13 @@ export const App: React.FC = () => {
             </div>}
           </AnimatedDetails>
 
-          <BackupPanel open={backupOpen} onOpenChange={setBackupOpen} deck={deck} exportBlocked={deckSaveBlocked || oledSaveBlocked || !!macroStorageError || !!lightingStorageError || Object.keys(storageErrors).length > 0} onRestored={restored => {
-            setDeckSaveBlocked(false); dispatchDeck({ type: 'replace', deck: restored.deck }); setBackupRevision(n => n + 1);
-            if (restored.extras) {
-              setOledSaveBlocked(false); setMacroStorageError('');
-              reloadLightingFromStorage();
-              // Restore editor preferences without issuing an OLED mode command.
-              const fallback = { ...oledState, mode: 'kadowaz' as OLEDMode, customTitle: 'ZERO', customSubtitle: 'ONLINE', brightness: 56, inverted: false, autoCycleS: AUTO_CYCLE_DEFAULT_S, playlist: [...DEFAULT_PLAYLIST] };
-              const next = loadOledState(fallback);
-              modeFromPadRef.current = next.mode === oledState.mode ? null : next.mode;
-              setOledState(prev => ({ ...prev, ...oledPreferences(next) }));
-            }
-            setEditingKeyBinding(null); setIsEditingKnob(false); setIsEditingDisplay(false);
-          }} />
+
 
           {/* foot */}
           <div className="mt-auto px-4 py-3 border-t border-[#C7C7C7]">
             <p className="font-mono text-[8.5px] uppercase tracking-[0.14em] text-[#646464] leading-relaxed">
               ZERO macropad<br />
-              12-col grid · build 2.4.1
+              Version {appVersion}
             </p>
           </div>
         </aside>
@@ -1221,7 +1236,7 @@ export const App: React.FC = () => {
         {/* ── CONTENT · cols 3–12 ─────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <div className="mobile-rail-toggle hidden shrink-0 border-b border-[#C7C7C7] bg-[#EDECE8] px-3 py-2">
-            <button aria-expanded={railOpen} aria-controls="workspace-rail" onClick={() => setRailOpen(open => !open)} className="text-xs font-bold text-[#1351AA]">{railOpen ? 'Close layers & tools' : 'Layers, firmware & backup'}</button>
+            <button aria-expanded={railOpen} aria-controls="workspace-rail" onClick={() => setRailOpen(open => !open)} className="text-xs font-bold text-[#1351AA]">{railOpen ? 'Close layers & tools' : 'Layers & firmware'}</button>
           </div>
           <div className="flex-1 flex min-h-0 overflow-hidden">
 
@@ -1285,12 +1300,9 @@ export const App: React.FC = () => {
                 }}
               />
 
-              <div className="w-full max-w-[624px] flex flex-wrap items-center justify-between gap-2 border border-[#C7C7C7] bg-white px-3 py-2">
+              <div className="intro-preview-tools w-full max-w-[624px] flex flex-wrap items-center justify-between gap-2 border border-[#C7C7C7] bg-white px-3 py-2">
                 <div className="flex items-center gap-2">
-                  <button type="button" aria-pressed={safePreview} onClick={() => {
-                    const next = !safePreviewRef.current; safePreviewRef.current = next; setSafePreview(next); virtualActionSequence.current++; setBrightnessToast(null);
-                    setVirtualFeedback({ type: 'info', message: next ? 'Safe preview is on. Virtual keys and knob will not send actions to Windows.' : 'Live virtual actions are on. Pressing an assigned key may control this computer.' });
-                  }} className={`border px-3 py-1.5 text-xs font-bold ${safePreview ? 'border-[#1351AA] bg-[#1351AA] text-white' : 'border-[#777] text-[#141414] hover:border-[#1351AA]'}`}>Safe preview {safePreview ? 'on' : 'off'}</button>
+                  <button type="button" aria-pressed={safePreview} onClick={() => changeSafePreview(!safePreviewRef.current)} className={`border px-3 py-1.5 text-xs font-bold ${safePreview ? 'border-[#1351AA] bg-[#1351AA] text-white' : 'border-[#777] text-[#141414] hover:border-[#1351AA]'}`}>Safe preview {safePreview ? 'on' : 'off'}</button>
                   <span className="text-[10px] text-[#444343]">Virtual deck only · resets on restart</span>
                 </div>
                 <div className="flex items-center gap-1" role="group" aria-label="Layout edit history">
@@ -1299,8 +1311,8 @@ export const App: React.FC = () => {
                 </div>
                 <p className="w-full text-[10px] text-[#444343]">Undo/redo covers key and knob layout edits this session, not macros or device uploads. Safe preview cannot stop actions or macros already started and does not affect other tests or a physical pad.</p>
               </div>
-              <div role="status" aria-live="polite" aria-label="Virtual action feedback" className={`w-full max-w-[624px] min-h-[40px] shrink-0 break-words [overflow-wrap:anywhere] border px-3 py-2 text-xs leading-relaxed ${virtualFeedback.type === 'error' ? 'border-[#AA3C20] bg-[#FFF1EB] text-[#76260F]' : virtualFeedback.type === 'success' ? 'border-[#A9BCD8] bg-[#F2F6FC] text-[#17457D]' : 'border-[#C7C7C7] bg-white text-[#444343]'}`}>
-                <strong className="mr-2">Virtual test</strong>{virtualFeedback.message}
+              <div role="status" aria-live="polite" aria-label="Virtual action feedback" className={`intro-preview-feedback w-full max-w-[624px] min-h-[40px] shrink-0 break-words [overflow-wrap:anywhere] border px-3 py-2 text-xs leading-relaxed ${virtualFeedback.type === 'error' ? 'border-[#AA3C20] bg-[#FFF1EB] text-[#76260F]' : virtualFeedback.type === 'success' ? 'border-[#A9BCD8] bg-[#F2F6FC] text-[#17457D]' : 'border-[#C7C7C7] bg-white text-[#444343]'}`}>
+                <strong className="mr-2">Virtual test</strong><span>{virtualFeedback.message}</span>
               </div>
 
               {/* VIA quick keycode tray */}
@@ -1335,7 +1347,6 @@ export const App: React.FC = () => {
                   dial={activeLayer.dial}
                   onSave={handleSaveDial}
                   onClose={() => setIsEditingKnob(false)}
-                  onTriggerAction={handleTriggerAction}
                 />
               ) : isEditingDisplay ? (
                 <DisplayConfigDrawer
@@ -1347,6 +1358,13 @@ export const App: React.FC = () => {
                     ...prev,
                     ...oledPreferences(updated),
                   }))}
+                  onSaveCustomScreen={(updated) => {
+                    if (oledSaveBlocked) throw new Error('Saved display data is unreadable; no changes were written. Restore a backup first.');
+                    const prefs = oledPreferences(updated);
+                    try { localStorage.setItem(OLED_KEY, JSON.stringify(prefs)); }
+                    catch { throw new Error('Could not save the screen on this PC. Your previous saved display data was kept.'); }
+                    setOledState(prev => ({ ...prev, ...prefs }));
+                  }}
                   onClose={() => setIsEditingDisplay(false)}
                   hardwareState={hardwareState}
                   deviceInfo={deviceInfo}
@@ -1536,6 +1554,18 @@ export const App: React.FC = () => {
           </div>
         )}
 
+        {activeTab === 'settings' && (
+          <SettingsPage theme={theme} onThemeChange={changeTheme} openingAnimation={openingAnimation} onOpeningAnimationChange={changeOpeningAnimation} preferenceNotice={preferenceNotice} safePreview={safePreview} onSafePreviewChange={changeSafePreview}
+            onReset={onReset}
+            backupPanel={<BackupPanel deck={deck} exportBlocked={deckSaveBlocked || oledSaveBlocked || !!macroStorageError || !!lightingStorageError || Object.keys(storageErrors).length > 0} onRestored={handleBackupRestored} />}
+            onOpenWelcome={() => setShowWelcome(true)}
+            onOpenHelp={() => setShowHelp(true)}
+            onReplayIntro={() => {
+              setActiveTab('designer');
+              window.setTimeout(() => window.dispatchEvent(new Event(INTRO_REPLAY_EVENT)), 0);
+            }} />
+        )}
+
         {activeTab === 'presets' && (
           <PresetsPage key={backupRevision} layers={layers} activeLayerId={activeLayerId}
             onApply={(preset: LayerPreset, layerId: string) => {
@@ -1652,7 +1682,6 @@ export const App: React.FC = () => {
         onSelectLayer={handleSelectLayer}
         onOpenDiagnostics={openHardwareDiagnostics}
         onOpenFirmwarePanel={openFirmwarePanel}
-        onExportDeck={handleExportDeck}
         hardwareState={hardwareState}
         onConnectSerial={() => hardwareBridge.connectSerial()}
         onDisconnectHardware={() => hardwareBridge.disconnect()}

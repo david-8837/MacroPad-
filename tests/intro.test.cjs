@@ -40,7 +40,7 @@ try {
   assert.ok(brand.start >= header.start + header.duration, 'layers cursor fills the completed header');
   assert.ok(railTitle.type && railTitle.start >= rail.start + rail.duration, 'navigation cursor types into the completed sidebar');
   assert.ok(REGION_SCRIPTS.flatMap(s => s.steps).filter(s => s.type).length >= 12, 'the sidebar and inspector text is typed');
-  for (const selector of ['.workspace-rail > div:nth-child(1) > p', '.workspace-rail > div:nth-child(2) > p', '.workspace-rail > details:nth-of-type(1) > summary', '.workspace-rail > details:nth-of-type(2) > summary', '.designer-inspector:not(.designer-inspector--editing) > div:last-child > div:nth-child(2) p']) {
+  for (const selector of ['.workspace-rail > div:nth-child(1) > p', '.workspace-rail > div:nth-child(2) > p', '.workspace-rail > details:nth-of-type(1) > summary', '.designer-inspector:not(.designer-inspector--editing) > div:last-child > div:nth-child(2) p']) {
     assert.ok(REGION_SCRIPTS.some(s => s.steps.some(step => step.selector === selector && step.type)), `${selector} should be typed`);
   }
   assert.equal(textClip([], 0, {left: 0, top: 0, width: 100, height: 30}), 'inset(0 100% 0 0)');
@@ -69,6 +69,10 @@ try {
   const longTrack = [...targets, { rect, start: 8000, label: 'still working' }];
   assert.ok(frameFor(REGION_SCRIPTS[1], longTrack, finishedAt + 850, 42, 1, viewport).opacity > 0,
     'other agents continue working while a finished cursor leaves');
+  for (const selector of ['.intro-preview-tools', '.intro-preview-feedback', '.designer-inspector:not(.designer-inspector--editing) > section[aria-label="Empty layer keys"]']) {
+    assert.ok(REGION_SCRIPTS.some(s => s.steps.some(step => step.selector === selector && step.frame)), `${selector} is drawn by a cursor`);
+  }
+  assert.ok(REGION_SCRIPTS.some(s => s.steps.some(step => step.selector === '.intro-preview-feedback > span' && step.type)), 'feedback text is typed');
   const intro = readFileSync(join(__dirname, '../src/intro/Intro.tsx'), 'utf8');
   assert.match(intro, /cancelAnimationFrame/); assert.match(intro, /removeEventListener\('resize'/);
   assert.match(intro, /app\.inert = previousInert/); assert.match(intro, /restoreTargets\(\)/);

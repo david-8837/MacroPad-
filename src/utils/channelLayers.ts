@@ -1,4 +1,5 @@
 import { Deck, Layer, KeyBinding } from '../types';
+import { KNOB_HOLD_MS } from './knobHold';
 
 /** The deck always carries four layers, numbered 0-3 — the same four pages the
  * firmware stores as channels (CFG_CHANNEL_COUNT). One concept, two names. */
@@ -88,7 +89,7 @@ function createDefaultDial(index: number): Layer['dial'] {
   return {
     label: `Volume · Layer ${index}`, activeModeName: modes[index], availableModes: modes,
     cwAction: media('Volume Up', 'volume_up'), ccwAction: media('Volume Down', 'volume_down'),
-    pressAction: media('Mute', 'mute'), accelerationCurve: 'linear', sensitivity: 5, channelHoldThresholdMs: 800,
+    pressAction: media('Mute', 'mute'), accelerationCurve: 'linear', sensitivity: 5, channelHoldThresholdMs: KNOB_HOLD_MS,
   };
 }
 
@@ -112,7 +113,7 @@ export function normalizeDeckLayers(deck: Deck): Deck {
     existingLayers[0].name = shortName(existingLayers[0].name);
     normalizeDialModes(existingLayers[0].dial, 0);
     if (existingLayers[0].dial && !existingLayers[0].dial.channelHoldThresholdMs) {
-      existingLayers[0].dial.channelHoldThresholdMs = 800;
+      existingLayers[0].dial.channelHoldThresholdMs = KNOB_HOLD_MS;
     }
   }
 
@@ -131,7 +132,7 @@ export function normalizeDeckLayers(deck: Deck): Deck {
     existingLayers[1].name = shortName(existingLayers[1].name);
     normalizeDialModes(existingLayers[1].dial, 1);
     if (existingLayers[1].dial && !existingLayers[1].dial.channelHoldThresholdMs) {
-      existingLayers[1].dial.channelHoldThresholdMs = 800;
+      existingLayers[1].dial.channelHoldThresholdMs = KNOB_HOLD_MS;
     }
   }
 
@@ -150,7 +151,7 @@ export function normalizeDeckLayers(deck: Deck): Deck {
     existingLayers[2].name = shortName(existingLayers[2].name);
     normalizeDialModes(existingLayers[2].dial, 2);
     if (existingLayers[2].dial && !existingLayers[2].dial.channelHoldThresholdMs) {
-      existingLayers[2].dial.channelHoldThresholdMs = 800;
+      existingLayers[2].dial.channelHoldThresholdMs = KNOB_HOLD_MS;
     }
   }
 
@@ -169,7 +170,7 @@ export function normalizeDeckLayers(deck: Deck): Deck {
     existingLayers[3].name = shortName(existingLayers[3].name);
     normalizeDialModes(existingLayers[3].dial, 3);
     if (existingLayers[3].dial && !existingLayers[3].dial.channelHoldThresholdMs) {
-      existingLayers[3].dial.channelHoldThresholdMs = 800;
+      existingLayers[3].dial.channelHoldThresholdMs = KNOB_HOLD_MS;
     }
   }
 

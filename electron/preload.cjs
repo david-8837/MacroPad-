@@ -3,6 +3,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   nativeWindowControls: process.platform === 'win32',
   rendererReady: () => ipcRenderer.send('startup:ready'),
+  setWindowTheme: (theme, persist = false) => ipcRenderer.invoke('view-theme:set', theme, persist),
+  prepareReset: () => ipcRenderer.invoke('reset:prepare'),
+  finishReset: () => ipcRenderer.invoke('reset:finish'),
+  getViewScale: () => ipcRenderer.invoke('view-scale:get'),
+  setViewScale: (factor) => ipcRenderer.invoke('view-scale:set', factor),
   openHelpLink: (id) => ipcRenderer.invoke('help:open', id),
   windowControl: (action) => ipcRenderer.send('window-control', action),
   execAction: (action) => ipcRenderer.invoke('exec-action', action),

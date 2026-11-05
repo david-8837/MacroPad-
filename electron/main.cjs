@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, session, s
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
+const { readWindowTheme, saveWindowTheme } = require('./windowTheme.cjs');
+const { resetNativeData } = require('./resetData.cjs');
 const { createWebhookServer, generateToken } = require('./webhookServer.cjs');
 const {
   discoverApplications,
@@ -29,6 +31,8 @@ let metricsPollBusy = false;
 let mediaTimer = null;
 let mediaPollBusy = false;
 let lastMediaJson = '';
+let resetPrepared = false;
+let resetPreparing = null;
 const WEBHOOK_PORT = 38491;
 
 // The preload grants native capabilities. Only the editor's own top-level page
@@ -139,6 +143,7 @@ function loadEditor() {
 }
 
 function createWindow() {
+  const startupTheme = readWindowTheme(app.getPath('userData'));
   maximizeOnStartup = true;
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -151,10 +156,12 @@ function createWindow() {
     // Native Windows caption buttons provide Win11 Snap Layouts without adding
     // a separate title bar. Other platforms keep the existing custom chrome.
     ...(process.platform === 'win32'
-      ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#e9e8e4', symbolColor: '#141414', height: 32 } }
+      ? { titleBarStyle: 'hidden', titleBarOverlay: startupTheme === 'dark'
+        ? { color: '#171b22', symbolColor: '#edf1f7', height: 32 }
+        : { color: '#e9e8e4', symbolColor: '#141414', height: 32 } }
       : { frame: false }),
     icon: path.join(__dirname, 'assets/zero.png'),
-    backgroundColor: '#0C0E14',
+    backgroundColor: startupTheme === 'dark' ? '#171b22' : '#E3E2DE',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -166,7 +173,7 @@ function createWindow() {
 
   splashWindow = new BrowserWindow({
     width: 390, height: 245, resizable: false, frame: false,
-    show: false, skipTaskbar: true, backgroundColor: '#FFFFFF',
+    show: false, skipTaskbar: true, backgroundColor: startupTheme === 'dark' ? '#171b22' : '#FFFFFF',
     icon: path.join(__dirname, 'assets/zero.png'),
     webPreferences: { preload: path.join(__dirname, 'splash-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
@@ -177,11 +184,24 @@ function createWindow() {
   splash.webContents.on('did-finish-load', () => {
     if (startupFailed) splash.webContents.send('startup:failure');
   });
-  splash.loadFile(path.join(__dirname, 'splash.html')).catch((err) => {
+  splash.loadFile(path.join(__dirname, 'splash.html'), { query: { theme: startupTheme } }).catch((err) => {
     console.error('[startup] Failed to load splash:', err);
     if (!splash.isDestroyed()) splash.destroy();
     if (splashWindow === splash) splashWindow = null;
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+  });
+
+  // Chromium persists zoom by origin across reinstalls. Recover only an
+  // unusually small, hard-to-use view on load; preserve normal user zoom and
+  // Windows display scaling, and do not alter saved deck settings.
+  const editorWindow = mainWindow;
+  const editorContents = editorWindow.webContents;
+  editorContents.on('did-finish-load', () => {
+    if (editorWindow.isDestroyed()) return;
+    try {
+      const factor = editorContents.getZoomFactor();
+      if (Number.isFinite(factor) && factor < 0.7) editorContents.setZoomFactor(1);
+    } catch (error) { console.warn('[startup] Could not check editor zoom:', error); }
   });
 
   // The UI is a closed local app: never open new windows or navigate away from it.
@@ -380,6 +400,51 @@ ipcMain.on('exec-action', async (event, incoming) => {
   } catch (err) {
     console.error('[exec-action]', err);
   }
+});
+
+// Limit the settings control to readable, useful scales. Keyboard zoom remains
+// available independently; this never changes Windows display scaling.
+handleEditor('view-theme:set', (_event, theme, persist = false) => {
+  if ((theme !== 'light' && theme !== 'dark') || typeof persist !== 'boolean') throw new Error('Invalid window theme.');
+  const saved = !persist || saveWindowTheme(app.getPath('userData'), theme);
+  if (process.platform === 'win32' && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setTitleBarOverlay(theme === 'dark'
+      ? { color: '#171b22', symbolColor: '#edf1f7', height: 32 }
+      : { color: '#e9e8e4', symbolColor: '#141414', height: 32 });
+  }
+  return saved;
+});
+handleEditor('view-scale:get', (event) => event.sender.getZoomFactor());
+handleEditor('view-scale:set', (event, factor) => {
+  if (typeof factor !== 'number' || !Number.isFinite(factor) || factor < 0.8 || factor > 2) {
+    throw new Error('View size must be between 80% and 200%.');
+  }
+  event.sender.setZoomFactor(factor);
+  return factor;
+});
+
+// The renderer unmounts before asking for this reset, preventing autosave from
+// repopulating deleted data. Only the trusted editor can prepare/finish it.
+handleEditor('reset:prepare', async (event) => {
+  if (resetPrepared) return true;
+  if (resetPreparing) return resetPreparing;
+  resetPreparing = (async () => {
+    event.sender.setZoomFactor(1);
+    await session.defaultSession.clearCache();
+    session.defaultSession.flushStorageData();
+    resetNativeData(app.getPath('userData'));
+    hardwareListenerReady = false;
+    resetPrepared = true;
+    return true;
+  })();
+  try { return await resetPreparing; } finally { resetPreparing = null; }
+});
+handleEditor('reset:finish', () => {
+  if (!resetPrepared) throw new Error('Reset was not prepared.');
+  isQuitting = true;
+  // Let the IPC response arrive before closing the entire app, including tray.
+  setTimeout(() => app.quit(), 200);
+  return true;
 });
 
 handleEditor('get-webhook-info', async () => ({

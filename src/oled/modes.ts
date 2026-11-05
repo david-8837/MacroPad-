@@ -12,6 +12,7 @@
 
 import type { OLEDState } from '../types';
 import { Frame, PANEL_H, PANEL_W } from './frame';
+import { decodePages, isCustomScreen } from './customScreen';
 import { textWidth } from './font';
 import {
   CREATURE_BLINK,
@@ -152,7 +153,9 @@ const deckStatus: OLEDModeSpec = {
     const subtitle = trunc((ctx.state.customSubtitle || 'READY').toUpperCase(), 8);
     const badgeW = textWidth(subtitle) + 4;
     const badgeX = PANEL_W - badgeW - 1;
-    if (blink(ctx.time, 1000)) fb.fillRect(1, 2, 3, 3);
+    // Compact live indicator and a clean badge keep the layer as the focus.
+    fb.rect(1, 1, 5, 5);
+    if (blink(ctx.time, 1000)) fb.pixel(3, 3);
     fb.clip({ x: 7, y: 0, w: Math.max(0, badgeX - 9), h: 8 });
     fb.text(7, 0, trunc(title, Math.max(0, Math.floor((badgeX - 9) / 6))));
     fb.noClip();
@@ -164,8 +167,8 @@ const deckStatus: OLEDModeSpec = {
     const width = count * 12 - 3;
     const start = Math.floor((PANEL_W - width) / 2);
     for (let i = 0; i < count; i += 1) {
-      if (i === ctx.layerIndex) fb.fillRect(start + i * 12, 29, 9, 2);
-      else fb.hline(start + i * 12, 30, 9);
+      if (i === ctx.layerIndex) fb.fillRect(start + i * 12, 29, 9, 3);
+      else fb.hline(start + i * 12 + 2, 30, 5);
     }
   },
 };
@@ -184,7 +187,8 @@ const system: OLEDModeSpec = {
     const temp = ctx.state.cpuTemp == null || !Number.isFinite(ctx.state.cpuTemp)
       ? '--'
       : `${Math.round(ctx.state.cpuTemp)}°C`;
-    fb.text(0, 0, 'SYSTEM');
+    fb.fillRect(0, 0, 39, 8);
+    fb.text(2, 0, 'SYSTEM', { invert: true });
     flushRight(fb, 0, temp);
 
     const rows: [string, number | null][] = [
@@ -201,7 +205,12 @@ const system: OLEDModeSpec = {
         fb.text(24, y, '--');
         return;
       }
-      meter(fb, 22, y, 68, 5, pct / 100);
+      // Segmented, measured-only meter; missing values never draw a fake bar.
+      for (let segment = 0; segment < 11; segment += 1) {
+        const x = 24 + segment * 6;
+        if (segment < Math.round(pct * 11 / 100)) fb.fillRect(x, y + 1, 4, 5);
+        else fb.hline(x, y + 6, 4);
+      }
       flushRight(fb, y, `${pct}%`);
     });
   },
@@ -243,7 +252,10 @@ const nowPlaying: OLEDModeSpec = {
     }
     fb.noClip();
     fb.text(0, 18, trunc((ctx.state.nowPlayingArtist || 'UNKNOWN ARTIST').toUpperCase(), 21));
-    if (pct !== null) meter(fb, 0, 27, PANEL_W, 4, pct / 100);
+    if (pct !== null) {
+      meter(fb, 0, 28, PANEL_W, 3, pct / 100);
+      fb.fillRect(Math.max(0, Math.min(124, Math.round(124 * pct / 100))), 27, 4, 5);
+    }
   },
 };
 
@@ -256,7 +268,7 @@ function drawTrack(fb: Frame, ctx: RenderContext, track: TrackState) {
   const slots = Math.max(2, ctx.layerCount);
   fb.text(1, 1, 'LAYER');
   flushRight(fb, 1, `${ctx.layerIndex} / ${Math.max(0, ctx.layerCount - 1)}`);
-  fb.hline(0, 10, PANEL_W);
+  for (let x = 1; x < PANEL_W; x += 4) fb.hline(x, 10, 2);
   const slotW = PANEL_W / slots;
   const centreOf = (n: number, w: number) => Math.round(slotW * (n + 0.5) - w / 2);
 
@@ -307,17 +319,15 @@ const layerIndicator: OLEDModeSpec = {
 const loader: OLEDModeSpec = {
   id: 'loader', label: 'Progress Loader', frames: 12, fps: 8, runtime: false,
   render(fb, ctx) {
-    fb.text(2, 1, 'LOADING');
-    flushRight(fb, 1, 'ANIMATION');
-    fb.hline(0, 10, PANEL_W);
-    const count = 10;
     const step = ctx.frame % 12;
-    for (let i = 0; i < count; i += 1) {
-      const x = 4 + i * 12;
-      fb.rect(x, 15, 9, 10);
-      if (i < Math.min(step, count)) fb.fillRect(x + 2, 17, 5, 6);
+    fb.fillRect(0, 0, 44, 8);
+    fb.text(2, 0, 'LOADER', { invert: true });
+    flushRight(fb, 0, 'LOOP');
+    fb.rect(0, 13, 128, 11);
+    for (let i = 0; i < 10; i += 1) {
+      if (i < Math.min(step, 10)) fb.fillRect(3 + i * 12, 16, 9, 5);
     }
-    fb.hline(4, 29, 117);
+    for (let i = 0; i < 10; i += 1) fb.hline(4 + i * 12, 28, 7);
   },
 };
 
@@ -327,27 +337,29 @@ const creature: OLEDModeSpec = {
     const f = ctx.frame % 16;
     const bitmap = f === 6 || f === 7 ? CREATURE_BLINK : f === 12 ? CREATURE_LOOK : CREATURE_IDLE;
     const bob = f === 3 || f === 4 || f === 11 ? 1 : 0;
-    fb.sprite(bitmap, 4, 8 + bob);
-    fb.hline(2, 27, 20);
-    fb.text(28, 1, 'PIXEL BUDDY');
-    fb.hline(28, 10, 98);
-    fb.rect(28, 14, 67, 13);
-    fb.text(32, 17, 'HELLO');
-    for (let i = 0; i < 3; i += 1) if (i <= Math.floor(f / 4) % 4) fb.fillRect(69 + i * 6, 21, 2, 2);
+    fb.rect(0, 1, 28, 30);
+    fb.sprite(bitmap, 6, 7 + bob);
+    fb.hline(4, 27, 20);
+    fb.text(34, 2, 'PIXEL BUDDY');
+    fb.hline(34, 11, 92);
+    fb.text(34, 16, 'HELLO');
+    for (let i = 0; i < 3; i += 1) if (i <= Math.floor(f / 4) % 4) fb.fillRect(72 + i * 6, 21, 2, 2);
+    for (let i = 0; i < 8; i += 1) fb.hline(34 + i * 11, 29, 7);
   },
 };
 
 const wave: OLEDModeSpec = {
   id: 'wave', label: 'Signal Wave', frames: 15, fps: 15, runtime: false,
   render(fb, ctx) {
-    fb.text(1, 0, 'SIGNAL WAVE');
-    fb.hline(0, 9, PANEL_W);
-    // A decorative trace, not a voltage measurement.
-    for (let x = 0; x < PANEL_W; x += 6) fb.pixel(x, 20);
+    fb.fillRect(0, 0, 75, 8);
+    fb.text(2, 0, 'SIGNAL WAVE', { invert: true });
+    flushRight(fb, 0, 'DEMO');
+    // Decorative motion only, not a voltage measurement.
+    for (let x = 1; x < PANEL_W; x += 5) fb.pixel(x, 21);
     const phase = ((ctx.frame % 15) / 15) * Math.PI * 2;
-    let previous = Math.round(20 - Math.sin((-1 / PANEL_W) * Math.PI * 4 + phase) * 8);
+    let previous = Math.round(21 - Math.sin((-1 / PANEL_W) * Math.PI * 4 + phase) * 8);
     for (let x = 0; x < PANEL_W; x += 1) {
-      const y = Math.round(20 - Math.sin((x / PANEL_W) * Math.PI * 4 + phase) * 8);
+      const y = Math.round(21 - Math.sin((x / PANEL_W) * Math.PI * 4 + phase) * 8);
       fb.vline(x, Math.min(y, previous), Math.abs(y - previous) + 1);
       previous = y;
     }
@@ -357,7 +369,6 @@ const wave: OLEDModeSpec = {
 const starfield: OLEDModeSpec = {
   id: 'starfield', label: 'Starfield', frames: 24, fps: 12, runtime: false,
   render(fb, ctx) {
-    // Every depth makes an integer number of screen widths per loop.
     const t = (ctx.frame % 24) / 24;
     for (let i = 0; i < 40; i += 1) {
       const depth = 1 + Math.floor(hash(i * 7 + 1) * 3);
@@ -368,6 +379,10 @@ const starfield: OLEDModeSpec = {
       if (depth >= 2 && x > 0) fb.pixel(x - 1, y);
       if (depth === 3 && y < PANEL_H - 1) fb.pixel(x, y + 1);
     }
+    // A quiet centre panel keeps the title legible over the moving stars.
+    fb.fillRect(34, 10, 60, 12, false);
+    fb.rect(34, 10, 60, 12);
+    fb.text(37, 13, 'STARFIELD');
   },
 };
 
@@ -386,6 +401,9 @@ const rain: OLEDModeSpec = {
         else if (k < 3 || (k + col) % 2 === 0) fb.pixel(x + 1, y);
       }
     }
+    fb.fillRect(37, 10, 54, 12, false);
+    fb.rect(37, 10, 54, 12);
+    fb.text(40, 13, 'DIGITAL');
   },
 };
 
@@ -395,15 +413,16 @@ const clock: OLEDModeSpec = {
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, '0');
     const mm = String(now.getMinutes()).padStart(2, '0');
-    centre(fb, 0, `${hh}:${mm}`, 2);
     const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    centre(fb, 17, `${days[now.getDay()]} ${now.getDate()} ${months[now.getMonth()]}`);
-    // One tick for each five seconds; no RTC is assumed on the pad itself.
+    fb.text(1, 2, `${hh}:${mm}`, { scale: 2 });
+    fb.vline(64, 2, 18);
+    fb.text(70, 2, days[now.getDay()]);
+    fb.text(70, 12, `${now.getDate()} ${months[now.getMonth()]}`);
     for (let i = 0; i < 12; i += 1) {
-      const x = 17 + i * 8;
-      if (i < Math.floor(now.getSeconds() / 5)) fb.fillRect(x, 27, 5, 3);
-      else fb.hline(x, 29, 5);
+      const x = 1 + i * 10;
+      if (i < Math.floor(now.getSeconds() / 5)) fb.fillRect(x, 26, 7, 4);
+      else fb.hline(x, 29, 7);
     }
   },
 };
@@ -417,20 +436,18 @@ const radar: OLEDModeSpec = {
       const rad = (a * Math.PI) / 180;
       fb.pixel(Math.round(cx + Math.cos(rad) * rr), Math.round(cy + Math.sin(rad) * rr));
     }
-    for (let radius = 1; radius <= r; radius += 1) {
-      fb.pixel(Math.round(cx + Math.cos(angle) * radius), Math.round(cy + Math.sin(angle) * radius));
-    }
+    for (let radius = 1; radius <= r; radius += 1) fb.pixel(Math.round(cx + Math.cos(angle) * radius), Math.round(cy + Math.sin(angle) * radius));
     for (const [bx, by] of [[8, 9], [22, 12], [14, 24], [26, 20]]) {
       const ba = Math.atan2(by - cy, bx - cx);
       const d = ((angle - ba) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
       if (d < Math.PI * 0.65) fb.fillRect(bx, by, 2, 2);
     }
     fb.vline(35, 1, 30);
-    fb.text(41, 2, 'RADAR');
-    fb.text(41, 12, 'SWEEP');
+    fb.fillRect(40, 2, 34, 8); fb.text(42, 2, 'RADAR', { invert: true });
+    fb.text(40, 13, 'SWEEP');
     for (let i = 0; i < 8; i += 1) {
-      if (i <= Math.floor((ctx.frame % 24) / 3)) fb.fillRect(41 + i * 10, 24, 7, 3);
-      else fb.hline(41 + i * 10, 26, 7);
+      if (i <= Math.floor((ctx.frame % 24) / 3)) fb.fillRect(40 + i * 10, 25, 7, 4);
+      else fb.hline(40 + i * 10, 28, 7);
     }
   },
 };
@@ -439,7 +456,7 @@ const pulse: OLEDModeSpec = {
   id: 'pulse', label: 'Heartbeat', frames: 12, fps: 12, runtime: false,
   render(fb, ctx) {
     const width = 91;
-    const shift = (ctx.frame % 12) * 5; // exactly one 60-pixel cycle per loop
+    const shift = (ctx.frame % 12) * 5;
     const baseline = 16;
     const sample = (x: number) => {
       const p = (x + shift + 60) % 60;
@@ -452,6 +469,7 @@ const pulse: OLEDModeSpec = {
       if (p >= 30 && p <= 36) v = 3;
       return Math.round(baseline - v);
     };
+    for (let x = 0; x < width; x += 5) fb.pixel(x, baseline);
     let prev = sample(-1);
     for (let x = 0; x < width; x += 1) {
       const y = sample(x);
@@ -459,10 +477,9 @@ const pulse: OLEDModeSpec = {
       prev = y;
     }
     fb.vline(94, 1, 30);
-    if (ctx.frame % 12 < 4) fb.sprite(HEART, 106, 2);
-    else fb.sprite(HEART, 106, 3);
+    fb.sprite(HEART, 106, ctx.frame % 12 < 4 ? 2 : 3);
     fb.text(97, 13, 'PULSE');
-    fb.text(102, 23, 'DEMO');
+    fb.fillRect(98, 23, 27, 8); fb.text(100, 23, 'DEMO', { invert: true });
   },
 };
 
@@ -509,6 +526,11 @@ export function renderPanel(fb: Frame, mode: OLEDMode, ctx: RenderContext): void
   if (ctx.track) {
     drawTrack(fb, ctx, ctx.track);
     return;
+  }
+  if (mode === 'system' && ctx.state.customScreenEnabled && isCustomScreen(ctx.state.customScreen)) {
+    const art = ctx.state.customScreen;
+    try { fb.blitPages(decodePages(art.frames[Math.floor(ctx.time * art.fps / 1000) % art.frames.length])); return; }
+    catch { /* A damaged saved frame falls back to the normal screen. */ }
   }
   getOLEDMode(mode).render(fb, ctx);
 }

@@ -3,6 +3,7 @@ import { OLEDMode, OLEDState } from '../types';
 import type { ConnectedDeviceInfo, HardwareConnectionState, PhysicalDisplaySettings } from '../utils/hardwareBridge';
 import { OLEDDisplay } from './OLEDDisplay';
 import { OLEDCanvas } from './OLEDCanvas';
+import { CustomScreenEditor } from './CustomScreenEditor';
 import { OLED_MODES } from '../oled/modes';
 import {
   AUTO_CYCLE_DEFAULT_S,
@@ -22,7 +23,7 @@ import {
   Tv,
   X,
   Sparkles,
-  Sliders,
+  Image,
   Sun,
   Eye,
   RotateCcw,
@@ -35,6 +36,7 @@ import {
 interface DisplayConfigDrawerProps {
   oledState: OLEDState;
   onUpdateOLEDState: (state: OLEDState) => void;
+  onSaveCustomScreen: (state: OLEDState) => void;
   onClose: () => void;
   hardwareState: HardwareConnectionState;
   deviceInfo: ConnectedDeviceInfo | null;
@@ -47,59 +49,10 @@ interface DisplayConfigDrawerProps {
   onTriggerAction?: (actionId: string, actionName: string, category: string) => void;
 }
 
-/* ── live read-outs ────────────────────────────────────────────────────────────
-   The telemetry tab shows what the machine reports. It has no controls: a slider
-   that invents a CPU load is how the panel started lying in the first place. */
-
-/** One measured value: label, bar, number. `null` prints as -- with no bar. */
-const LiveMeter: React.FC<{ label: string; value: number | null; suffix: string; max?: number; tone?: 'ink' | 'blue' }> = ({
-  label, value, suffix, max = 100, tone = 'blue',
-}) => {
-  const known = value !== null && value !== undefined && Number.isFinite(value);
-  const pct = known ? Math.max(0, Math.min(100, (Number(value) / max) * 100)) : 0;
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-[11px] font-mono">
-        <span className="text-[#444343]">{label}</span>
-        <span className={`font-bold ${tone === 'ink' ? 'text-[#444343]' : 'text-[#1351AA]'}`}>
-          {known ? `${Math.round(Number(value))}${suffix}` : '--'}
-        </span>
-      </div>
-      <div className="h-2 bg-[#EDECE8] border border-[#C7C7C7]">
-        {known && (
-          <div
-            className={`h-full ${tone === 'ink' ? 'bg-[#444343]' : 'bg-[#1351AA]'}`}
-            style={{ width: `${pct}%` }}
-          />
-        )}
-      </div>
-    </div>
-  );
-};
-
-/** Name the subsystem that answered, or say plainly that none did. */
-function sourceLine(state: OLEDState): string {
-  const s = state.metricsSource;
-  const parts: string[] = [];
-  if (s?.cpu) parts.push(`CPU ${s.cpu}`);
-  if (s?.gpu) parts.push(`GPU ${s.gpu}`);
-  if (s?.temp) parts.push(`temp ${s.temp}`);
-  if (!parts.length) {
-    return 'No native telemetry. The desktop app reads CPU/RAM from os.cpus() deltas, GPU and temperature from Windows counters — a browser cannot, so the panel shows --.';
-  }
-  return `Measured: ${parts.join(' · ')}`;
-}
-
-/** m:ss, or a placeholder when the timeline is unknown. */
-function clock(seconds: number | null | undefined): string {
-  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '--:--';
-  const total = Math.max(0, Math.round(Number(seconds)));
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
-
 export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
   oledState,
   onUpdateOLEDState,
+  onSaveCustomScreen,
   onClose,
   hardwareState,
   deviceInfo,
@@ -117,7 +70,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
     playlist: normalizePlaylist(oledState.playlist ?? DEFAULT_PLAYLIST),
     autoCycleS: clampAutoCycleS(oledState.autoCycleS ?? AUTO_CYCLE_DEFAULT_S),
   });
-  const [activeTab, setActiveTab] = useState<'modes' | 'appearance' | 'telemetry'>('modes');
+  const [activeTab, setActiveTab] = useState<'modes' | 'appearance' | 'custom'>('modes');
   const [saving, setSaving] = useState(false);
   const [saveOutcome, setSaveOutcome] = useState<'idle' | 'device' | 'pc' | 'error'>('idle');
   const [saveMessage, setSaveMessage] = useState('');
@@ -146,11 +99,13 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
       autoCycleS: clampAutoCycleS(oledState.autoCycleS ?? AUTO_CYCLE_DEFAULT_S),
       customTitle: oledState.customTitle,
       customSubtitle: oledState.customSubtitle,
+      customScreen: oledState.customScreen,
+      customScreenEnabled: oledState.customScreenEnabled,
     };
     latest.current = { ...latest.current, ...prefs };
     setLocalState(prev => ({ ...prev, ...prefs }));
   }, [oledState.mode, oledState.brightness, oledState.inverted, oledState.autoCycleS,
-      oledState.playlist, oledState.customTitle, oledState.customSubtitle]);
+      oledState.playlist, oledState.customTitle, oledState.customSubtitle, oledState.customScreen, oledState.customScreenEnabled]);
 
   const commit = useCallback(
     (updated: OLEDState) => {
@@ -165,7 +120,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
   );
 
   const handleSelectMode = (mode: OLEDMode) => {
-    commit({ ...latest.current, mode });
+    commit({ ...latest.current, mode, ...(mode === 'system' ? { customScreenEnabled: false } : {}) });
     onTriggerAction?.('oled-mode-change', `OLED Mode: ${mode.toUpperCase()}`, 'display');
   };
 
@@ -258,6 +213,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
       mode: 'kadowaz',
       customTitle: 'ZERO',
       customSubtitle: 'ONLINE',
+      customScreenEnabled: false,
       brightness: 56,
       inverted: false,
       autoCycleS: AUTO_CYCLE_DEFAULT_S,
@@ -336,22 +292,22 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('telemetry')}
+          onClick={() => setActiveTab('custom')}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-mono font-bold transition-all border-b-2 ${
- activeTab === 'telemetry'
+ activeTab === 'custom'
  ? 'text-[#E3E2DE] border-[#444343] bg-[#1351AA]'
  : 'text-[#646464] border-transparent hover:text-[#141414] hover:bg-[#F4F3F0]'
  }`}
         >
-          <Sliders className="w-3.5 h-3.5" />
-          <span>TELEMETRY</span>
+          <Image className="w-3.5 h-3.5" />
+          <span>CREATE SCREEN</span>
         </button>
       </div>
 
       {/* Body Content */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Real-time Display Showcase Box */}
-        <div className="panel p-5 border border-[#C7C7C7]  space-y-3 ">
+        {activeTab !== 'custom' && <div className="panel p-5 border border-[#C7C7C7]  space-y-3 ">
           <div className="flex items-center justify-between text-xs font-mono text-[#444343]">
             <span className="flex items-center gap-2 font-bold text-[#444343]">
               <Eye className="w-3.5 h-3.5 text-[#1351AA]" /> LIVE OLED HARDWARE SIMULATOR
@@ -381,7 +337,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
             through {playlist.length} of {OLED_MODES.length} screens. A key or the knob can be
             bound to OLED NEXT for a manual step.
           </div>
-        </div>
+        </div>}
 
         {/* TAB 1: MODES — title top-left, live panel preview below, nothing else */}
         {activeTab === 'modes' && (
@@ -396,6 +352,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
             </div>
 
             <p className="text-[10.5px] text-[#646464] leading-relaxed">Signal Wave, Heartbeat and the other animated designs are decorative, not sensor readings. Live values appear only on the telemetry and media screens when available.</p>
+            <p className="text-[10.5px] text-[#646464] leading-relaxed">Previews show the refreshed designs. Built-in animations run from the pad’s installed firmware and may look different until compatible firmware is updated. Custom artwork stays on this PC.</p>
 
             {/* Rotation: the only controls that matter on a panel with no touch. */}
             <div className="panel p-4 border border-[#E3E2DE] space-y-3">
@@ -490,7 +447,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
                 const isSelected = localState.mode === spec.id;
                 const inRotation = playlist.includes(spec.id);
                 const tag = isSelected
-                  ? 'ACTIVE'
+                  ? spec.id === 'system' && localState.customScreenEnabled ? 'CUSTOM' : 'ACTIVE'
                   : inRotation
                     ? spec.frames > 1
                       ? `${spec.fps} FPS`
@@ -680,97 +637,22 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
           </div>
         )}
 
-        {/* TAB 3: LIVE TELEMETRY & MEDIA (read-only: these are measurements) */}
-        {activeTab === 'telemetry' && (
-          <div className="space-y-4">
-            <div className="panel p-4 border border-[#E3E2DE] space-y-4">
-              <div className="flex items-baseline justify-between">
-                <div className="text-xs font-mono font-bold text-[#444343]">
-                  HARDWARE TELEMETRY (LIVE)
-                </div>
-                <span className="text-[10px] font-mono text-[#646464]">
-                  SYSTEM MODE SOURCE
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                <LiveMeter label="CPU LOAD" value={oledState.cpuLoad} suffix="%" />
-                <LiveMeter label="RAM USAGE" value={oledState.ramUsage} suffix="%" />
-                <LiveMeter label="GPU LOAD" value={oledState.gpuLoad} suffix="%" />
-                <LiveMeter label="TEMPERATURE" value={oledState.cpuTemp} suffix="°C" max={100} tone="ink" />
-              </div>
-
-              <div className="text-[10px] font-mono text-[#646464] leading-relaxed border-t border-[#E3E2DE] pt-2">
-                {sourceLine(oledState)}
-                <p className="mt-1">CPU is active time over the sampling interval. Windows GPU counters show the busiest engine across available adapters; vendor fallback uses a different measure. Readings may differ from Task Manager's selected GPU or update timing. Temperature is the reported ACPI zone or GPU sensor, not necessarily CPU temperature.</p>
-              </div>
-            </div>
-
-            <div className="panel p-4 border border-[#E3E2DE] space-y-3">
-              <div className="flex items-baseline justify-between">
-                <div className="text-xs font-mono font-bold text-[#444343]">
-                  MEDIA SESSION (LIVE)
-                </div>
-                <span className="text-[10px] font-mono text-[#646464]">
-                  NOW PLAYING MODE SOURCE
-                </span>
-              </div>
-
-              {oledState.nowPlayingTrack ? (
-                <div className="space-y-3">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <div className="text-sm font-bold text-[#141414] truncate">
-                      {oledState.nowPlayingTrack}
-                    </div>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 border border-[#C7C7C7] text-[#444343] flex-none">
-                      {oledState.isPlaying ? 'PLAYING' : 'PAUSED'}
-                    </span>
-                  </div>
-                  <div className="text-[11px] font-mono text-[#646464] truncate">
-                    {oledState.nowPlayingArtist || 'Unknown artist'}
-                  </div>
-                  <div className="flex justify-between text-[10px] font-mono text-[#444343]">
-                    <span>{clock(oledState.trackPositionS)}</span>
-                    <span>{clock(oledState.trackDurationS)}</span>
-                  </div>
-                  <div className="h-2 bg-[#EDECE8] border border-[#C7C7C7]">
-                    <div
-                      className="h-full bg-[#1351AA]"
-                      style={{ width: `${Math.max(0, Math.min(100, oledState.trackProgress ?? 0))}%` }}
-                    />
-                  </div>
-                  <div className="text-[10px] font-mono text-[#646464]">
-                    {oledState.nowPlayingApp ? `Session: ${oledState.nowPlayingApp}` : 'Session: unknown app'}
-                  </div>
-                </div>
-              ) : oledState.mediaStatus === 'error' || oledState.mediaStatus === 'unavailable' ? (
-                <div role="status" className="text-[11px] font-mono text-[#9A3412] leading-relaxed">
-                  MEDIA UNAVAILABLE — {oledState.mediaError || 'Media detection requires the Windows desktop app.'}
-                  {' '}Try restarting the desktop app. Some players or browsers may not expose a Windows media session.
-                </div>
-              ) : oledState.mediaStatus === 'checking' ? (
-                <div role="status" className="text-[11px] font-mono text-[#646464]">Checking the Windows media session…</div>
-              ) : (
-                <div className="text-[11px] font-mono text-[#646464] leading-relaxed">
-                  NO MEDIA — no readable Windows media session. Start playback in a player
-                  that exposes media information to Windows; title and playback details
-                  come from the OS media session (SMTC).
-                </div>
-              )}
-            </div>
-
-            <p className="text-[10px] font-mono text-[#646464] leading-relaxed px-1">
-              These values are measured, never simulated. A reading the machine does not
-              expose shows as <span className="text-[#444343] font-bold">--</span> on the panel
-              and here — the app will not fill the gap with a plausible number.
-            </p>
-          </div>
+        {activeTab === 'custom' && (
+          <CustomScreenEditor
+            saved={localState.customScreen}
+            connected={hardwareState === 'connected' && !!deviceInfo?.protocolReady && !!deviceInfo.hasOledStream}
+            onApply={screen => {
+              const next = { ...latest.current, mode: 'system' as OLEDMode, customScreen: screen, customScreenEnabled: true };
+              onSaveCustomScreen(next); // Verify PC storage before reporting a save.
+              commit(next);
+            }}
+          />
         )}
       </div>
 
       {/* Edits already persist as PC preferences. Only a verified flash
           transaction below is allowed to display SAVED TO PAD. */}
-      <div className="p-6 border-t border-[#E3E2DE] bg-[#FFFFFF] space-y-3">
+      {activeTab !== 'custom' && <div className="p-6 border-t border-[#E3E2DE] bg-[#FFFFFF] space-y-3">
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
@@ -801,7 +683,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
                 <><Check className="w-4 h-4" /><span>SAVED ON PC ONLY</span></>
               ) : (
                 <><Sparkles className="w-4 h-4" />
-                  <span>{canSaveToPad ? 'SAVE DISPLAY TO PAD' : 'SAVE DISPLAY (PC ONLY)'}</span></>
+                  <span>{canSaveToPad ? 'SAVE PAD SETTINGS' : 'SAVE SETTINGS (PC ONLY)'}</span></>
               )}
             </button>
           </div>
@@ -815,7 +697,7 @@ export const DisplayConfigDrawer: React.FC<DisplayConfigDrawerProps> = ({
               ? 'OLED not detected at 0x3C; check GP28/GP29 wiring. Settings remain PC-only.'
               : 'Settings remain on this PC until a compatible OLED-capable pad with flash is connected.')}
         </p>
-      </div>
+      </div>}
     </div>
   );
 };

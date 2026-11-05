@@ -211,3 +211,17 @@ export function chordToAction(keys: string[]): ChordResult {
   }
   return { kind: 'keycode', code: ((mods & 0xff) << 8) | (usage & 0xff), text };
 }
+
+/**
+ * Combinations the firmware cannot encode but ZERO's Windows executor can send
+ * together. Brightness is a separate display operation, not a keyboard event.
+ * The native executor refuses more than 32 keys and never sends a partial chord.
+ */
+export function isDesktopOnlyChord(keys: string[]): boolean {
+  if (keys.length < 2 || keys.length > 32 || chordToAction(keys).kind !== 'unsupported') return false;
+  return keys.every(key => {
+    const single = chordToAction([key]);
+    return single.kind === 'keycode' || single.kind === 'mods' ||
+      (single.kind === 'media' && single.code !== MEDIA_CODE.brightness_up && single.code !== MEDIA_CODE.brightness_down);
+  });
+}

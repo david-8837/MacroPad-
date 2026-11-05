@@ -20,12 +20,14 @@ const puppeteer = require(process.env.PUPPETEER_CORE_PATH || 'puppeteer-core');
     await page.$$eval('.macropad-key', keys => keys[0].click());
     await page.$eval('button[title^="KC_A —"]', e => e.click());
     await page.waitForFunction(() => !document.querySelector('[aria-label="Layout edit history"] button')?.disabled);
-    await page.$eval('summary::-p-text(Backup & restore)', el => el.click());
+    await page.$eval('button[aria-label="Settings"]',el=>el.click()); await page.waitForSelector('#backup-restore');
     const input=await page.$('input[type="file"][accept*="json"]'); await input.uploadFile(file);
     await page.waitForSelector('[aria-label="Confirm backup restore"]');
     assert.match(await page.$eval('[aria-label="Confirm backup restore"]',el=>el.textContent),/macros, screen and lighting/);
     await page.$eval('button::-p-text(Confirm restore)',el=>el.click());
     await page.waitForFunction(()=>document.querySelector('[role="status"]')?.textContent.includes('Restored in the app'));
+    await page.$eval('nav[aria-label="Modules"] button::-p-text(Keys)',el=>el.click());
+    await page.waitForSelector('[aria-label="Layout edit history"]');
     assert.equal(await page.$eval('[aria-label="Layout edit history"] button::-p-text(Undo)', e => e.disabled), true, 'restore clears layout history');
     for(const [key, expected] of [['kadowaz_deck',deck],['kadowaz_macros_v2',macros],['kadowaz_oled',oled],['kadowaz_lighting',lighting]])
       assert.deepEqual(JSON.parse(await page.evaluate(k=>localStorage.getItem(k),key)),expected,key);

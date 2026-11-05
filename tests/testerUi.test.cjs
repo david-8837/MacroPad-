@@ -19,6 +19,10 @@ try {
   assert.match(html, /aria-label="Keyboard layout"/);
   assert.match(html, /aria-label="Sound feedback"/);
   assert.match(html, /tester-keyboard-scroll overflow-x-auto/);
+  assert.match(html, /tester-main-scroll/);
+  assert.match(html, /tester-keyboard-extras/);
+  assert.match(html, /tester-key-label/);
+  assert.doesNotMatch(html, /tester-key-label truncate/, 'key labels remain readable');
   assert.doesNotMatch(html, /1000Hz|switch bounce|USB latency:|scan rate/i);
   const source = readFileSync(resolve(root, 'src/components/via/ViaKeyTester.tsx'), 'utf8');
   assert.match(source, /clearHeldKeys\(prev\)/);

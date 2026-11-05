@@ -62,7 +62,7 @@ if (!process.env.CHROMIUM_PATH) throw new Error('Set CHROMIUM_PATH');
         else if (scenario === 'malformed') assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('kadowaz_deck'))).layers[0].keys[0], null);
         else if (scenario === 'shuffled') assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('kadowaz_deck'))).layers[0].keys[0].keyIndex, 1);
         else assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('kadowaz_deck'))).layers[0].dial.pressAction, null);
-        await page.$eval('summary::-p-text(Backup & restore)', el => el.click());
+        await page.click('button[aria-label="Settings"]'); await page.waitForSelector('#backup-restore');
         assert.equal(await page.$eval('button::-p-text(Download backup)', el => el.disabled), true);
         const input = await page.$('input[type="file"][accept*="json"]'); await input.uploadFile(backupPath);
         await page.waitForSelector('[aria-label="Confirm backup restore"]');

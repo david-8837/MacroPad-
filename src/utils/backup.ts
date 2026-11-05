@@ -1,3 +1,4 @@
+import { isCustomScreen } from '../oled/customScreen';
 import type { Deck } from '../types';
 import { MACRO_STORAGE_KEY, validMacroLibrary, type StoredMacro } from './macroStorage';
 import { isOLEDMode } from '../oled/modes';
@@ -48,6 +49,8 @@ export function validDeck(value: unknown, local = false, allowMacroReferences = 
 export function validOled(value: unknown): value is OledPrefs | null {
   if (value === null) return true;
   if (!object(value)) return false;
+  if (value.customScreen !== undefined && !isCustomScreen(value.customScreen)) return false;
+  if (value.customScreenEnabled !== undefined && typeof value.customScreenEnabled !== 'boolean') return false;
   for (const key of ['customTitle', 'customSubtitle']) if (value[key] !== undefined && typeof value[key] !== 'string') return false;
   if (value.mode !== undefined && !isOLEDMode(value.mode)) return false;
   if (value.brightness !== undefined && (!finite(value.brightness) || (value.brightness as number) < 0 || (value.brightness as number) > 100)) return false;

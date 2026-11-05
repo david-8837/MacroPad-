@@ -64,7 +64,7 @@ async function main() {
   const capped = route(layers, 9, 'dial_ccw', event(1, 0, 512));
   assert.equal(capped.count, 20, 'a corrupted/high-volume batch must not launch 512 apps');
   assert.equal(capped.truncated, true);
-  assert.equal(id(route(layers, 9, 'dial_hold', event(1))), 'L1-knob-hold');
+  assert.equal(id(route(layers, 9, 'dial_hold', event(1))), undefined, 'old knob-hold assignments never run on the PC');
   assert.equal(id(route(layers, 0, 'tap', event(9))), undefined, 'invalid channel is ignored');
   assert.equal(id(route(layers, 10, 'tap', event(0))), undefined, 'invalid key is ignored');
   console.log('physicalActionRouter: all assertions passed');

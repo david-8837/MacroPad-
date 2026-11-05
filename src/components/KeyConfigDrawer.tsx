@@ -5,6 +5,8 @@ import { appLibraryNeedsIconRefresh, loadAppLibrary, readAppLibrary, mergeAppLib
 import { DiscoveredAppIcon } from './DiscoveredAppIcon';
 import { chordToAction } from '../utils/deviceKeymap';
 import { capturedSystemKey } from '../utils/capturedSystemKey';
+import { DrawerVirtualKeyboard } from './DrawerVirtualKeyboard';
+import { ShortcutSuggestions } from './ShortcutSuggestions';
 import { 
   X, 
   Play, 
@@ -34,23 +36,7 @@ interface KeyConfigDrawerProps {
   hideCloseButton?: boolean;
 }
 
-import {
-  KeyboardKeyDef as DrawerKeyDef,
-  drawerKeyName,
-  DRAWER_MAIN_ROW_0,
-  DRAWER_MAIN_ROW_1,
-  DRAWER_MAIN_ROW_2,
-  DRAWER_MAIN_ROW_3,
-  DRAWER_MAIN_ROW_4,
-  DRAWER_MAIN_ROW_5,
-  DRAWER_NAV_ROW_0,
-  DRAWER_NAV_ROW_1,
-  DRAWER_NAV_ROW_2,
-  DRAWER_ARROW_ROW_4,
-  DRAWER_ARROW_ROW_5,
-  DRAWER_NUMPAD_ROW_0,
-  DRAWER_NUMPAD_GRID,
-} from '../data/keyboardLayouts';
+import type { KeyboardKeyDef as DrawerKeyDef } from '../data/keyboardLayouts';
 export type { DrawerKeyDef };
 export {
   DRAWER_MAIN_ROW_0,
@@ -66,7 +52,7 @@ export {
   DRAWER_ARROW_ROW_5,
   DRAWER_NUMPAD_ROW_0,
   DRAWER_NUMPAD_GRID,
-};
+} from '../data/keyboardLayouts';
 
 export const DRAWER_MEDIA_KEYS = [
   { name: 'Vol Up', key: 'AudioVolumeUp' },
@@ -117,12 +103,8 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     keyBinding.tapAction?.category === 'app_launch' ? 'app'
       : (keyBinding.tapAction?.category === 'text' || (keyBinding.tapAction?.category === 'script' && keyBinding.tapAction.name.startsWith('Type: '))) ? 'text' : 'keyboard'
   );
-  const [keyboardLayout, setKeyboardLayout] = useState<'full' | 'tkl' | '60'>('full');
   
-  // Shortcut & Multi-Key Mode State
-  // 'append': every key click/press adds to the combo without wiping existing keys
-  // 'chord': live chord replace mode
-  const [comboMode, setComboMode] = useState<'append' | 'chord'>('append');
+  // Click or type keys to build one shortcut.
   const shortcutCaptureRef = useRef<HTMLDivElement>(null);
   const [recordedKeys, setRecordedKeys] = useState<string[]>(
     editedKey.tapAction?.payload?.keys || []
@@ -216,35 +198,6 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     if (activeTab === 'app' && appLibraryNeedsIconRefresh(loadAppLibrary())) void refreshDrawerApps();
   }, [activeTab]);
 
-  // Base unit sizing for perfect fit without horizontal scrolling
-  const UNIT_WIDTH = 20.5; // px per 1u
-  const UNIT_HEIGHT = 22; // px per row
-
-  // Checks if a visual key item matches any key in recordedKeys
-  const isKeyActive = (k: DrawerKeyDef, keys: string[]) => {
-    return keys.some(recorded => {
-      if (!recorded) return false;
-      if (recorded === k.code || recorded === k.label) return true;
-      if (k.code.startsWith('Key') && recorded.toUpperCase() === k.code.replace('Key', '').toUpperCase()) return true;
-      if (k.code.startsWith('Digit') && recorded === k.code.replace('Digit', '')) return true;
-      if ((k.code === 'ControlLeft' || k.code === 'ControlRight') && (recorded === 'Ctrl' || recorded === 'Control')) return true;
-      if ((k.code === 'ShiftLeft' || k.code === 'ShiftRight') && recorded === 'Shift') return true;
-      if ((k.code === 'AltLeft' || k.code === 'AltRight') && recorded === 'Alt') return true;
-      if ((k.code === 'MetaLeft' || k.code === 'MetaRight') && (recorded === 'Win' || recorded === 'Meta')) return true;
-      if (k.code === 'Escape' && (recorded === 'Esc' || recorded === 'Escape')) return true;
-      if (k.code === 'Backspace' && (recorded === '⌫' || recorded === 'Backspace')) return true;
-      if (k.code === 'ArrowUp' && (recorded === '▲' || recorded === 'ArrowUp' || recorded === 'Up')) return true;
-      if (k.code === 'ArrowDown' && (recorded === '▼' || recorded === 'ArrowDown' || recorded === 'Down')) return true;
-      if (k.code === 'ArrowLeft' && (recorded === '◀' || recorded === 'ArrowLeft' || recorded === 'Left')) return true;
-      if (k.code === 'ArrowRight' && (recorded === '▶' || recorded === 'ArrowRight' || recorded === 'Right')) return true;
-      if (k.code.startsWith('Numpad')) {
-        const sub = k.code.replace('Numpad', '');
-        return recorded === k.code || recorded === sub || recorded === `Num ${sub}` || recorded === `NumPad${sub}`;
-      }
-      return false;
-    });
-  };
-
   // Helper to commit updated key sequence to editedKey and parent state
   const commitUpdatedKeys = (newKeys: string[]) => {
     const comboString = newKeys.join(' + ');
@@ -285,7 +238,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
       e.stopPropagation();
       playKeyClick('down');
 
-      // Backspace: in append mode, remove the last key from the combo
+      // Backspace removes the last key from the combination
       if (e.key === 'Backspace') {
         const previous = recordedKeysRef.current;
         if (previous.length) {
@@ -340,8 +293,8 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
 
       if (detectedKeys.length === 0) return;
 
-      const next = comboMode === 'chord' ? detectedKeys : [...recordedKeysRef.current];
-      if (comboMode !== 'chord') for (const k of detectedKeys) if (!next.includes(k)) next.push(k);
+      const next = [...recordedKeysRef.current];
+      for (const k of detectedKeys) if (!next.includes(k)) next.push(k);
       updateRecordedKeys(next);
       commitUpdatedKeys(next);
     };
@@ -350,7 +303,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [activeTab, editedKey, comboMode, recordedKeys.length, captureOnlyWhenFocused]);
+  }, [activeTab, editedKey, recordedKeys.length, captureOnlyWhenFocused]);
 
   // Handle clicking on virtual keyboard key
   const handleVirtualKeyClick = (keyName: string) => {
@@ -358,7 +311,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     playKeyClick('down');
     
     const previous = recordedKeysRef.current;
-    const next = comboMode === 'chord' ? [keyName] : previous.includes(keyName) ? previous.filter(k => k !== keyName) : [...previous, keyName];
+    const next = previous.includes(keyName) ? previous.filter(k => k !== keyName) : [...previous, keyName];
     updateRecordedKeys(next);
     commitUpdatedKeys(next);
   };
@@ -472,41 +425,6 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
     onClose();
   };
 
-  const renderDrawerKey = (k: DrawerKeyDef, customHeight = `${UNIT_HEIGHT}px`) => {
-    if (k.code.startsWith('spacer-')) {
-      const uWidth = (k.width || 1) * UNIT_WIDTH;
-      return <div key={k.code} style={{ width: `${uWidth}px` }} className="pointer-events-none shrink-0" />;
-    }
-
-    const isSelected = isKeyActive(k, recordedKeys);
-    const uWidth = (k.width || 1) * UNIT_WIDTH;
-
-    return (
-      <button
-        key={k.code}
-        type="button"
-        disabled={k.code === 'Calc'}
-        title={k.code === 'Calc' ? 'Calculator key is not supported; use Open App instead' : undefined}
-        onClick={() => handleVirtualKeyClick(drawerKeyName(k))}
-        style={{
-          width: `${uWidth}px`,
-          height: customHeight
-        }}
-        className={` flex flex-col items-center justify-between p-0.5 font-mono text-[8.5px] font-bold border transition-all select-none shrink-0 cursor-pointer ${
- isSelected
- ? 'text-[#E3E2DE] border-[#1351AA] font-black scale-95 z-10'
- : 'text-[#444343] border-[#E3E2DE] hover:border-[#141414] hover:bg-[#FFFFFF] hover:text-[#141414] active:scale-95'
- }`}
-      >
-        <span className="truncate leading-tight px-0.2">{k.label}</span>
-        {k.subLabel && (
-          <span className={`text-[6px] leading-none ${isSelected ? 'text-[#444343]' : 'text-[#646464]'}`}>
-            {k.subLabel}
-          </span>
-        )}
-      </button>
-    );
-  };
 
   return (
     <div className="w-full h-full flex flex-col  border-l border-[#E3E2DE] select-none overflow-hidden editor-slide-in">
@@ -674,33 +592,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
                   </span>
                 </div>
 
-                {/* Input Mode Switch: Append vs Chord */}
-                <div className="flex items-center gap-1 p-0.5 bg-[#EDECE8] border border-[#E3E2DE] text-[10px] font-mono">
-                  <button
-                    type="button"
-                    onClick={() => setComboMode('append')}
-                    className={`px-2 py-0.5 transition-all cursor-pointer ${
- comboMode === 'append'
- ? 'bg-[#1351AA] text-[#E3E2DE] font-extrabold '
- : 'text-[#444343] hover:text-[#141414]'
- }`}
-                    title="Append Mode: Click or type multiple keys to build sequence"
-                  >
-                    + Append Keys
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setComboMode('chord')}
-                    className={`px-2 py-0.5 transition-all cursor-pointer ${
- comboMode === 'chord'
- ? 'bg-[#1351AA] text-[#E3E2DE] font-extrabold '
- : 'text-[#444343] hover:text-[#141414]'
- }`}
-                    title="Chord Mode: Capture single simultaneous combination"
-                  >
-                    ⚡ Chord
-                  </button>
-                </div>
+
               </div>
 
               {/* Active Recorded Keys Interactive Pills */}
@@ -772,162 +664,8 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
               </div>
             </div>
 
-            {/* Quick Presets Toolbar */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[10px] font-mono text-[#646464]">
-                <span className="uppercase tracking-wider text-[9px] flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-[#1351AA]" />
-                  Popular Shortcuts:
-                </span>
-                <span className="text-[9px] text-[#646464]">1-click assign</span>
-              </div>
-              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                {SHORTCUT_PRESETS.map((p) => (
-                  <button
-                    key={p.name}
-                    type="button"
-                    onClick={() => applyPreset(p.keys, p.label, p.name)}
-                    className="px-2 py-1 bg-[#FFFFFF] hover:bg-[#FFFFFF] border border-[#E3E2DE] hover:border-[#141414] text-[#444343] hover:text-[#141414] text-[10px] font-mono whitespace-nowrap transition-all shrink-0 cursor-pointer active:scale-95"
-                  >
-                    <span className="font-bold text-[#1351AA]">{p.name}</span>
-                    <span className="text-[#646464] ml-1 text-[9px]">({p.label})</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Layout Switcher (Full Size / TKL / 60%) */}
-            <div className="flex items-center justify-between text-[11px] font-mono pt-1">
-              <span className="text-[#646464] uppercase tracking-wider text-[9.5px]">Virtual Keyboard:</span>
-              <div className="flex items-center gap-1 p-0.5 bg-[#EDECE8] border border-[#E3E2DE]">
-                <button
-                  type="button"
-                  onClick={() => setKeyboardLayout('full')}
-                  className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${
- keyboardLayout === 'full' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
- }`}
-                >
-                  Full 104
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setKeyboardLayout('tkl')}
-                  className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${
- keyboardLayout === 'tkl' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
- }`}
-                >
-                  TKL
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setKeyboardLayout('60')}
-                  className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${
- keyboardLayout === '60' ? 'bg-[#1351AA] text-[#E3E2DE] font-bold' : 'text-[#444343] hover:text-[#141414]'
- }`}
-                >
-                  60%
-                </button>
-              </div>
-            </div>
-
-            {/* The fixed-width keys stay centered when they fit; on a narrow
-                inspector, scroll to the navigation/numpad instead of clipping them. */}
-            <div className="p-2.5 bg-[#FFFFFF] border border-[#E3E2DE] overflow-x-auto select-none">
-              <div className="flex w-max mx-auto gap-2">
-                
-                {/* ALPHANUMERIC 15u */}
-                <div className="space-y-[1.5px] shrink-0">
-                  {/* Function row */}
-                  <div className="flex gap-[1.5px] mb-1">
-                    {DRAWER_MAIN_ROW_0.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* Number row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_1.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* QWERTY row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_2.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* Home row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_3.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* Shift row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_4.map(k => renderDrawerKey(k))}
-                  </div>
-
-                  {/* Bottom Space row */}
-                  <div className="flex gap-[1.5px]">
-                    {DRAWER_MAIN_ROW_5.map(k => renderDrawerKey(k))}
-                  </div>
-                </div>
-
-                {/* NAVIGATION & ARROWS */}
-                {keyboardLayout !== '60' && (
-                  <div className="space-y-[1.5px] flex flex-col justify-between shrink-0">
-                    <div className="flex gap-[1.5px] mb-1">
-                      {DRAWER_NAV_ROW_0.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div className="flex gap-[1.5px]">
-                      {DRAWER_NAV_ROW_1.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div className="flex gap-[1.5px]">
-                      {DRAWER_NAV_ROW_2.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div className="h-[22px]" />
-                    <div className="flex gap-[1.5px]">
-                      {DRAWER_ARROW_ROW_4.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div className="flex gap-[1.5px]">
-                      {DRAWER_ARROW_ROW_5.map(k => renderDrawerKey(k))}
-                    </div>
-                  </div>
-                )}
-
-                {/* NUMPAD */}
-                {keyboardLayout === 'full' && (
-                  <div className="space-y-[1.5px] shrink-0">
-                    <div className="flex gap-[1.5px] mb-1">
-                      {DRAWER_NUMPAD_ROW_0.map(k => renderDrawerKey(k))}
-                    </div>
-                    <div
-                      className="grid gap-[1.5px]"
-                      style={{
-                        gridTemplateColumns: `repeat(4, ${UNIT_WIDTH}px)`,
-                        gridTemplateRows: `repeat(5, ${UNIT_HEIGHT}px)`
-                      }}
-                    >
-                      {DRAWER_NUMPAD_GRID.map(k => {
-                        const isSelected = isKeyActive(k, recordedKeys);
-                        return (
-                          <button
-                            key={k.code}
-                            type="button"
-                            onClick={() => handleVirtualKeyClick(drawerKeyName(k))}
-                            style={{ gridArea: k.gridArea }}
-                            className={` flex flex-col items-center justify-between p-0.5 font-mono text-[8.5px] font-bold border transition-all select-none cursor-pointer ${
- isSelected
- ? 'text-[#E3E2DE] border-[#1351AA] font-black scale-95 z-10'
- : 'text-[#444343] border-[#E3E2DE] hover:border-[#141414] hover:bg-[#FFFFFF] hover:text-[#141414] active:scale-95'
- }`}
-                          >
-                            <span className="truncate leading-none">{k.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            </div>
-
+            <DrawerVirtualKeyboard recordedKeys={recordedKeys} onKey={handleVirtualKeyClick} />
+            <ShortcutSuggestions shortcuts={SHORTCUT_PRESETS} onSelect={applyPreset} />
           </div>
         )}
 

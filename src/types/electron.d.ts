@@ -49,6 +49,11 @@ export interface ElectronAPI {
   /** Windows uses native caption buttons for Snap Layouts. */
   nativeWindowControls?: boolean;
   rendererReady?: () => void;
+  setWindowTheme?: (theme: 'light' | 'dark', persist?: boolean) => Promise<boolean>;
+  prepareReset?: () => Promise<boolean>;
+  finishReset?: () => Promise<boolean>;
+  getViewScale?: () => Promise<number>;
+  setViewScale?: (factor: number) => Promise<number>;
   openHelpLink?: (id: 'project' | 'guide' | 'credits') => Promise<boolean>;
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   execAction: (action: Record<string, unknown>) => Promise<{ success: boolean; error?: string; brightness?: number; brightnessAtLimit?: boolean; message?: string }>;
