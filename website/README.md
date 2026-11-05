@@ -18,7 +18,7 @@ The completed pages use a subtle grid, editorial artwork and hover feedback on i
 
 In the interactive illustration, select a key or layer, or click the knob to cycle layers. Selections are held in memory per layer for that page visit only; the illustration does not change the actual app or a physical device.
 
-The **Download for Windows** button downloads the unsigned Windows test installer from the GitHub pre-release `v1.0.1-test.22`. The app was built and smoke-tested on a hosted Windows runner; physical Windows devices, audio hardware, macropad hardware and firmware remain untested. Windows may show a warning because the installer is unsigned. The website does not host the installer itself.
+The **Download for Windows** button downloads the unsigned Windows test installer from the GitHub pre-release `v1.0.1-test.23`. The app was built and smoke-tested on a hosted Windows runner; physical Windows devices, audio hardware, macropad hardware and firmware remain untested. Windows may show a warning because the installer is unsigned. The website does not host the installer itself.
 
 ## Feedback and support
 

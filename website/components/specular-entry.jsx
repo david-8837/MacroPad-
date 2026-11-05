@@ -9,7 +9,7 @@ if (mount) {
   const root = createRoot(mount);
   flushSync(() => root.render(
     <SpecularButton
-      href="https://github.com/david-8837/MacroPad-/releases/download/v1.0.1-test.22/ZERO-Deck-Studio-1.0.1-test.22-x64.exe"
+      href="https://github.com/david-8837/MacroPad-/releases/download/v1.0.1-test.23/ZERO-Deck-Studio-1.0.1-test.23-x64.exe"
       target="_top"
       rel="noreferrer"
       aria-describedby="hero-download-status"
