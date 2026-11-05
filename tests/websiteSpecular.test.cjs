@@ -7,6 +7,7 @@ const html = readFileSync(join(root, 'website/index.html'), 'utf8');
 const bundle = readFileSync(join(root, 'website/assets/specular-button.js'), 'utf8');
 const dom = new JSDOM(html, { url: 'https://example.test/', runScripts: 'outside-only', pretendToBeVisual: true });
 const { window } = dom;
+assert.match(html, /specular-button\.js\?v=7/, 'new release link must not reuse the old cached button script');
 const fallback = window.document.querySelector('.hero-download-mount a');
 assert.equal(fallback.href, 'https://github.com/david-8837/MacroPad-/releases/download/v1.0.1-test.22/ZERO-Deck-Studio-1.0.1-test.22-x64.exe', 'the static fallback is a real link');
 let webglAttempts = 0;
