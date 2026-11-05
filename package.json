@@ -1,6 +1,6 @@
 {
   "name": "kadowaz-deck-studio",
-  "version": "1.0.1-test.22",
+  "version": "1.0.1-test.23",
   "description": "Next-Gen Macropad Desktop Studio & Hardware Engine",
   "main": "electron/main.cjs",
   "scripts": {

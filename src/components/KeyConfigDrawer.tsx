@@ -571,7 +571,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
       </div>
 
       {/* DRAWER BODY */}
-      <div className="flex-1 min-h-0 p-3.5 overflow-y-auto space-y-3">
+      <div data-key-drawer-body className="flex-1 min-h-0 p-3.5 overflow-y-auto space-y-3">
 
         {/* TAB 1: FULL SIZE KEYBOARD & MULTI-KEY COMBO BUILDER */}
         {activeTab === 'keyboard' && (
@@ -962,7 +962,7 @@ export const KeyConfigDrawer: React.FC<KeyConfigDrawerProps> = ({
             </div>
 
             {/* App List / Cards Grid */}
-            <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+            <div data-app-list className="space-y-1.5 pr-1">
               {(() => {
                 const q = drawerAppSearch.toLowerCase().trim();
                 const filtered = drawerApps.filter((a) => {

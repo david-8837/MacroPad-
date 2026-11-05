@@ -72,6 +72,8 @@ export function create(container) { const root = createRoot(container); return {
     assert(button('Assign').disabled, 'empty keyboard cannot be assigned');
     await click(button('3. Open App'));
     assert(button('Assign').disabled, 'app selection required');
+    const appList = container.querySelector('[data-app-list]');
+    assert(appList && !appList.classList.contains('max-h-56') && !appList.classList.contains('overflow-y-auto'), 'application cards use the main drawer scroll, not a capped nested list');
     await click([...container.querySelectorAll('button')].find(b => b.textContent.includes('Code Editor') && b.hasAttribute('aria-pressed')));
     assert(!button('Assign').disabled, 'selecting an app enables the footer');
     assert.equal(savedBindings.length, 0, 'selection alone does not assign');
